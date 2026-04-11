@@ -7,6 +7,7 @@ import { initDb } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { warmup } from './hf-client.js';
+import { oauthRouter } from './oauth.js';
 
 const app = express();
 app.use(express.json());
@@ -22,6 +23,9 @@ app.use(
     message: { error: 'Too many requests, please slow down.' },
   }),
 );
+
+// OAuth 2.0 — mounted before auth middleware (public endpoints)
+app.use(oauthRouter);
 
 // Health check — used by Railway healthcheck
 app.get('/health', (_req, res) => {

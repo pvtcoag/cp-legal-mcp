@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { fetchDocumentText, validateCitation, AuslawError } from '../auslaw-client.js';
+import { fetchDocumentText, validateCitation, AuslawError, isJadeExpiry, JADE_EXPIRY_NOTICE } from '../auslaw-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
@@ -102,15 +102,22 @@ export function registerGetJudgment(server: McpServer): void {
         doc = await fetchDocumentText(resolvedUrl);
       } catch (err) {
         if (err instanceof AuslawError) {
-          log.warn({ err }, 'AusLaw fetch_document_text failed');
+          const jadeExpired = isJadeExpiry(err);
+          if (jadeExpired) {
+            logger.warn({ err }, 'JADE session cookie may have expired');
+          } else {
+            log.warn({ err }, 'AusLaw fetch_document_text failed');
+          }
+          const baseMessage = jadeExpired
+            ? 'Could not retrieve the judgment — the JADE session appears to have expired.'
+            : 'Could not retrieve the judgment. The legal database may be temporarily unavailable.';
           return {
             content: [
               {
                 type: 'text' as const,
                 text: JSON.stringify({
-                  error: 'upstream_unavailable',
-                  message:
-                    'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
+                  error: jadeExpired ? 'jade_session_expired' : 'upstream_unavailable',
+                  message: baseMessage + (jadeExpired ? JADE_EXPIRY_NOTICE : ''),
                 }),
               },
             ],

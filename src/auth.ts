@@ -41,6 +41,14 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   const identity = tokenMap.get(token);
 
   if (!identity) {
+    // WWW-Authenticate header with resource_metadata URL triggers mcp-remote's
+    // OAuth discovery flow (RFC 9728).  Without this header mcp-remote treats
+    // the 401 as a plain auth failure and does not attempt OAuth.
+    const issuer = process.env.OAUTH_ISSUER ?? 'https://api.example.com';
+    res.setHeader(
+      'WWW-Authenticate',
+      `Bearer realm="${issuer}", resource_metadata="${issuer}/.well-known/oauth-protected-resource"`,
+    );
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }

@@ -12,6 +12,9 @@ const ConfigSchema = z.object({
   // Admin — comma-separated user identities permitted to use admin tools
   ADMIN_USERS: z.string().default('admin'),
 
+  // OAuth — public base URL of this service (no trailing slash)
+  OAUTH_ISSUER: z.string().url().default('https://api.example.com'),
+
   // HuggingFace
   HF_API_TOKEN: z.string().min(1, 'HF_API_TOKEN is required'),
   HF_ENABLED: z
