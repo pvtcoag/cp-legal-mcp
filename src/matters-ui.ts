@@ -375,7 +375,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
 // GET /matters/:ref — matter detail
 mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
-  const ref = decodeURIComponent(req.params['ref'] ?? '');
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
@@ -463,7 +463,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
 // GET /matters/:ref/export.csv — CSV download
 mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
-  const ref = decodeURIComponent(req.params['ref'] ?? '');
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
 
   if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
 
