@@ -15,6 +15,10 @@ const ConfigSchema = z.object({
   // OAuth — public base URL of this service (no trailing slash)
   OAUTH_ISSUER: z.string().url().default('https://api.example.com'),
 
+  // Static OAuth client ID for Claude Web (enter this same value in claude.ai settings).
+  // Leave unset if only using mcp-remote (which does dynamic registration automatically).
+  OAUTH_CLIENT_ID: z.string().optional(),
+
   // HuggingFace
   HF_API_TOKEN: z.string().min(1, 'HF_API_TOKEN is required'),
   HF_ENABLED: z

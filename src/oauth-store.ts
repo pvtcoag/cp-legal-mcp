@@ -20,8 +20,32 @@ export function registerClient(params: Omit<OAuthClient, 'clientId'>): string {
   return clientId;
 }
 
+/**
+ * Pre-register a client with a known static ID (used for Claude Web).
+ * Called at startup — idempotent, safe to call multiple times.
+ */
+export function preRegisterClient(clientId: string, redirectUris: string[], clientName?: string): void {
+  clients.set(clientId, { clientId, redirectUris, clientName });
+  logger.info({ clientId, clientName }, 'OAuth static client pre-registered');
+}
+
 export function getClient(clientId: string): OAuthClient | undefined {
-  return clients.get(clientId);
+  // Check dynamically registered clients (mcp-remote) and pre-registered static clients
+  const client = clients.get(clientId);
+  if (client) return client;
+
+  // Fallback: accept the OAUTH_CLIENT_ID env var directly — no startup dependency.
+  // This handles Claude Web, which uses a static client ID configured in claude.ai settings.
+  const staticId = process.env.OAUTH_CLIENT_ID?.trim();
+  if (staticId && clientId === staticId) {
+    return {
+      clientId,
+      redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+      clientName: 'Claude Web',
+    };
+  }
+
+  return undefined;
 }
 
 // ── Auth codes ────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { warmup } from './hf-client.js';
 import { oauthRouter } from './oauth.js';
+import { preRegisterClient } from './oauth-store.js';
 
 const app = express();
 app.use(express.json());
@@ -62,6 +63,15 @@ const server = app.listen(config.PORT, async () => {
     { port: config.PORT, env: config.NODE_ENV, hfEnabled: config.HF_ENABLED },
     'cp-legal-mcp listening',
   );
+
+  // Pre-register static OAuth client for Claude Web
+  if (config.OAUTH_CLIENT_ID) {
+    preRegisterClient(
+      config.OAUTH_CLIENT_ID,
+      ['https://claude.ai/api/mcp/auth_callback'],
+      'Claude Web',
+    );
+  }
 
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
