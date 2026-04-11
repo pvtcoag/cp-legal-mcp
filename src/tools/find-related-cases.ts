@@ -197,7 +197,7 @@ export function registerFindRelatedCases(server: McpServer): void {
         }
       }
 
-      let finalResults: Array<{ title: string; citation: string; url: string; excerpt?: string; similarity?: number; relevance_score: number }>;
+      let finalResults: Array<{ title: string; citation?: string; url: string; excerpt?: string; corpus_similarity?: number; relevance_score: number }>;
 
       if (allCandidates.length === 0) {
         finalResults = [];
