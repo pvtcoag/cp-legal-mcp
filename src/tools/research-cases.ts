@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCases, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
+import { recordMatterQuery } from '../matter-log.js';
 
 const inputSchema = z.object({
   query: z
@@ -47,7 +47,7 @@ const inputSchema = z.object({
     .max(100)
     .optional()
     .describe(
-      'Optional matter reference to tag this search for later retrieval (e.g. "ABC-2024-001" or "Smith Dispute"). Use get_matter_history to review all searches for a matter.',
+      'Matter reference to tag this search in the research log (e.g. "ABC-2024-001" or "Smith Dispute"). If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
     ),
 });
 
@@ -101,16 +101,14 @@ export function registerResearchCases(server: McpServer): void {
         relevance_score: Math.round(score * 1000) / 1000,
       }));
 
-      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
-        recordMatterQuery({
-          matter_ref: input.matter_ref,
-          tool_name: 'research_cases',
-          query_text: input.query,
-          jurisdiction: input.jurisdiction,
-          result_count: results.length,
-          top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
-        });
-      }
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'research_cases',
+        query_text: input.query,
+        jurisdiction: input.jurisdiction,
+        result_count: results.length,
+        top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+      });
 
       return {
         content: [{

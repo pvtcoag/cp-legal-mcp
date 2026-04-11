@@ -8,7 +8,7 @@ import {
   JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
+import { recordMatterQuery } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation_or_url: z
@@ -21,7 +21,7 @@ const inputSchema = z.object({
     .string()
     .max(100)
     .optional()
-    .describe('Optional matter reference to tag this retrieval for later review.'),
+    .describe('Matter reference to tag this retrieval in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
 });
 
 export function registerGetJudgment(server: McpServer): void {
@@ -77,15 +77,13 @@ export function registerGetJudgment(server: McpServer): void {
 
       const citation = doc.citation ?? resolved.citation;
 
-      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
-        recordMatterQuery({
-          matter_ref: input.matter_ref,
-          tool_name: 'get_judgment',
-          query_text: input.citation_or_url,
-          result_count: 1,
-          top_results: [{ title: doc.title ?? input.citation_or_url, citation, url: resolved.url }],
-        });
-      }
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'get_judgment',
+        query_text: input.citation_or_url,
+        result_count: 1,
+        top_results: [{ title: doc.title ?? input.citation_or_url, citation, url: resolved.url }],
+      });
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({

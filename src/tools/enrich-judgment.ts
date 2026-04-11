@@ -9,7 +9,7 @@ import {
 } from '../auslaw-client.js';
 import { enrichDocument } from '../isaacus-client.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
+import { recordMatterQuery } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation_or_url: z
@@ -20,7 +20,7 @@ const inputSchema = z.object({
     .string()
     .max(100)
     .optional()
-    .describe('Optional matter reference to tag this enrichment for later retrieval.'),
+    .describe('Matter reference to tag this enrichment in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
 });
 
 export function registerEnrichJudgment(server: McpServer): void {
@@ -93,15 +93,13 @@ export function registerEnrichJudgment(server: McpServer): void {
       const citation = doc.citation ?? resolved.citation;
       const title = doc.title ?? citation ?? input.citation_or_url;
 
-      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
-        recordMatterQuery({
-          matter_ref: input.matter_ref,
-          tool_name: 'enrich_judgment',
-          query_text: input.citation_or_url,
-          result_count: 1,
-          top_results: [{ title, citation, url: resolved.url }],
-        });
-      }
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'enrich_judgment',
+        query_text: input.citation_or_url,
+        result_count: 1,
+        top_results: [{ title, citation, url: resolved.url }],
+      });
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({

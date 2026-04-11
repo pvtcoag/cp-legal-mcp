@@ -190,8 +190,12 @@ export interface AuslawFormattedCitation {
 }
 
 export interface AuslawPinpoint {
-  pinpoint: string;
-  full?: string;
+  /** The pinpoint reference, e.g. "[20]" or "p 42". */
+  pinpointString: string;
+  /** Full AGLC4 citation with pinpoint appended, e.g. "[2024] HCA 12, [20]". */
+  fullCitation: string;
+  paragraphNumber?: number;
+  paragraphText?: string;
 }
 
 export async function searchCitingCases(params: {
@@ -216,9 +220,81 @@ export async function searchByCitation(params: {
   });
 }
 
-export async function formatCitation(citation: string): Promise<AuslawFormattedCitation> {
-  logger.debug({ citation }, 'auslaw: format_citation');
-  return callAuslawTool<AuslawFormattedCitation>('format_citation', { citation });
+/**
+ * Call an AusLaw tool and return the raw text response without JSON-parsing.
+ * Used for tools that return plain text (e.g. format_citation).
+ */
+async function callAuslawToolText(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+): Promise<string> {
+  const url = new URL('/mcp', config.AUSLAW_BASE_URL);
+
+  const transport = new StreamableHTTPClientTransport(url, {
+    requestInit: {
+      signal: AbortSignal.timeout(config.AUSLAW_TIMEOUT_MS),
+      headers: { 'Content-Type': 'application/json' },
+    },
+  });
+
+  const client = new Client(
+    { name: 'cp-legal-mcp', version: '0.1.0' },
+    { capabilities: {} },
+  );
+
+  try {
+    await client.connect(transport);
+
+    const result = await client.callTool({ name: toolName, arguments: toolArgs });
+
+    if (result.isError) {
+      const errorText = (result.content as Array<{ type: string; text?: string }>)
+        .filter((c) => c.type === 'text' && c.text)
+        .map((c) => c.text)
+        .join('\n');
+      throw new AuslawError(
+        `AusLaw tool "${toolName}" returned error: ${errorText}`,
+        toolName,
+      );
+    }
+
+    const textItem = (result.content as Array<{ type: string; text?: string }>).find(
+      (c) => c.type === 'text' && c.text,
+    );
+    if (!textItem?.text) {
+      throw new AuslawError(`AusLaw tool "${toolName}" returned no text content`, toolName);
+    }
+
+    return textItem.text;
+  } catch (err) {
+    if (err instanceof AuslawError) throw err;
+    let message = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
+    if (cause instanceof Error && cause.message) message += ` (cause: ${cause.message})`;
+    else if (cause) message += ` (cause: ${String(cause)})`;
+    throw new AuslawError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
+  } finally {
+    await client.close().catch(() => { /* ignore close errors */ });
+  }
+}
+
+export async function formatCitation(params: {
+  title: string;
+  neutralCitation?: string;
+  reportedCitation?: string;
+  pinpoint?: string;
+  style?: 'neutral' | 'reported' | 'combined';
+}): Promise<AuslawFormattedCitation> {
+  logger.debug({ params }, 'auslaw: format_citation');
+  // auslaw-mcp format_citation returns plain text, not JSON
+  const text = await callAuslawToolText('format_citation', {
+    title: params.title,
+    ...(params.neutralCitation && { neutralCitation: params.neutralCitation }),
+    ...(params.reportedCitation && { reportedCitation: params.reportedCitation }),
+    ...(params.pinpoint && { pinpoint: params.pinpoint }),
+    ...(params.style && { style: params.style }),
+  });
+  return { formatted: text, style: params.style };
 }
 
 // ── Judgment URL resolution ───────────────────────────────────────────────────
@@ -258,12 +334,16 @@ export async function resolveJudgmentUrl(input: string): Promise<ResolvedJudgmen
 }
 
 export async function generatePinpoint(params: {
-  citation: string;
-  paragraph: number;
+  url: string;
+  paragraphNumber?: number;
+  phrase?: string;
+  caseCitation?: string;
 }): Promise<AuslawPinpoint> {
   logger.debug({ params }, 'auslaw: generate_pinpoint');
   return callAuslawTool<AuslawPinpoint>('generate_pinpoint', {
-    citation: params.citation,
-    paragraph: params.paragraph,
+    url: params.url,
+    ...(params.paragraphNumber !== undefined && { paragraphNumber: params.paragraphNumber }),
+    ...(params.phrase && { phrase: params.phrase }),
+    ...(params.caseCitation && { caseCitation: params.caseCitation }),
   });
 }

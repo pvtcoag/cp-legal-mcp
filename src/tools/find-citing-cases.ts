@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCitingCases, AuslawError } from '../auslaw-client.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
+import { recordMatterQuery } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation: z
@@ -20,7 +20,7 @@ const inputSchema = z.object({
     .string()
     .max(100)
     .optional()
-    .describe('Optional matter reference to tag this search for later retrieval.'),
+    .describe('Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
 });
 
 export function registerFindCitingCases(server: McpServer): void {
@@ -69,15 +69,13 @@ export function registerFindCitingCases(server: McpServer): void {
         ...(item.date ? { date: item.date } : {}),
       }));
 
-      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
-        recordMatterQuery({
-          matter_ref: input.matter_ref,
-          tool_name: 'find_citing_cases',
-          query_text: input.citation,
-          result_count: cases.length,
-          top_results: cases.slice(0, 3).map((c) => ({ title: c.title, citation: c.citation, url: c.url })),
-        });
-      }
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'find_citing_cases',
+        query_text: input.citation,
+        result_count: cases.length,
+        top_results: cases.slice(0, 3).map((c) => ({ title: c.title, citation: c.citation, url: c.url })),
+      });
 
       return {
         content: [{

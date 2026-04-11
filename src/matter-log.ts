@@ -1,4 +1,5 @@
 import { logMatterQuery } from './db.js';
+import { config } from './config.js';
 import { getUser } from './request-context.js';
 import { logger } from './logger.js';
 
@@ -10,7 +11,8 @@ export function validateMatterRef(ref: string): boolean {
 }
 
 export interface MatterLogParams {
-  matter_ref: string;
+  /** Explicit matter reference from the tool call. Falls back to DEFAULT_MATTER_REF if absent. */
+  matter_ref?: string;
   tool_name: string;
   query_text: string;
   jurisdiction?: string;
@@ -20,8 +22,12 @@ export interface MatterLogParams {
 
 // Fire-and-forget: DB failures must never affect tool responses
 export function recordMatterQuery(params: MatterLogParams): void {
+  const effectiveMatterRef = params.matter_ref?.trim() || config.DEFAULT_MATTER_REF;
+  if (!effectiveMatterRef || !validateMatterRef(effectiveMatterRef)) return;
+
   logMatterQuery({
     ...params,
+    matter_ref: effectiveMatterRef,
     user_id: getUser(),
   }).catch((err) => logger.warn({ err }, 'Matter query log failed — continuing'));
 }

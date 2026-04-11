@@ -21,6 +21,10 @@ const ConfigSchema = z.object({
 
   // Isaacus — legal AI reranking
   ISAACUS_API_KEY: z.string().min(1, 'ISAACUS_API_KEY is required'),
+
+  // Matter tracking — optional default applied when no matter_ref is passed in a tool call.
+  // Useful for firms that want all queries automatically tagged (e.g. set to "general-research").
+  DEFAULT_MATTER_REF: z.string().max(100).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

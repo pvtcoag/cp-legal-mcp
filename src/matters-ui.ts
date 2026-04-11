@@ -31,6 +31,8 @@ const TOOL_LABELS: Record<string, string> = {
   research_cases: 'Case Research',
   research_legislation: 'Legislation Research',
   get_judgment: 'Judgment',
+  ask_judgment: 'Ask Judgment',
+  enrich_judgment: 'Enrich Judgment',
   find_citing_cases: 'Citing Cases',
   search_by_citation: 'Citation Search',
   format_citation: 'Format Citation',
