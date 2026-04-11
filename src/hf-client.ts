@@ -51,6 +51,18 @@ async function getBatchEmbeddings(texts: string[]): Promise<number[][]> {
   return raw as unknown as number[][];
 }
 
+// Warm up the HF model at startup to avoid cold-start latency on first real request.
+// Fires silently — startup continues even if warmup fails.
+export async function warmup(): Promise<void> {
+  if (!config.HF_ENABLED) return;
+  try {
+    await getEmbedding('Australian legal research warmup');
+    logger.info({ model: config.HF_RERANK_MODEL }, 'HF model warmed up');
+  } catch (err) {
+    logger.warn({ err }, 'HF warmup failed — first request may be slow');
+  }
+}
+
 export async function rerank<T extends RerankCandidate>(
   query: string,
   candidates: T[],

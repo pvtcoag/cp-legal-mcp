@@ -145,3 +145,61 @@ export async function validateCitation(
   logger.debug({ citation }, 'auslaw: validate_citation');
   return callAuslawTool<AuslawCitationValidation>('validate_citation', { citation });
 }
+
+export interface AuslawCitingCase {
+  title: string;
+  citation: string;
+  url: string;
+  excerpt?: string;
+  court?: string;
+  date?: string;
+  [key: string]: unknown;
+}
+
+export interface AuslawFormattedCitation {
+  formatted: string;
+  style?: string;
+}
+
+export interface AuslawPinpoint {
+  pinpoint: string;
+  full?: string;
+}
+
+export async function searchCitingCases(params: {
+  citation: string;
+  limit?: number;
+}): Promise<AuslawCitingCase[]> {
+  logger.debug({ params }, 'auslaw: search_citing_cases');
+  return callAuslawTool<AuslawCitingCase[]>('search_citing_cases', {
+    citation: params.citation,
+    ...(params.limit && { limit: params.limit }),
+  });
+}
+
+export async function searchByCitation(params: {
+  citation_or_name: string;
+  limit?: number;
+}): Promise<AuslawCase[]> {
+  logger.debug({ params }, 'auslaw: search_by_citation');
+  return callAuslawTool<AuslawCase[]>('search_by_citation', {
+    citation: params.citation_or_name,
+    ...(params.limit && { limit: params.limit }),
+  });
+}
+
+export async function formatCitation(citation: string): Promise<AuslawFormattedCitation> {
+  logger.debug({ citation }, 'auslaw: format_citation');
+  return callAuslawTool<AuslawFormattedCitation>('format_citation', { citation });
+}
+
+export async function generatePinpoint(params: {
+  citation: string;
+  paragraph: number;
+}): Promise<AuslawPinpoint> {
+  logger.debug({ params }, 'auslaw: generate_pinpoint');
+  return callAuslawTool<AuslawPinpoint>('generate_pinpoint', {
+    citation: params.citation,
+    paragraph: params.paragraph,
+  });
+}

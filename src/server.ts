@@ -5,6 +5,10 @@ import { logger } from './logger.js';
 import { registerResearchCases } from './tools/research-cases.js';
 import { registerResearchLegislation } from './tools/research-legislation.js';
 import { registerGetJudgment } from './tools/get-judgment.js';
+import { registerFindCitingCases } from './tools/find-citing-cases.js';
+import { registerSearchByCitation } from './tools/search-by-citation.js';
+import { registerFormatCitation } from './tools/format-citation.js';
+import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
 
 function buildServer(): McpServer {
   const server = new McpServer({
@@ -12,9 +16,18 @@ function buildServer(): McpServer {
     version: '0.1.0',
   });
 
+  // Discovery & retrieval
   registerResearchCases(server);
   registerResearchLegislation(server);
+  registerSearchByCitation(server);
+  registerFindCitingCases(server);
+
+  // Document access
   registerGetJudgment(server);
+
+  // Citation utilities
+  registerFormatCitation(server);
+  registerGeneratePinpoint(server);
 
   return server;
 }

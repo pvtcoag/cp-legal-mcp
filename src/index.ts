@@ -3,6 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { createMcpHandler } from './server.js';
+import { warmup } from './hf-client.js';
 
 const app = express();
 app.use(express.json());
@@ -58,6 +59,8 @@ const server = app.listen(config.PORT, () => {
     { port: config.PORT, env: config.NODE_ENV, hfEnabled: config.HF_ENABLED },
     'cp-legal-mcp listening',
   );
+  // Warm up HF model in background — reduces first-request latency
+  warmup();
 });
 
 process.on('SIGTERM', () => {
