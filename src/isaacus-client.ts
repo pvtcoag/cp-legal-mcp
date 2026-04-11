@@ -11,7 +11,7 @@ function inputTokens(response: unknown): number {
 
 export interface RerankCandidate {
   title: string;
-  excerpt: string;
+  excerpt?: string;
   url: string;
   citation?: string;
   [key: string]: unknown;

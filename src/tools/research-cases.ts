@@ -142,7 +142,15 @@ export function registerResearchCases(server: McpServer): void {
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify({ query: input.query, jurisdiction: input.jurisdiction, result_count: results.length, results }, null, 2),
+          text: JSON.stringify({
+            query: input.query,
+            jurisdiction: input.jurisdiction,
+            result_count: results.length,
+            results,
+            _suggested_next: results.length > 0
+              ? 'Call summarise_judgment on the 1–2 most relevant results for a structured overview (holding, orders, facts, principles, outcome) before going deeper. Use ask_judgment only for questions outside those five dimensions.'
+              : 'No results found — try broadening the query, removing jurisdiction filters, or using classify_legal_issue to identify better jurisdiction codes.',
+          }, null, 2),
         }],
       };
     },

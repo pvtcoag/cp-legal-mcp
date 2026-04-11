@@ -155,6 +155,7 @@ export function registerSummariseJudgment(server: McpServer): void {
           },
           cases_cited: enriched.citations_made,
           defined_terms: enriched.defined_terms,
+          _suggested_next: 'Use ask_judgment for questions not covered by the five summary dimensions above. Use find_citing_cases to trace subsequent treatment. Use find_related_cases to discover cases addressing similar issues. Do NOT call enrich_judgment — enrichment data is already included above.',
         }, null, 2) }],
       };
     },

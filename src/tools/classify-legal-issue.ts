@@ -202,6 +202,7 @@ export function registerClassifyLegalIssue(server: McpServer): void {
           all_proceeding_types: proceedingTypes,
           suggested_jurisdictions: suggestedJurisdictions,
           note: 'Scores > 0.5 indicate a positive match. Use suggested_jurisdictions with research_cases.',
+          _suggested_next: `Call research_cases with jurisdiction set to one of [${suggestedJurisdictions.join(', ')}] and your research query. Start with the highest-authority court (first in the list).`,
         }, null, 2) }],
       };
     },

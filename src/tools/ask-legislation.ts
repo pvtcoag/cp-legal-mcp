@@ -113,6 +113,7 @@ export function registerAskLegislation(server: McpServer): void {
             confidence: Math.round(a.score * 1000) / 1000,
             char_range: [a.start, a.end],
           })),
+          _suggested_next: 'Use research_cases to find judgments that have interpreted or applied this provision. Use ask_legislation with a follow-up question to extract related provisions (e.g. definitions, penalty provisions, exceptions).',
         }, null, 2) }],
       };
     },

@@ -202,6 +202,7 @@ export function registerCompareCases(server: McpServer): void {
           case_a: panelA,
           case_b: panelB,
           agreement_note,
+          _suggested_next: 'Use ask_judgment on either case for follow-up questions on specific aspects of the reasoning. Use enrich_judgment to check whether one case cited the other and with what reception sentiment.',
         }, null, 2) }],
       };
     },
