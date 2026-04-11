@@ -121,8 +121,11 @@ async function callAuslawTool<T>(
     return JSON.parse(textItem.text) as T;
   } catch (err) {
     if (err instanceof AuslawError) throw err;
-    // Wrap timeout / network errors
-    const message = err instanceof Error ? err.message : String(err);
+    // Wrap timeout / network errors — include cause for fetch/network failures
+    let message = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
+    if (cause instanceof Error && cause.message) message += ` (cause: ${cause.message})`;
+    else if (cause) message += ` (cause: ${String(cause)})`;
     throw new AuslawError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
   } finally {
     await client.close().catch(() => {
