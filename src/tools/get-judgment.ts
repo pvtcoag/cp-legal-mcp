@@ -51,6 +51,7 @@ export function registerGetJudgment(server: McpServer): void {
                   text: JSON.stringify({
                     error: 'upstream_unavailable',
                     message: 'Could not validate the citation. The legal database may be temporarily unavailable.',
+                    detail: err.message,
                   }),
                 },
               ],
@@ -118,6 +119,7 @@ export function registerGetJudgment(server: McpServer): void {
                 text: JSON.stringify({
                   error: jadeExpired ? 'jade_session_expired' : 'upstream_unavailable',
                   message: baseMessage + (jadeExpired ? JADE_EXPIRY_NOTICE : ''),
+                  detail: err.message,
                 }),
               },
             ],

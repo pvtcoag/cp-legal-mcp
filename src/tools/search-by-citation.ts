@@ -53,6 +53,7 @@ export function registerSearchByCitation(server: McpServer): void {
                 text: JSON.stringify({
                   error: 'upstream_unavailable',
                   message: 'Could not search by citation. The legal database may be temporarily unavailable.',
+                  detail: err.message,
                 }),
               },
             ],

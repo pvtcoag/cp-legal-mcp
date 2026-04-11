@@ -51,7 +51,7 @@ export function registerResearchLegislation(server: McpServer): void {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_legislation failed');
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'upstream_unavailable', message: 'The Australian legislation database is currently unavailable. Please retry in a moment.' }) }],
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'upstream_unavailable', message: 'The Australian legislation database is currently unavailable. Please retry in a moment.', detail: err.message }) }],
             isError: true,
           };
         }

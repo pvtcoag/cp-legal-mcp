@@ -61,6 +61,7 @@ export function registerGeneratePinpoint(server: McpServer): void {
                 text: JSON.stringify({
                   error: 'upstream_unavailable',
                   message: 'Could not generate pinpoint reference. The legal database may be temporarily unavailable.',
+                  detail: err.message,
                 }),
               },
             ],

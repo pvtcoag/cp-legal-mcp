@@ -49,6 +49,7 @@ export function registerFindCitingCases(server: McpServer): void {
                   error: 'upstream_unavailable',
                   message:
                     'Could not retrieve citing cases. The citator service may be temporarily unavailable.',
+                  detail: err.message,
                 }),
               },
             ],

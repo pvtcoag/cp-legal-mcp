@@ -50,6 +50,7 @@ export function registerFormatCitation(server: McpServer): void {
                 text: JSON.stringify({
                   error: 'upstream_unavailable',
                   message: 'Could not format citation. The legal database may be temporarily unavailable.',
+                  detail: err.message,
                 }),
               },
             ],
