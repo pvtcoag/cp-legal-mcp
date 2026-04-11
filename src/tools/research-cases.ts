@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCases, AuslawError } from '../auslaw-client.js';
-import { rerank } from '../hf-client.js';
+import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
@@ -59,7 +59,9 @@ export function registerResearchCases(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'research_cases' });
 
-      const fetchLimit = Math.min((input.limit ?? 5) * 2, 15);
+      // Fetch more candidates than needed — Kanon 2 Reranker scores all of them
+      // accurately so a larger pool yields better final results.
+      const fetchLimit = Math.min((input.limit ?? 5) * 4, 20);
 
       let rawResults;
       try {
@@ -84,7 +86,7 @@ export function registerResearchCases(server: McpServer): void {
       try {
         ranked = await rerank(input.query, rawResults, input.limit ?? 5);
       } catch (err) {
-        log.warn({ err }, 'HF reranking failed, using original order');
+        log.warn({ err }, 'Isaacus reranking failed, using original order');
         ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
       }
 

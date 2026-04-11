@@ -19,14 +19,8 @@ const ConfigSchema = z.object({
   // Leave unset if only using mcp-remote (which does dynamic registration automatically).
   OAUTH_CLIENT_ID: z.string().optional(),
 
-  // HuggingFace
-  HF_API_TOKEN: z.string().min(1, 'HF_API_TOKEN is required'),
-  HF_ENABLED: z
-    .string()
-    .default('true')
-    .transform((v) => v === 'true'),
-  HF_RERANK_MODEL: z.string().default('isaacus/emubert'),
-  HF_RERANK_TOP_K: z.string().default('10').transform(Number),
+  // Isaacus — legal AI reranking
+  ISAACUS_API_KEY: z.string().min(1, 'ISAACUS_API_KEY is required'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

@@ -6,7 +6,6 @@ import { authMiddleware } from './auth.js';
 import { initDb } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
-import { warmup } from './hf-client.js';
 import { oauthRouter } from './oauth.js';
 import { preRegisterClient } from './oauth-store.js';
 import { mattersRouter } from './matters-ui.js';
@@ -102,7 +101,7 @@ app.delete('/mcp', authMiddleware, mcpRoute);
 // Startup
 const server = app.listen(config.PORT, async () => {
   logger.info(
-    { port: config.PORT, env: config.NODE_ENV, hfEnabled: config.HF_ENABLED },
+    { port: config.PORT, env: config.NODE_ENV },
     'cp-legal-mcp listening',
   );
 
@@ -118,8 +117,6 @@ const server = app.listen(config.PORT, async () => {
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
 
-  // Warm HF model in background to reduce first-request latency
-  warmup();
 });
 
 process.on('SIGTERM', () => {
