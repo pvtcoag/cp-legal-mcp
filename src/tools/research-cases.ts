@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCases, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../hf-client.js';
 import { logger } from '../logger.js';
+import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
 const inputSchema = z.object({
   query: z
@@ -41,6 +42,13 @@ const inputSchema = z.object({
     .boolean()
     .default(true)
     .describe('Whether to include formatted citations in the response'),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe(
+      'Optional matter reference to tag this search for later retrieval (e.g. "ABC-2024-001" or "Smith Dispute"). Use get_matter_history to review all searches for a matter.',
+    ),
 });
 
 export function registerResearchCases(server: McpServer): void {
@@ -49,11 +57,8 @@ export function registerResearchCases(server: McpServer): void {
     'Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
     inputSchema.shape,
     async (input) => {
-      // query excluded from child logger base — only emitted at debug level to avoid leaking
-      // sensitive query content into info/warn/error log lines in production
       const log = logger.child({ tool: 'research_cases' });
 
-      // Fetch 2× requested limit to give reranker material; cap at 15 to be kind to AustLII
       const fetchLimit = Math.min((input.limit ?? 5) * 2, 15);
 
       let rawResults;
@@ -68,16 +73,7 @@ export function registerResearchCases(server: McpServer): void {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_cases failed');
           return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  error: 'upstream_unavailable',
-                  message:
-                    'The Australian legal database is currently unavailable. Please retry in a moment.',
-                }),
-              },
-            ],
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'upstream_unavailable', message: 'The Australian legal database is currently unavailable. Please retry in a moment.' }) }],
             isError: true,
           };
         }
@@ -103,22 +99,22 @@ export function registerResearchCases(server: McpServer): void {
         relevance_score: Math.round(score * 1000) / 1000,
       }));
 
+      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'research_cases',
+          query_text: input.query,
+          jurisdiction: input.jurisdiction,
+          result_count: results.length,
+          top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+        });
+      }
+
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                query: input.query,
-                jurisdiction: input.jurisdiction,
-                result_count: results.length,
-                results,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ query: input.query, jurisdiction: input.jurisdiction, result_count: results.length, results }, null, 2),
+        }],
       };
     },
   );

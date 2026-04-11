@@ -9,6 +9,7 @@ import { registerFindCitingCases } from './tools/find-citing-cases.js';
 import { registerSearchByCitation } from './tools/search-by-citation.js';
 import { registerFormatCitation } from './tools/format-citation.js';
 import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
+import { registerGetMatterHistory } from './tools/get-matter-history.js';
 
 function buildServer(): McpServer {
   const server = new McpServer({
@@ -28,6 +29,9 @@ function buildServer(): McpServer {
   // Citation utilities
   registerFormatCitation(server);
   registerGeneratePinpoint(server);
+
+  // Matter tracking
+  registerGetMatterHistory(server);
 
   return server;
 }

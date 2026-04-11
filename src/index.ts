@@ -2,6 +2,9 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { authMiddleware } from './auth.js';
+import { initDb } from './db.js';
+import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { warmup } from './hf-client.js';
 
@@ -20,7 +23,7 @@ app.use(
   }),
 );
 
-// Health check — used by Railway healthcheck and monitoring
+// Health check — used by Railway healthcheck
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -29,37 +32,32 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// Bearer token auth middleware — only active when MCP_AUTH_TOKEN is set
-function authGuard(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction,
-): void {
-  if (!config.MCP_AUTH_TOKEN) {
-    next();
-    return;
-  }
-  const header = req.headers['authorization'] ?? '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (token !== config.MCP_AUTH_TOKEN) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  next();
+// MCP endpoint — auth guard, then propagate user identity into async context
+const mcpHandler = createMcpHandler();
+
+function mcpRoute(req: express.Request, res: express.Response): void {
+  const user = res.locals['user'] as string | undefined;
+  // Run the MCP handler inside the request context so tool handlers can read user identity
+  requestContext.run({ user }, () => {
+    mcpHandler(req, res);
+  });
 }
 
-// MCP endpoint — all three HTTP methods required by the Streamable HTTP transport spec
-const mcpHandler = createMcpHandler();
-app.post('/mcp', authGuard, mcpHandler);
-app.get('/mcp', authGuard, mcpHandler);
-app.delete('/mcp', authGuard, mcpHandler);
+app.post('/mcp', authMiddleware, mcpRoute);
+app.get('/mcp', authMiddleware, mcpRoute);
+app.delete('/mcp', authMiddleware, mcpRoute);
 
-const server = app.listen(config.PORT, () => {
+// Startup
+const server = app.listen(config.PORT, async () => {
   logger.info(
     { port: config.PORT, env: config.NODE_ENV, hfEnabled: config.HF_ENABLED },
     'cp-legal-mcp listening',
   );
-  // Warm up HF model in background — reduces first-request latency
+
+  // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
+  await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
+
+  // Warm HF model in background to reduce first-request latency
   warmup();
 });
 

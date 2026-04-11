@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchLegislation, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../hf-client.js';
 import { logger } from '../logger.js';
+import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
 const inputSchema = z.object({
   query: z
@@ -13,9 +14,7 @@ const inputSchema = z.object({
   jurisdiction: z
     .enum(['cth', 'nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'act', 'nt', 'all'])
     .default('all')
-    .describe(
-      'Australian jurisdiction for legislation search. cth = Commonwealth/Federal',
-    ),
+    .describe('Australian jurisdiction for legislation search. cth = Commonwealth/Federal'),
   limit: z
     .number()
     .int()
@@ -23,6 +22,11 @@ const inputSchema = z.object({
     .max(20)
     .default(5)
     .describe('Maximum number of results to return'),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe('Optional matter reference to tag this search for later retrieval.'),
 });
 
 export function registerResearchLegislation(server: McpServer): void {
@@ -47,16 +51,7 @@ export function registerResearchLegislation(server: McpServer): void {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_legislation failed');
           return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  error: 'upstream_unavailable',
-                  message:
-                    'The Australian legislation database is currently unavailable. Please retry in a moment.',
-                }),
-              },
-            ],
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'upstream_unavailable', message: 'The Australian legislation database is currently unavailable. Please retry in a moment.' }) }],
             isError: true,
           };
         }
@@ -80,22 +75,22 @@ export function registerResearchLegislation(server: McpServer): void {
         relevance_score: Math.round(score * 1000) / 1000,
       }));
 
+      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'research_legislation',
+          query_text: input.query,
+          jurisdiction: input.jurisdiction,
+          result_count: results.length,
+          top_results: results.slice(0, 3).map((r) => ({ title: r.title, url: r.url })),
+        });
+      }
+
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                query: input.query,
-                jurisdiction: input.jurisdiction,
-                result_count: results.length,
-                results,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ query: input.query, jurisdiction: input.jurisdiction, result_count: results.length, results }, null, 2),
+        }],
       };
     },
   );

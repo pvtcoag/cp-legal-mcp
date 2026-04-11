@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fetchDocumentText, validateCitation, AuslawError } from '../auslaw-client.js';
 import { logger } from '../logger.js';
+import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
 // Neutral citation: [2024] HCA 12, [2023] FCAFC 45, etc.
 const NEUTRAL_CITATION_RE = /^\[\d{4}\]\s+[A-Z]+\s+\d+$/i;
@@ -14,6 +15,11 @@ const inputSchema = z.object({
     .describe(
       'Neutral citation (e.g. "[2024] HCA 12") or a full AustLII URL of the judgment to retrieve',
     ),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe('Optional matter reference to tag this retrieval for later review.'),
 });
 
 export function registerGetJudgment(server: McpServer): void {
@@ -114,6 +120,18 @@ export function registerGetJudgment(server: McpServer): void {
         throw err;
       }
 
+      const citation = doc.citation ?? (isCitation ? value : undefined);
+
+      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'get_judgment',
+          query_text: value,
+          result_count: 1,
+          top_results: [{ title: doc.title ?? value, citation, url: resolvedUrl }],
+        });
+      }
+
       return {
         content: [
           {
@@ -121,7 +139,7 @@ export function registerGetJudgment(server: McpServer): void {
             text: JSON.stringify(
               {
                 title: doc.title,
-                citation: doc.citation ?? (isCitation ? value : undefined),
+                citation,
                 url: resolvedUrl,
                 canonical_url: canonicalUrl ?? resolvedUrl,
                 char_count: doc.text.length,

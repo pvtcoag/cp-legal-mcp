@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchByCitation, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../hf-client.js';
 import { logger } from '../logger.js';
+import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation_or_name: z
@@ -18,6 +19,11 @@ const inputSchema = z.object({
     .max(20)
     .default(5)
     .describe('Maximum number of results to return'),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe('Optional matter reference to tag this search for later retrieval.'),
 });
 
 export function registerSearchByCitation(server: McpServer): void {
@@ -76,21 +82,21 @@ export function registerSearchByCitation(server: McpServer): void {
         relevance_score: Math.round(score * 1000) / 1000,
       }));
 
+      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'search_by_citation',
+          query_text: input.citation_or_name,
+          result_count: results.length,
+          top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+        });
+      }
+
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                query: input.citation_or_name,
-                result_count: results.length,
-                results,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ query: input.citation_or_name, result_count: results.length, results }, null, 2),
+        }],
       };
     },
   );

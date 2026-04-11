@@ -2,14 +2,13 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCitingCases, AuslawError } from '../auslaw-client.js';
 import { logger } from '../logger.js';
+import { recordMatterQuery, validateMatterRef } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation: z
     .string()
     .min(5)
-    .describe(
-      'Neutral citation of the case to find citations for, e.g. "[2024] HCA 12"',
-    ),
+    .describe('Neutral citation of the case to find citations for, e.g. "[2024] HCA 12"'),
   limit: z
     .number()
     .int()
@@ -17,6 +16,11 @@ const inputSchema = z.object({
     .max(20)
     .default(10)
     .describe('Maximum number of citing cases to return'),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe('Optional matter reference to tag this search for later retrieval.'),
 });
 
 export function registerFindCitingCases(server: McpServer): void {
@@ -64,21 +68,21 @@ export function registerFindCitingCases(server: McpServer): void {
         ...(item.date ? { date: item.date } : {}),
       }));
 
+      if (input.matter_ref && validateMatterRef(input.matter_ref)) {
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'find_citing_cases',
+          query_text: input.citation,
+          result_count: cases.length,
+          top_results: cases.slice(0, 3).map((c) => ({ title: c.title, citation: c.citation, url: c.url })),
+        });
+      }
+
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                cited_case: input.citation,
-                citing_case_count: cases.length,
-                cases,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ cited_case: input.citation, citing_case_count: cases.length, cases }, null, 2),
+        }],
       };
     },
   );
