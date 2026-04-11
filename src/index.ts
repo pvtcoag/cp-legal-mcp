@@ -12,6 +12,7 @@ import { preRegisterClient } from './oauth-store.js';
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // OAuth login form POST
 
 // Rate limiting — 60 requests per minute per IP
 app.use(
