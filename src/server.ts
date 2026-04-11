@@ -9,6 +9,8 @@ import { registerFindCitingCases } from './tools/find-citing-cases.js';
 import { registerSearchByCitation } from './tools/search-by-citation.js';
 import { registerFormatCitation } from './tools/format-citation.js';
 import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
+import { registerAskJudgment } from './tools/ask-judgment.js';
+import { registerEnrichJudgment } from './tools/enrich-judgment.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 
@@ -24,8 +26,10 @@ function buildServer(): McpServer {
   registerSearchByCitation(server);
   registerFindCitingCases(server);
 
-  // Document access
+  // Document access & analysis
   registerGetJudgment(server);
+  registerAskJudgment(server);
+  registerEnrichJudgment(server);
 
   // Citation utilities
   registerFormatCitation(server);

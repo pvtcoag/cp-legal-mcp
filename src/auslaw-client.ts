@@ -221,6 +221,42 @@ export async function formatCitation(citation: string): Promise<AuslawFormattedC
   return callAuslawTool<AuslawFormattedCitation>('format_citation', { citation });
 }
 
+// ── Judgment URL resolution ───────────────────────────────────────────────────
+// Shared by get_judgment, ask_judgment, enrich_judgment and any other tool that
+// needs to resolve a citation-or-URL input into a fetchable AustLII URL.
+
+const NEUTRAL_CITATION_RE = /^\[\d{4}\]\s+[A-Z]+\s+\d+$/i;
+const URL_RE = /^https?:\/\//;
+
+export interface ResolvedJudgment {
+  url: string;
+  canonicalUrl?: string;
+  /** The original citation string, if the input was a citation rather than a URL. */
+  citation?: string;
+}
+
+/**
+ * Resolves a neutral citation or AustLII URL into a concrete fetch URL.
+ * Throws AuslawError with a descriptive message on invalid input or missing citation.
+ */
+export async function resolveJudgmentUrl(input: string): Promise<ResolvedJudgment> {
+  const value = input.trim();
+  if (URL_RE.test(value)) {
+    return { url: value };
+  }
+  if (NEUTRAL_CITATION_RE.test(value)) {
+    const validation = await validateCitation(value);
+    if (!validation.valid || !validation.url) {
+      throw new AuslawError(`Citation "${value}" could not be found on AustLII.`, 'validate_citation');
+    }
+    return { url: validation.url, canonicalUrl: validation.canonical ?? undefined, citation: value };
+  }
+  throw new AuslawError(
+    'Invalid input: provide a neutral citation like "[2024] HCA 12" or a full AustLII URL.',
+    'resolve_judgment_url',
+  );
+}
+
 export async function generatePinpoint(params: {
   citation: string;
   paragraph: number;
