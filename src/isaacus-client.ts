@@ -49,7 +49,7 @@ export async function rerank<T extends RerankCandidate>(
     top_n: topK,
   });
 
-  return response.results.map((result) => ({
+  return response.results.map((result: { index: number; score: number }) => ({
     item: candidates[result.index],
     score: result.score,
   }));
