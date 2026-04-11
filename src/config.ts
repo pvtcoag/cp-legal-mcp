@@ -9,6 +9,9 @@ const ConfigSchema = z.object({
   AUSLAW_BASE_URL: z.string().url('AUSLAW_BASE_URL must be a valid URL'),
   AUSLAW_TIMEOUT_MS: z.string().default('30000').transform(Number),
 
+  // Auth — optional bearer token; if set, all /mcp requests must include it
+  MCP_AUTH_TOKEN: z.string().optional(),
+
   // HuggingFace
   HF_API_TOKEN: z.string().min(1, 'HF_API_TOKEN is required'),
   HF_ENABLED: z
