@@ -13,6 +13,8 @@ import { registerAskJudgment } from './tools/ask-judgment.js';
 import { registerEnrichJudgment } from './tools/enrich-judgment.js';
 import { registerSummariseJudgment } from './tools/summarise-judgment.js';
 import { registerClassifyLegalIssue } from './tools/classify-legal-issue.js';
+import { registerFindRelatedCases } from './tools/find-related-cases.js';
+import { registerCompareCases } from './tools/compare-cases.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 
@@ -36,6 +38,10 @@ function buildServer(): McpServer {
 
   // Issue classification
   registerClassifyLegalIssue(server);
+
+  // Discovery & analysis
+  registerFindRelatedCases(server);
+  registerCompareCases(server);
 
   // Citation utilities
   registerFormatCitation(server);

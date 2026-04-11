@@ -35,6 +35,8 @@ const TOOL_LABELS: Record<string, string> = {
   enrich_judgment: 'Enrich Judgment',
   summarise_judgment: 'Summarise',
   classify_legal_issue: 'Classify Issue',
+  find_related_cases: 'Related Cases',
+  compare_cases: 'Compare Cases',
   find_citing_cases: 'Citing Cases',
   search_by_citation: 'Citation Search',
   format_citation: 'Format Citation',
@@ -404,12 +406,14 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   const lastRow = rows[0]!;
   const researchers = [...new Set(rows.map((r) => r.user_id).filter(Boolean))].join(', ') || '—';
   const totalResults = rows.reduce((sum, r) => sum + (r.result_count ?? 0), 0);
+  const totalTokens = rows.reduce((sum, r) => sum + (r.api_tokens_used ?? 0), 0);
   const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
 
   const queryRows = rows.map((r) => {
     const topLinks = (r.top_results ?? []).slice(0, 3)
       .map((tr) => `<a href="${esc(tr.url)}" target="_blank" rel="noopener">${esc(tr.title)}${tr.citation ? ` — ${esc(tr.citation)}` : ''}</a>`)
       .join('');
+    const tokensCell = r.api_tokens_used ? r.api_tokens_used.toLocaleString() : '—';
     return `<tr>
       <td class="date-small">${fmtDateTime(r.created_at)}</td>
       <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
@@ -417,6 +421,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <td class="query-text">${esc(r.query_text)}</td>
       <td class="date-small">${esc(r.jurisdiction ?? '—')}</td>
       <td class="count" style="text-align:right">${r.result_count ?? 0}</td>
+      <td class="count" style="text-align:right">${tokensCell}</td>
       <td class="top-results">${topLinks || '—'}</td>
     </tr>`;
   }).join('');
@@ -434,6 +439,10 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <div class="card">
         <div class="card-label">Results Retrieved</div>
         <div class="card-value">${totalResults}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">API Tokens Used</div>
+        <div class="card-value">${totalTokens > 0 ? totalTokens.toLocaleString() : '—'}</div>
       </div>
       <div class="card">
         <div class="card-label">Researchers</div>
@@ -457,6 +466,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
         <th>Query</th>
         <th>Jurisdiction</th>
         <th style="text-align:right">Results</th>
+        <th style="text-align:right">Tokens</th>
         <th>Top Results</th>
       </tr></thead>
       <tbody>${queryRows}</tbody>
@@ -476,7 +486,7 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   if (!isAdmin(user) && !rows.some((r) => r.user_id === user)) { res.status(403).send('Forbidden'); return; }
 
   const csvEsc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
-  const header = ['Date/Time', 'Tool', 'Researcher', 'Query', 'Jurisdiction', 'Results', 'Top Results']
+  const header = ['Date/Time', 'Tool', 'Researcher', 'Query', 'Jurisdiction', 'Results', 'Tokens', 'Top Results']
     .map(csvEsc).join(',');
   const dataRows = rows.map((r) => {
     const topResults = (r.top_results ?? []).slice(0, 3)
@@ -489,6 +499,7 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
       r.query_text,
       r.jurisdiction ?? '',
       String(r.result_count ?? 0),
+      String(r.api_tokens_used ?? 0),
       topResults,
     ].map(csvEsc).join(',');
   });

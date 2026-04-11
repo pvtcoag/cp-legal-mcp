@@ -1,0 +1,251 @@
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  fetchDocumentText,
+  resolveJudgmentUrl,
+  searchCases,
+  AuslawError,
+  isJadeExpiry,
+  JADE_EXPIRY_NOTICE,
+} from '../auslaw-client.js';
+import {
+  embedText,
+  rerank,
+  cosineSimilarity,
+} from '../isaacus-client.js';
+import {
+  getJudgmentEmbedding,
+  upsertJudgmentEmbedding,
+  getAllJudgmentEmbeddings,
+} from '../db.js';
+import { logger } from '../logger.js';
+import { recordMatterQuery } from '../matter-log.js';
+
+const inputSchema = z.object({
+  citation_or_url: z
+    .string()
+    .min(5)
+    .describe('Neutral citation (e.g. "[2024] HCA 12") or full AustLII URL of the seed judgment'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(15)
+    .default(5)
+    .describe('Maximum number of related cases to return'),
+  matter_ref: z
+    .string()
+    .max(100)
+    .optional()
+    .describe(
+      'Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
+    ),
+});
+
+export function registerFindRelatedCases(server: McpServer): void {
+  server.tool(
+    'find_related_cases',
+    'Find Australian judgments semantically related to a given case using Kanon 2 Embedder vector similarity. Searches the judgment corpus (built up as cases are researched) plus an AustLII keyword search based on the case title. Results improve as the corpus grows. Use this to discover cases that address similar legal issues without relying solely on the citation network.',
+    inputSchema.shape,
+    async (input) => {
+      const log = logger.child({ tool: 'find_related_cases', input: input.citation_or_url });
+      let totalTokens = 0;
+
+      // ── 1. Resolve and fetch the seed judgment ──────────────────────────────
+      let resolved;
+      try {
+        resolved = await resolveJudgmentUrl(input.citation_or_url);
+      } catch (err) {
+        if (err instanceof AuslawError) {
+          log.warn({ err }, 'resolveJudgmentUrl failed');
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: 'invalid_input',
+              message: err.message,
+              received: input.citation_or_url,
+            }) }],
+            isError: true,
+          };
+        }
+        throw err;
+      }
+
+      let doc;
+      try {
+        doc = await fetchDocumentText(resolved.url);
+      } catch (err) {
+        if (err instanceof AuslawError) {
+          const jadeExpired = isJadeExpiry(err);
+          if (jadeExpired) logger.warn({ err }, 'JADE session cookie may have expired');
+          else log.warn({ err }, 'fetch_document_text failed');
+          const baseMessage = jadeExpired
+            ? 'Could not retrieve the judgment — the JADE session appears to have expired.'
+            : 'Could not retrieve the judgment. The legal database may be temporarily unavailable.';
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: jadeExpired ? 'jade_session_expired' : 'upstream_unavailable',
+              message: baseMessage + (jadeExpired ? JADE_EXPIRY_NOTICE : ''),
+              detail: err.message,
+            }) }],
+            isError: true,
+          };
+        }
+        throw err;
+      }
+
+      const seedTitle = doc.title ?? resolved.citation ?? input.citation_or_url;
+      const seedCitation = doc.citation ?? resolved.citation;
+
+      // ── 2. Get or generate embedding for the seed judgment ──────────────────
+      // Embed only first 8000 chars — the intro and headnote carry most of the
+      // topical signal; full text would exceed the model context anyway.
+      const TEXT_WINDOW = 8000;
+      const textForEmbedding = doc.text.slice(0, TEXT_WINDOW);
+
+      let seedEmbedding = await getJudgmentEmbedding(resolved.url).catch(() => null);
+      if (!seedEmbedding) {
+        try {
+          const embedResult = await embedText(textForEmbedding, 'retrieval/document');
+          seedEmbedding = embedResult.embedding;
+          totalTokens += embedResult.tokensUsed;
+          // Cache it for future calls — fire-and-forget
+          upsertJudgmentEmbedding(resolved.url, seedEmbedding).catch((err) =>
+            logger.warn({ err }, 'embedding cache write failed'),
+          );
+        } catch (err) {
+          log.warn({ err }, 'Isaacus embedding failed — falling back to title search only');
+          seedEmbedding = null;
+        }
+      }
+
+      // ── 3. Corpus similarity search ─────────────────────────────────────────
+      interface SimilarCase {
+        url: string;
+        title: string | null;
+        citation: string | null;
+        similarity: number;
+        source: 'corpus' | 'auslaw';
+        excerpt?: string;
+      }
+
+      const corpusResults: SimilarCase[] = [];
+
+      if (seedEmbedding) {
+        const corpus = await getAllJudgmentEmbeddings().catch(() => []);
+        const others = corpus.filter((e) => e.url !== resolved.url);
+
+        if (others.length > 0) {
+          const scored = others
+            .map((e) => ({
+              url: e.url,
+              title: e.title,
+              citation: e.citation,
+              similarity: cosineSimilarity(seedEmbedding!, e.embedding),
+              source: 'corpus' as const,
+            }))
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, input.limit * 2); // over-fetch for reranking
+
+          corpusResults.push(...scored);
+          log.debug({ corpusSize: others.length, found: scored.length }, 'corpus similarity done');
+        }
+      }
+
+      // ── 4. AustLII keyword search for freshness ─────────────────────────────
+      // Use the title as the search query — the most stable topical signal.
+      const auslawCandidates = await searchCases({
+        query: seedTitle,
+        limit: input.limit * 3,
+      }).catch(() => []);
+
+      // Exclude the seed judgment itself
+      const auslawFiltered = auslawCandidates.filter(
+        (c) => c.url !== resolved.url && c.citation !== seedCitation,
+      );
+
+      // ── 5. Merge and rerank ─────────────────────────────────────────────────
+      // Build a unified candidate pool from both sources, deduplicated by URL
+      const seen = new Set<string>();
+      const allCandidates: Array<{
+        title: string; citation: string; url: string; excerpt: string;
+        similarity?: number; source: 'corpus' | 'auslaw';
+      }> = [];
+
+      for (const c of corpusResults) {
+        if (!seen.has(c.url)) {
+          seen.add(c.url);
+          allCandidates.push({
+            title: c.title ?? '',
+            citation: c.citation ?? '',
+            url: c.url,
+            excerpt: '',
+            similarity: c.similarity,
+            source: 'corpus',
+          });
+        }
+      }
+      for (const c of auslawFiltered) {
+        if (!seen.has(c.url)) {
+          seen.add(c.url);
+          allCandidates.push({
+            title: c.title,
+            citation: c.citation,
+            url: c.url,
+            excerpt: c.excerpt ?? '',
+            source: 'auslaw',
+          });
+        }
+      }
+
+      let finalResults: Array<{ title: string; citation: string; url: string; excerpt?: string; similarity?: number; relevance_score: number }>;
+
+      if (allCandidates.length === 0) {
+        finalResults = [];
+      } else {
+        const rerankQuery = `Cases related to: ${seedTitle}${seedCitation ? ` (${seedCitation})` : ''}`;
+        try {
+          const rerankResult = await rerank(rerankQuery, allCandidates, input.limit);
+          totalTokens += rerankResult.tokensUsed;
+          finalResults = rerankResult.results.map(({ item, score }) => ({
+            title: item.title,
+            citation: item.citation || undefined,
+            url: item.url,
+            ...(item.excerpt ? { excerpt: item.excerpt } : {}),
+            ...(item.similarity !== undefined ? { corpus_similarity: Math.round(item.similarity * 1000) / 1000 } : {}),
+            relevance_score: Math.round(score * 1000) / 1000,
+          }));
+        } catch {
+          // Reranker failed — return raw candidates sorted by corpus similarity then title
+          finalResults = allCandidates.slice(0, input.limit).map((c) => ({
+            title: c.title,
+            citation: c.citation || undefined,
+            url: c.url,
+            ...(c.excerpt ? { excerpt: c.excerpt } : {}),
+            ...(c.similarity !== undefined ? { corpus_similarity: Math.round(c.similarity * 1000) / 1000 } : {}),
+            relevance_score: c.similarity ?? 0,
+          }));
+        }
+      }
+
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'find_related_cases',
+        query_text: input.citation_or_url,
+        result_count: finalResults.length,
+        top_results: finalResults.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+        api_tokens_used: totalTokens,
+      });
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          seed_case: { title: seedTitle, citation: seedCitation, url: resolved.url },
+          related_cases: finalResults,
+          corpus_size: (await getAllJudgmentEmbeddings().catch(() => [])).length,
+          note: corpusResults.length === 0
+            ? 'Corpus is empty or has only this judgment — results are from AustLII keyword search. The corpus grows as more judgments are researched with summarise_judgment, enrich_judgment, or ask_judgment.'
+            : `${corpusResults.length} result(s) from the ${(await getAllJudgmentEmbeddings().catch(() => [])).length}-judgment semantic corpus; remaining from AustLII.`,
+        }, null, 2) }],
+      };
+    },
+  );
+}

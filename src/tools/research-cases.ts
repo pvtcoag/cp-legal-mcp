@@ -42,6 +42,15 @@ const inputSchema = z.object({
     .boolean()
     .default(true)
     .describe('Whether to include formatted citations in the response'),
+  use_iql: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Treat the query as an IQL boolean expression for precise matching. ' +
+      'Supports AND, OR, NOT operators and quoted phrases. ' +
+      'Example: \'"duty of care" AND negligence NOT "contributory negligence"\'. ' +
+      'Only affects result ranking — AustLII search still receives the raw query.',
+    ),
   matter_ref: z
     .string()
     .max(100)
@@ -83,8 +92,11 @@ export function registerResearchCases(server: McpServer): void {
       }
 
       let ranked;
+      let rerankTokens = 0;
       try {
-        ranked = await rerank(input.query, rawResults, input.limit ?? 5);
+        const rerankResult = await rerank(input.query, rawResults, input.limit ?? 5, { isIql: input.use_iql });
+        ranked = rerankResult.results;
+        rerankTokens = rerankResult.tokensUsed;
       } catch (err) {
         log.warn({ err }, 'Isaacus reranking failed, using original order');
         ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
@@ -108,6 +120,7 @@ export function registerResearchCases(server: McpServer): void {
         jurisdiction: input.jurisdiction,
         result_count: results.length,
         top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+        api_tokens_used: rerankTokens,
       });
 
       return {

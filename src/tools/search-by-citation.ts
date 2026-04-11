@@ -65,8 +65,11 @@ export function registerSearchByCitation(server: McpServer): void {
 
       // Rerank when searching by name (multiple candidates); less useful for exact citation lookup
       let ranked;
+      let rerankTokens = 0;
       try {
-        ranked = await rerank(input.citation_or_name, rawResults, input.limit ?? 5);
+        const rerankResult = await rerank(input.citation_or_name, rawResults, input.limit ?? 5);
+        ranked = rerankResult.results;
+        rerankTokens = rerankResult.tokensUsed;
       } catch (err) {
         log.warn({ err }, 'Isaacus reranking failed, using original order');
         ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
@@ -89,6 +92,7 @@ export function registerSearchByCitation(server: McpServer): void {
         query_text: input.citation_or_name,
         result_count: results.length,
         top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
+        api_tokens_used: rerankTokens,
       });
 
       return {

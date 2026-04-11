@@ -55,6 +55,16 @@ export async function initDb(): Promise<void> {
       fetched_at    TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_jc_fetched_at ON judgment_cache(fetched_at DESC);
+
+    CREATE TABLE IF NOT EXISTS judgment_embeddings (
+      url         TEXT PRIMARY KEY,
+      embedding   JSONB        NOT NULL,
+      dimensions  INTEGER      NOT NULL DEFAULT 1792,
+      model       TEXT         NOT NULL DEFAULT 'kanon-2-embedder',
+      created_at  TIMESTAMPTZ  DEFAULT NOW()
+    );
+
+    ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS api_tokens_used INTEGER DEFAULT 0;
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -68,6 +78,7 @@ export interface QueryLogEntry {
   jurisdiction?: string;
   result_count: number;
   top_results: Array<{ title: string; citation?: string; url: string }>;
+  api_tokens_used?: number;
 }
 
 // Fire-and-forget safe: caller should .catch() this
@@ -76,8 +87,8 @@ export async function logMatterQuery(entry: QueryLogEntry): Promise<void> {
 
   await pool.query(
     `INSERT INTO matter_queries
-       (matter_ref, user_id, tool_name, query_text, jurisdiction, result_count, top_results)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       (matter_ref, user_id, tool_name, query_text, jurisdiction, result_count, top_results, api_tokens_used)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       entry.matter_ref,
       entry.user_id ?? null,
@@ -86,6 +97,7 @@ export async function logMatterQuery(entry: QueryLogEntry): Promise<void> {
       entry.jurisdiction ?? null,
       entry.result_count,
       JSON.stringify(entry.top_results),
+      entry.api_tokens_used ?? 0,
     ],
   );
 }
@@ -99,6 +111,7 @@ export interface MatterHistoryRow {
   jurisdiction: string | null;
   result_count: number;
   top_results: Array<{ title: string; citation?: string; url: string }>;
+  api_tokens_used: number;
   created_at: string;
 }
 
@@ -110,7 +123,7 @@ export async function getMatterHistory(
 
   const result = await pool.query<MatterHistoryRow>(
     `SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
-            result_count, top_results, created_at
+            result_count, top_results, api_tokens_used, created_at
      FROM matter_queries
      WHERE matter_ref = $1
      ORDER BY created_at DESC
@@ -217,6 +230,49 @@ export async function upsertJudgmentCache(
   );
 }
 
+// ── Judgment embeddings ───────────────────────────────────────────────────────
+
+export interface EmbeddingEntry {
+  url: string;
+  title: string | null;
+  citation: string | null;
+  embedding: number[];
+}
+
+export async function getJudgmentEmbedding(url: string): Promise<number[] | null> {
+  if (!pool) return null;
+  const result = await pool.query<{ embedding: number[] }>(
+    'SELECT embedding FROM judgment_embeddings WHERE url = $1',
+    [url],
+  );
+  return result.rows[0]?.embedding ?? null;
+}
+
+export async function upsertJudgmentEmbedding(url: string, embedding: number[]): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO judgment_embeddings (url, embedding, dimensions)
+     VALUES ($1, $2::jsonb, $3)
+     ON CONFLICT (url) DO UPDATE SET
+       embedding  = EXCLUDED.embedding,
+       dimensions = EXCLUDED.dimensions,
+       created_at = NOW()`,
+    [url, JSON.stringify(embedding), embedding.length],
+  );
+}
+
+/** Returns all embedded judgments joined with cache metadata for similarity search. */
+export async function getAllJudgmentEmbeddings(): Promise<EmbeddingEntry[]> {
+  if (!pool) return [];
+  const result = await pool.query<EmbeddingEntry>(`
+    SELECT je.url, jc.title, jc.citation, je.embedding
+    FROM judgment_embeddings je
+    LEFT JOIN judgment_cache jc ON je.url = jc.url
+    ORDER BY je.created_at DESC
+  `);
+  return result.rows;
+}
+
 export interface UserActivityRow {
   user_id: string | null;
   query_date: string;
@@ -252,7 +308,7 @@ export async function getRecentActivity(limit: number = 50): Promise<RecentActiv
   if (!pool) return [];
   const result = await pool.query<RecentActivityRow>(`
     SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
-           result_count, top_results, created_at
+           result_count, top_results, api_tokens_used, created_at
     FROM matter_queries
     ORDER BY created_at DESC
     LIMIT $1

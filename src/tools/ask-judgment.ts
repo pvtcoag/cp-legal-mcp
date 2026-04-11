@@ -113,6 +113,7 @@ export function registerAskJudgment(server: McpServer): void {
         query_text: input.question,
         result_count: extraction.answers.length,
         top_results: [{ title, citation, url: resolved.url }],
+        api_tokens_used: extraction.tokensUsed,
       });
 
       if (extraction.inextractable || extraction.answers.length === 0) {

@@ -18,6 +18,8 @@ export interface MatterLogParams {
   jurisdiction?: string;
   result_count: number;
   top_results: Array<{ title: string; citation?: string; url: string }>;
+  /** Total Isaacus API tokens consumed by this tool call. Used for per-matter cost attribution. */
+  api_tokens_used?: number;
 }
 
 // Fire-and-forget: DB failures must never affect tool responses

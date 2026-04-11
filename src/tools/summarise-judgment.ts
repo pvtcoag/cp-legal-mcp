@@ -92,9 +92,9 @@ export function registerSummariseJudgment(server: McpServer): void {
       }
 
       // Enrichment + all five QA calls run in parallel for maximum throughput
-      let enriched, holdingR, ordersR, factsR, principlesR, outcomeR;
+      let enrichResult, holdingR, ordersR, factsR, principlesR, outcomeR;
       try {
-        [enriched, holdingR, ordersR, factsR, principlesR, outcomeR] = await Promise.all([
+        [enrichResult, holdingR, ordersR, factsR, principlesR, outcomeR] = await Promise.all([
           enrichDocument(doc.text),
           extractAnswer(QA_QUESTIONS.holding, doc.text, 1),
           extractAnswer(QA_QUESTIONS.orders, doc.text, 1),
@@ -116,6 +116,12 @@ export function registerSummariseJudgment(server: McpServer): void {
         };
       }
 
+      const enriched = enrichResult.data;
+      const totalTokens =
+        enrichResult.tokensUsed +
+        holdingR.tokensUsed + ordersR.tokensUsed + factsR.tokensUsed +
+        principlesR.tokensUsed + outcomeR.tokensUsed;
+
       const citation = doc.citation ?? resolved.citation;
       const title = doc.title ?? citation ?? input.citation_or_url;
 
@@ -125,6 +131,7 @@ export function registerSummariseJudgment(server: McpServer): void {
         query_text: input.citation_or_url,
         result_count: 1,
         top_results: [{ title, citation, url: resolved.url }],
+        api_tokens_used: totalTokens,
       });
 
       return {

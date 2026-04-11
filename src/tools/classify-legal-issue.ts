@@ -145,9 +145,9 @@ export function registerClassifyLegalIssue(server: McpServer): void {
       const practiceDescriptions = PRACTICE_AREAS.map((a) => a.description);
       const proceedingDescriptions = PROCEEDING_TYPES.map((p) => p.description);
 
-      let practiceResults, proceedingResults;
+      let practiceClassification, proceedingClassification;
       try {
-        [practiceResults, proceedingResults] = await Promise.all([
+        [practiceClassification, proceedingClassification] = await Promise.all([
           classifyText(input.text, practiceDescriptions),
           classifyText(input.text, proceedingDescriptions),
         ]);
@@ -164,13 +164,15 @@ export function registerClassifyLegalIssue(server: McpServer): void {
         };
       }
 
+      const totalTokens = practiceClassification.tokensUsed + proceedingClassification.tokensUsed;
+
       // Map description strings back to human-readable labels
-      const practiceAreas = practiceResults.map((r) => {
+      const practiceAreas = practiceClassification.results.map((r) => {
         const area = PRACTICE_AREAS.find((a) => a.description === r.category);
         return { area: area?.label ?? r.category, score: Math.round(r.score * 1000) / 1000 };
       });
 
-      const proceedingTypes = proceedingResults.map((r) => {
+      const proceedingTypes = proceedingClassification.results.map((r) => {
         const pt = PROCEEDING_TYPES.find((p) => p.description === r.category);
         return { type: pt?.label ?? r.category, score: Math.round(r.score * 1000) / 1000 };
       });
@@ -186,6 +188,7 @@ export function registerClassifyLegalIssue(server: McpServer): void {
         query_text: input.text.slice(0, 200),
         result_count: practiceAreas.length,
         top_results: [],
+        api_tokens_used: totalTokens,
       });
 
       return {

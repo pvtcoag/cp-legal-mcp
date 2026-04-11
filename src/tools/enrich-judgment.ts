@@ -76,8 +76,11 @@ export function registerEnrichJudgment(server: McpServer): void {
 
       // Enrich using Isaacus
       let enriched;
+      let enrichTokens = 0;
       try {
-        enriched = await enrichDocument(doc.text);
+        const enrichResult = await enrichDocument(doc.text);
+        enriched = enrichResult.data;
+        enrichTokens = enrichResult.tokensUsed;
       } catch (err) {
         log.warn({ err }, 'Isaacus enrichDocument failed');
         return {
@@ -99,6 +102,7 @@ export function registerEnrichJudgment(server: McpServer): void {
         query_text: input.citation_or_url,
         result_count: 1,
         top_results: [{ title, citation, url: resolved.url }],
+        api_tokens_used: enrichTokens,
       });
 
       return {
