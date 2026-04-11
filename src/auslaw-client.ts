@@ -13,6 +13,7 @@ export interface AuslawCase {
   court?: string;
   date?: string;
   jurisdiction?: string;
+  [key: string]: unknown;
 }
 
 export interface AuslawLegislation {
@@ -21,6 +22,7 @@ export interface AuslawLegislation {
   excerpt: string;
   jurisdiction?: string;
   date?: string;
+  [key: string]: unknown;
 }
 
 export interface AuslawDocumentText {
