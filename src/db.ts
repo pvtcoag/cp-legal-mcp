@@ -121,6 +121,24 @@ export interface MatterSummaryRow {
   last_activity: string;
 }
 
+export async function listMattersForUser(userId: string): Promise<MatterSummaryRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<MatterSummaryRow>(`
+    SELECT
+      matter_ref,
+      COUNT(*)::int                              AS query_count,
+      ARRAY_AGG(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS users,
+      ARRAY_AGG(DISTINCT tool_name)              AS tools_used,
+      MIN(created_at)                            AS first_activity,
+      MAX(created_at)                            AS last_activity
+    FROM matter_queries
+    WHERE user_id = $1
+    GROUP BY matter_ref
+    ORDER BY last_activity DESC
+  `, [userId]);
+  return result.rows;
+}
+
 export async function listMatters(): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const result = await pool.query<MatterSummaryRow>(`

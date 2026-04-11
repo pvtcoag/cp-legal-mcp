@@ -9,6 +9,7 @@ import { createMcpHandler } from './server.js';
 import { warmup } from './hf-client.js';
 import { oauthRouter } from './oauth.js';
 import { preRegisterClient } from './oauth-store.js';
+import { mattersRouter } from './matters-ui.js';
 
 const app = express();
 app.use(express.json());
@@ -28,6 +29,9 @@ app.use(
 
 // OAuth 2.0 — mounted before auth middleware (public endpoints)
 app.use(oauthRouter);
+
+// Matter history UI — cookie-session auth, independent of MCP bearer auth
+app.use(mattersRouter);
 
 // Health check — used by Railway healthcheck
 app.get('/health', (_req, res) => {
