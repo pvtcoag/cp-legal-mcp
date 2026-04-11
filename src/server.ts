@@ -11,6 +11,8 @@ import { registerFormatCitation } from './tools/format-citation.js';
 import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
 import { registerAskJudgment } from './tools/ask-judgment.js';
 import { registerEnrichJudgment } from './tools/enrich-judgment.js';
+import { registerSummariseJudgment } from './tools/summarise-judgment.js';
+import { registerClassifyLegalIssue } from './tools/classify-legal-issue.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 
@@ -30,6 +32,10 @@ function buildServer(): McpServer {
   registerGetJudgment(server);
   registerAskJudgment(server);
   registerEnrichJudgment(server);
+  registerSummariseJudgment(server);
+
+  // Issue classification
+  registerClassifyLegalIssue(server);
 
   // Citation utilities
   registerFormatCitation(server);

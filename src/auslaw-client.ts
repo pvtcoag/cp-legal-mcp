@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { getCachedJudgment, upsertJudgmentCache } from './db.js';
 
 // --- Response types (inferred from AusLaw MCP source) ---
 
@@ -163,8 +164,32 @@ export async function searchLegislation(params: {
 }
 
 export async function fetchDocumentText(url: string): Promise<AuslawDocumentText> {
-  logger.debug({ url }, 'auslaw: fetch_document_text');
-  return callAuslawTool<AuslawDocumentText>('fetch_document_text', { url });
+  // Check judgment cache first — 30-day TTL (judgments are permanent documents)
+  const cached = await getCachedJudgment(url).catch(() => null);
+  if (cached) {
+    logger.debug({ url }, 'judgment cache hit');
+    return {
+      url,
+      text: cached.body_text,
+      citation: cached.citation ?? undefined,
+      title: cached.title ?? undefined,
+    };
+  }
+
+  logger.debug({ url }, 'auslaw: fetch_document_text (cache miss)');
+  const doc = await callAuslawTool<AuslawDocumentText>('fetch_document_text', { url });
+
+  // Cache for future calls — fire-and-forget, never blocks the response
+  upsertJudgmentCache({
+    url: doc.url ?? url,
+    canonical_url: null,
+    title: doc.title ?? null,
+    citation: doc.citation ?? null,
+    body_text: doc.text,
+    char_count: doc.text.length,
+  }).catch((err) => logger.warn({ err }, 'judgment cache write failed'));
+
+  return doc;
 }
 
 export async function validateCitation(

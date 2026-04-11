@@ -38,6 +38,9 @@ export interface ExtractedAnswer {
  * Extract direct answers to a question from a document using Kanon Answer Extractor.
  * Returns answers sorted by confidence. Returns empty array if the answer is
  * not present in the document (high inextractability score).
+ *
+ * chunking_options enables accurate extraction from long judgments by sliding
+ * a 512-token window with 10% overlap across the full text.
  */
 export async function extractAnswer(
   question: string,
@@ -49,6 +52,7 @@ export async function extractAnswer(
     query: question,
     texts: [documentText],
     top_k: topK,
+    chunking_options: { size: 512, overlap_ratio: 0.1 },
   });
 
   type RawExtraction = {
@@ -86,13 +90,17 @@ export interface EnrichedJudgment {
 /**
  * Enrich a judgment using Kanon 2 Enricher, returning structured entities:
  * parties, dates, citations with reception sentiment, and defined terms.
- * Reception sentiment (positive/mixed/negative/neutral) is especially useful
- * for understanding how a cited case was treated.
+ * Reception sentiment (positive/mixed/negative/neutral) reveals how cited
+ * cases were treated by the court.
+ *
+ * overflow_strategy: 'auto' enables Isaacus to handle judgments that exceed
+ * the model's context window by automatically chunking and merging results.
  */
 export async function enrichDocument(text: string): Promise<EnrichedJudgment> {
   const response = await client.enrichments.create({
     model: 'kanon-2-enricher',
     texts: [text],
+    overflow_strategy: 'auto',
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,12 +137,14 @@ export async function enrichDocument(text: string): Promise<EnrichedJudgment> {
   };
 }
 
+// ── Reranking ─────────────────────────────────────────────────────────────────
+
 /**
- * Rerank candidates against a query using the Kanon 2 Reranker.
+ * Rerank candidates against a query using the Kanon Universal Classifier.
  *
- * Uses Isaacus's Kanon Universal Classifier — purpose-built for Australian legal
- * text, ranked #1 on Legal RAG Bench. Automatically chunks long documents so full
- * case excerpts are scored accurately without truncation.
+ * Purpose-built for Australian legal text, ranked #1 on Legal RAG Bench.
+ * chunking_options enables accurate scoring of full case excerpts without
+ * truncation by sliding a 512-token window with 10% overlap.
  */
 export async function rerank<T extends RerankCandidate>(
   query: string,
@@ -154,10 +164,47 @@ export async function rerank<T extends RerankCandidate>(
     query,
     texts,
     top_n: topK,
+    chunking_options: { size: 512, overlap_ratio: 0.1 },
   });
 
   return response.results.map((result: { index: number; score: number }) => ({
     item: candidates[result.index],
     score: result.score,
   }));
+}
+
+// ── Zero-shot classification ──────────────────────────────────────────────────
+
+export interface ClassificationResult {
+  category: string;
+  /** Score 0–1. >0.5 indicates the text matches the category. */
+  score: number;
+}
+
+/**
+ * Classify text against a list of category descriptions using Kanon Universal
+ * Classifier in zero-shot mode. Returns all categories sorted by score descending.
+ *
+ * Pass the text to classify as `text` and a list of natural-language category
+ * descriptions as `categories`. Scores > 0.5 indicate a positive match.
+ */
+export async function classifyText(
+  text: string,
+  categories: string[],
+): Promise<ClassificationResult[]> {
+  if (categories.length === 0) return [];
+
+  logger.debug({ categoryCount: categories.length }, 'Isaacus classification');
+
+  const response = await client.classifications.universal.create({
+    model: 'kanon-universal-classifier',
+    query: text,
+    texts: categories,
+    is_iql: false,
+    scoring_method: 'auto',
+  });
+
+  return (response.classifications as Array<{ index: number; score: number }>)
+    .sort((a, b) => b.score - a.score)
+    .map((c) => ({ category: categories[c.index]!, score: c.score }));
 }

@@ -44,6 +44,17 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_mq_matter_ref  ON matter_queries(matter_ref);
     CREATE INDEX IF NOT EXISTS idx_mq_created_at  ON matter_queries(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_mq_user_id     ON matter_queries(user_id);
+
+    CREATE TABLE IF NOT EXISTS judgment_cache (
+      url           TEXT PRIMARY KEY,
+      canonical_url TEXT,
+      title         TEXT,
+      citation      TEXT,
+      body_text     TEXT        NOT NULL,
+      char_count    INTEGER,
+      fetched_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_jc_fetched_at ON judgment_cache(fetched_at DESC);
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -154,6 +165,56 @@ export async function listMatters(): Promise<MatterSummaryRow[]> {
     ORDER BY last_activity DESC
   `);
   return result.rows;
+}
+
+// ── Judgment cache ────────────────────────────────────────────────────────────
+
+export interface CachedJudgment {
+  url: string;
+  canonical_url: string | null;
+  title: string | null;
+  citation: string | null;
+  body_text: string;
+  char_count: number;
+  fetched_at: string;
+}
+
+/** Returns a cached judgment if it exists and is younger than 30 days. */
+export async function getCachedJudgment(url: string): Promise<CachedJudgment | null> {
+  if (!pool) return null;
+  const result = await pool.query<CachedJudgment>(
+    `SELECT url, canonical_url, title, citation, body_text, char_count, fetched_at
+     FROM judgment_cache
+     WHERE url = $1 AND fetched_at > NOW() - INTERVAL '30 days'`,
+    [url],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Upsert a judgment into the cache. Silently no-ops when DB is unavailable. */
+export async function upsertJudgmentCache(
+  entry: Omit<CachedJudgment, 'fetched_at'>,
+): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO judgment_cache (url, canonical_url, title, citation, body_text, char_count)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (url) DO UPDATE SET
+       canonical_url = EXCLUDED.canonical_url,
+       title         = EXCLUDED.title,
+       citation      = EXCLUDED.citation,
+       body_text     = EXCLUDED.body_text,
+       char_count    = EXCLUDED.char_count,
+       fetched_at    = NOW()`,
+    [
+      entry.url,
+      entry.canonical_url,
+      entry.title,
+      entry.citation,
+      entry.body_text,
+      entry.char_count,
+    ],
+  );
 }
 
 export interface UserActivityRow {
