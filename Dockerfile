@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -16,6 +16,7 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 
 COPY package*.json ./
+COPY --from=builder /app/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
