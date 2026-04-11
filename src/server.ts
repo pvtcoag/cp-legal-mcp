@@ -15,6 +15,8 @@ import { registerSummariseJudgment } from './tools/summarise-judgment.js';
 import { registerClassifyLegalIssue } from './tools/classify-legal-issue.js';
 import { registerFindRelatedCases } from './tools/find-related-cases.js';
 import { registerCompareCases } from './tools/compare-cases.js';
+import { registerAskLegislation } from './tools/ask-legislation.js';
+import { registerGetLegislation } from './tools/get-legislation.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 
@@ -24,24 +26,28 @@ function buildServer(): McpServer {
     version: '0.1.0',
   });
 
-  // Discovery & retrieval
+  // Discovery & retrieval — cases
   registerResearchCases(server);
-  registerResearchLegislation(server);
   registerSearchByCitation(server);
   registerFindCitingCases(server);
+  registerFindRelatedCases(server);
 
-  // Document access & analysis
+  // Discovery & retrieval — legislation
+  registerResearchLegislation(server);
+
+  // Judgment analysis
   registerGetJudgment(server);
   registerAskJudgment(server);
   registerEnrichJudgment(server);
   registerSummariseJudgment(server);
+  registerCompareCases(server);
+
+  // Legislation analysis
+  registerGetLegislation(server);
+  registerAskLegislation(server);
 
   // Issue classification
   registerClassifyLegalIssue(server);
-
-  // Discovery & analysis
-  registerFindRelatedCases(server);
-  registerCompareCases(server);
 
   // Citation utilities
   registerFormatCitation(server);

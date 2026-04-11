@@ -42,6 +42,20 @@ const inputSchema = z.object({
     .boolean()
     .default(true)
     .describe('Whether to include formatted citations in the response'),
+  from_year: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Filter results to cases decided on or after this year, e.g. 2015'),
+  to_year: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Filter results to cases decided on or before this year, e.g. 2023'),
   use_iql: z
     .boolean()
     .default(false)
@@ -78,6 +92,8 @@ export function registerResearchCases(server: McpServer): void {
           query: input.query,
           jurisdiction: input.jurisdiction === 'all' ? undefined : input.jurisdiction,
           limit: fetchLimit,
+          fromYear: input.from_year,
+          toYear: input.to_year,
         });
         log.debug({ query: input.query, resultCount: rawResults.length }, 'AusLaw results received');
       } catch (err) {

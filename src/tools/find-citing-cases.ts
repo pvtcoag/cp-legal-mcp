@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchCitingCases, AuslawError } from '../auslaw-client.js';
+import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
@@ -31,11 +32,12 @@ export function registerFindCitingCases(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'find_citing_cases', citation: input.citation });
 
+      const fetchLimit = Math.min((input.limit ?? 10) * 3, 30);
       let results;
       try {
         results = await searchCitingCases({
           citation: input.citation,
-          limit: input.limit ?? 10,
+          limit: fetchLimit,
         });
         log.debug({ resultCount: results.length }, 'AusLaw citing cases received');
       } catch (err) {
@@ -59,14 +61,27 @@ export function registerFindCitingCases(server: McpServer): void {
         throw err;
       }
 
-      // Results already sorted by relevance from jade.io's citator — no reranking needed
-      const cases = results.map((item) => ({
+      // Rerank by the citation itself as query — surfaces most substantively relevant citing cases
+      // rather than relying solely on jade.io's opaque ordering.
+      let ranked;
+      let rerankTokens = 0;
+      try {
+        const rerankResult = await rerank(input.citation, results, input.limit ?? 10);
+        ranked = rerankResult.results;
+        rerankTokens = rerankResult.tokensUsed;
+      } catch (err) {
+        log.warn({ err }, 'Isaacus reranking failed, using jade.io order');
+        ranked = results.slice(0, input.limit ?? 10).map((item) => ({ item, score: 1.0 }));
+      }
+
+      const cases = ranked.map(({ item, score }) => ({
         title: item.title,
         citation: item.citation,
         url: item.url,
         ...(item.excerpt ? { excerpt: item.excerpt } : {}),
         ...(item.court ? { court: item.court } : {}),
         ...(item.date ? { date: item.date } : {}),
+        relevance_score: Math.round(score * 1000) / 1000,
       }));
 
       recordMatterQuery({
@@ -75,6 +90,7 @@ export function registerFindCitingCases(server: McpServer): void {
         query_text: input.citation,
         result_count: cases.length,
         top_results: cases.slice(0, 3).map((c) => ({ title: c.title, citation: c.citation, url: c.url })),
+        api_tokens_used: rerankTokens,
       });
 
       return {

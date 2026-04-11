@@ -78,10 +78,10 @@ export const JADE_EXPIRY_NOTICE =
 
 // --- Internal: call one AusLaw tool via MCP-over-HTTP ---
 
-async function callAuslawTool<T>(
+async function callAuslawToolRaw(
   toolName: string,
   toolArgs: Record<string, unknown>,
-): Promise<T> {
+): Promise<string> {
   const url = new URL('/mcp', config.AUSLAW_BASE_URL);
 
   const transport = new StreamableHTTPClientTransport(url, {
@@ -119,20 +119,24 @@ async function callAuslawTool<T>(
       throw new AuslawError(`AusLaw tool "${toolName}" returned no text content`, toolName);
     }
 
-    return JSON.parse(textItem.text) as T;
+    return textItem.text;
   } catch (err) {
     if (err instanceof AuslawError) throw err;
-    // Wrap timeout / network errors — include cause for fetch/network failures
     let message = err instanceof Error ? err.message : String(err);
     const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
     if (cause instanceof Error && cause.message) message += ` (cause: ${cause.message})`;
     else if (cause) message += ` (cause: ${String(cause)})`;
     throw new AuslawError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
   } finally {
-    await client.close().catch(() => {
-      /* ignore close errors */
-    });
+    await client.close().catch(() => { /* ignore close errors */ });
   }
+}
+
+async function callAuslawTool<T>(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+): Promise<T> {
+  return JSON.parse(await callAuslawToolRaw(toolName, toolArgs)) as T;
 }
 
 // --- Public API ---
@@ -141,12 +145,16 @@ export async function searchCases(params: {
   query: string;
   jurisdiction?: string;
   limit?: number;
+  fromYear?: number;
+  toYear?: number;
 }): Promise<AuslawCase[]> {
   logger.debug({ params }, 'auslaw: search_cases');
   return callAuslawTool<AuslawCase[]>('search_cases', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
+    ...(params.fromYear !== undefined && { fromYear: params.fromYear }),
+    ...(params.toYear !== undefined && { toYear: params.toYear }),
   });
 }
 
@@ -245,64 +253,6 @@ export async function searchByCitation(params: {
   });
 }
 
-/**
- * Call an AusLaw tool and return the raw text response without JSON-parsing.
- * Used for tools that return plain text (e.g. format_citation).
- */
-async function callAuslawToolText(
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-): Promise<string> {
-  const url = new URL('/mcp', config.AUSLAW_BASE_URL);
-
-  const transport = new StreamableHTTPClientTransport(url, {
-    requestInit: {
-      signal: AbortSignal.timeout(config.AUSLAW_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json' },
-    },
-  });
-
-  const client = new Client(
-    { name: 'cp-legal-mcp', version: '0.1.0' },
-    { capabilities: {} },
-  );
-
-  try {
-    await client.connect(transport);
-
-    const result = await client.callTool({ name: toolName, arguments: toolArgs });
-
-    if (result.isError) {
-      const errorText = (result.content as Array<{ type: string; text?: string }>)
-        .filter((c) => c.type === 'text' && c.text)
-        .map((c) => c.text)
-        .join('\n');
-      throw new AuslawError(
-        `AusLaw tool "${toolName}" returned error: ${errorText}`,
-        toolName,
-      );
-    }
-
-    const textItem = (result.content as Array<{ type: string; text?: string }>).find(
-      (c) => c.type === 'text' && c.text,
-    );
-    if (!textItem?.text) {
-      throw new AuslawError(`AusLaw tool "${toolName}" returned no text content`, toolName);
-    }
-
-    return textItem.text;
-  } catch (err) {
-    if (err instanceof AuslawError) throw err;
-    let message = err instanceof Error ? err.message : String(err);
-    const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
-    if (cause instanceof Error && cause.message) message += ` (cause: ${cause.message})`;
-    else if (cause) message += ` (cause: ${String(cause)})`;
-    throw new AuslawError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
-  } finally {
-    await client.close().catch(() => { /* ignore close errors */ });
-  }
-}
-
 export async function formatCitation(params: {
   title: string;
   neutralCitation?: string;
@@ -312,7 +262,7 @@ export async function formatCitation(params: {
 }): Promise<AuslawFormattedCitation> {
   logger.debug({ params }, 'auslaw: format_citation');
   // auslaw-mcp format_citation returns plain text, not JSON
-  const text = await callAuslawToolText('format_citation', {
+  const text = await callAuslawToolRaw('format_citation', {
     title: params.title,
     ...(params.neutralCitation && { neutralCitation: params.neutralCitation }),
     ...(params.reportedCitation && { reportedCitation: params.reportedCitation }),
@@ -346,7 +296,17 @@ export async function resolveJudgmentUrl(input: string): Promise<ResolvedJudgmen
     return { url: value };
   }
   if (NEUTRAL_CITATION_RE.test(value)) {
-    const validation = await validateCitation(value);
+    let validation: AuslawCitationValidation;
+    try {
+      validation = await validateCitation(value);
+    } catch (err) {
+      // Upstream failure (JADE down, network error) — distinguish from genuine not-found
+      const detail = err instanceof AuslawError ? err.message : String(err);
+      throw new AuslawError(
+        `Could not validate citation "${value}" — the legal database may be temporarily unavailable. Detail: ${detail}`,
+        'validate_citation',
+      );
+    }
     if (!validation.valid || !validation.url) {
       throw new AuslawError(`Citation "${value}" could not be found on AustLII.`, 'validate_citation');
     }

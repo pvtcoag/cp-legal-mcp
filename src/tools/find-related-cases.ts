@@ -236,14 +236,15 @@ export function registerFindRelatedCases(server: McpServer): void {
         api_tokens_used: totalTokens,
       });
 
+      const corpusSize = (await getAllJudgmentEmbeddings().catch(() => [])).length;
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           seed_case: { title: seedTitle, citation: seedCitation, url: resolved.url },
           related_cases: finalResults,
-          corpus_size: (await getAllJudgmentEmbeddings().catch(() => [])).length,
+          corpus_size: corpusSize,
           note: corpusResults.length === 0
             ? 'Corpus is empty or has only this judgment — results are from AustLII keyword search. The corpus grows as more judgments are researched with summarise_judgment, enrich_judgment, or ask_judgment.'
-            : `${corpusResults.length} result(s) from the ${(await getAllJudgmentEmbeddings().catch(() => [])).length}-judgment semantic corpus; remaining from AustLII.`,
+            : `${corpusResults.length} result(s) from the ${corpusSize}-judgment semantic corpus; remaining from AustLII.`,
         }, null, 2) }],
       };
     },

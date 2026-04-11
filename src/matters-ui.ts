@@ -38,6 +38,8 @@ const TOOL_LABELS: Record<string, string> = {
   find_related_cases: 'Related Cases',
   compare_cases: 'Compare Cases',
   find_citing_cases: 'Citing Cases',
+  get_legislation: 'Legislation',
+  ask_legislation: 'Ask Legislation',
   search_by_citation: 'Citation Search',
   format_citation: 'Format Citation',
   generate_pinpoint: 'Pinpoint',
