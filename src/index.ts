@@ -43,7 +43,7 @@ app.get('/health/auslaw', async (_req, res) => {
 
   // Probe several paths to discover what auslaw-mcp actually serves
   const probes = [
-    { path: '/mcp',      method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'probe', version: '1' } }, id: 1 }) },
+    { path: '/mcp',      method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'probe', version: '1' } }, id: 1 }) },
     { path: '/mcp',      method: 'GET',  body: undefined },
     { path: '/sse',      method: 'GET',  body: undefined },
     { path: '/health',   method: 'GET',  body: undefined },

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@huggingface/inference": "^3.9.0",
-    "@modelcontextprotocol/sdk": "^1.11.0",
+    "@modelcontextprotocol/sdk": "^1.27.0",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "pg": "^8.13.0",
