@@ -25,8 +25,8 @@ function candidateToText(c: RerankCandidate): string {
 /**
  * Rerank candidates against a query using the Kanon 2 Reranker.
  *
- * Uses Isaacus's cross-encoder model — purpose-built for Australian legal text,
- * ranked #1 on Legal RAG Bench. Automatically chunks long documents so full
+ * Uses Isaacus's Kanon Universal Classifier — purpose-built for Australian legal
+ * text, ranked #1 on Legal RAG Bench. Automatically chunks long documents so full
  * case excerpts are scored accurately without truncation.
  */
 export async function rerank<T extends RerankCandidate>(
@@ -43,7 +43,7 @@ export async function rerank<T extends RerankCandidate>(
   const texts = candidates.map(candidateToText);
 
   const response = await client.rerankings.create({
-    model: 'kanon-2-reranker',
+    model: 'kanon-universal-classifier',
     query,
     texts,
     top_n: topK,
