@@ -26,9 +26,9 @@ export function registerSearchByCitation(server: McpServer): void {
     'Look up an Australian case by its neutral citation or case name. Returns matching cases with URLs and metadata. Use this when you have a specific citation or case name to resolve.',
     inputSchema.shape,
     async (input) => {
-      const log = logger.child({ tool: 'search_by_citation', input: input.citation_or_name });
+      const log = logger.child({ tool: 'search_by_citation' });
 
-      const fetchLimit = Math.min((input.limit ?? 5) * 2, 20);
+      const fetchLimit = Math.min((input.limit ?? 5) * 2, 15);
 
       let rawResults;
       try {
@@ -36,7 +36,7 @@ export function registerSearchByCitation(server: McpServer): void {
           citation_or_name: input.citation_or_name,
           limit: fetchLimit,
         });
-        log.debug({ resultCount: rawResults.length }, 'AusLaw results received');
+        log.debug({ input: input.citation_or_name, resultCount: rawResults.length }, 'AusLaw results received');
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_by_citation failed');

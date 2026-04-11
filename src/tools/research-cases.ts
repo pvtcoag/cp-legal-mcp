@@ -49,9 +49,12 @@ export function registerResearchCases(server: McpServer): void {
     'Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
     inputSchema.shape,
     async (input) => {
-      const log = logger.child({ tool: 'research_cases', query: input.query });
+      // query excluded from child logger base — only emitted at debug level to avoid leaking
+      // sensitive query content into info/warn/error log lines in production
+      const log = logger.child({ tool: 'research_cases' });
 
-      const fetchLimit = Math.min((input.limit ?? 5) * 3, 20);
+      // Fetch 2× requested limit to give reranker material; cap at 15 to be kind to AustLII
+      const fetchLimit = Math.min((input.limit ?? 5) * 2, 15);
 
       let rawResults;
       try {
@@ -60,7 +63,7 @@ export function registerResearchCases(server: McpServer): void {
           jurisdiction: input.jurisdiction === 'all' ? undefined : input.jurisdiction,
           limit: fetchLimit,
         });
-        log.debug({ resultCount: rawResults.length }, 'AusLaw results received');
+        log.debug({ query: input.query, resultCount: rawResults.length }, 'AusLaw results received');
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_cases failed');

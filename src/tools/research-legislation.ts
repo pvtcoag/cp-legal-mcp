@@ -31,9 +31,9 @@ export function registerResearchLegislation(server: McpServer): void {
     'Search Australian federal and state legislation. Returns semantically reranked acts and regulations from AustLII.',
     inputSchema.shape,
     async (input) => {
-      const log = logger.child({ tool: 'research_legislation', query: input.query });
+      const log = logger.child({ tool: 'research_legislation' });
 
-      const fetchLimit = Math.min((input.limit ?? 5) * 3, 20);
+      const fetchLimit = Math.min((input.limit ?? 5) * 2, 15);
 
       let rawResults;
       try {
@@ -42,7 +42,7 @@ export function registerResearchLegislation(server: McpServer): void {
           jurisdiction: input.jurisdiction === 'all' ? undefined : input.jurisdiction,
           limit: fetchLimit,
         });
-        log.debug({ resultCount: rawResults.length }, 'AusLaw results received');
+        log.debug({ query: input.query, resultCount: rawResults.length }, 'AusLaw results received');
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_legislation failed');
