@@ -10,6 +10,7 @@ import { registerSearchByCitation } from './tools/search-by-citation.js';
 import { registerFormatCitation } from './tools/format-citation.js';
 import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
+import { registerInspectDatabase } from './tools/inspect-database.js';
 
 function buildServer(): McpServer {
   const server = new McpServer({
@@ -32,6 +33,9 @@ function buildServer(): McpServer {
 
   // Matter tracking
   registerGetMatterHistory(server);
+
+  // Admin (restricted to ADMIN_USERS)
+  registerInspectDatabase(server);
 
   return server;
 }

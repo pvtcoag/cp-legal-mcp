@@ -9,6 +9,9 @@ const ConfigSchema = z.object({
   AUSLAW_BASE_URL: z.string().url('AUSLAW_BASE_URL must be a valid URL'),
   AUSLAW_TIMEOUT_MS: z.string().default('30000').transform(Number),
 
+  // Admin — comma-separated user identities permitted to use admin tools
+  ADMIN_USERS: z.string().default('admin'),
+
   // HuggingFace
   HF_API_TOKEN: z.string().min(1, 'HF_API_TOKEN is required'),
   HF_ENABLED: z

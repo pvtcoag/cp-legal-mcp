@@ -109,3 +109,74 @@ export async function getMatterHistory(
 
   return result.rows;
 }
+
+// ── Admin queries (admin-only) ─────────────────────────────────────────────
+
+export interface MatterSummaryRow {
+  matter_ref: string;
+  query_count: number;
+  users: string[];
+  tools_used: string[];
+  first_activity: string;
+  last_activity: string;
+}
+
+export async function listMatters(): Promise<MatterSummaryRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<MatterSummaryRow>(`
+    SELECT
+      matter_ref,
+      COUNT(*)::int                              AS query_count,
+      ARRAY_AGG(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS users,
+      ARRAY_AGG(DISTINCT tool_name)              AS tools_used,
+      MIN(created_at)                            AS first_activity,
+      MAX(created_at)                            AS last_activity
+    FROM matter_queries
+    GROUP BY matter_ref
+    ORDER BY last_activity DESC
+  `);
+  return result.rows;
+}
+
+export interface UserActivityRow {
+  user_id: string | null;
+  query_date: string;
+  query_count: number;
+  matters: string[];
+}
+
+export async function getUserActivity(params: {
+  date_from?: string;
+  date_to?: string;
+}): Promise<UserActivityRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<UserActivityRow>(`
+    SELECT
+      user_id,
+      DATE(created_at)::text                         AS query_date,
+      COUNT(*)::int                                  AS query_count,
+      ARRAY_AGG(DISTINCT matter_ref)                 AS matters
+    FROM matter_queries
+    WHERE ($1::date IS NULL OR created_at >= $1::date)
+      AND ($2::date IS NULL OR created_at <  $2::date + INTERVAL '1 day')
+    GROUP BY user_id, DATE(created_at)
+    ORDER BY query_date DESC, user_id
+  `, [params.date_from ?? null, params.date_to ?? null]);
+  return result.rows;
+}
+
+export interface RecentActivityRow extends MatterHistoryRow {
+  // same shape, no additional fields
+}
+
+export async function getRecentActivity(limit: number = 50): Promise<RecentActivityRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<RecentActivityRow>(`
+    SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
+           result_count, top_results, created_at
+    FROM matter_queries
+    ORDER BY created_at DESC
+    LIMIT $1
+  `, [limit]);
+  return result.rows;
+}
