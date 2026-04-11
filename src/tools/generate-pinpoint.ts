@@ -25,10 +25,7 @@ const inputSchema = z.object({
     .min(1)
     .optional()
     .describe('Phrase to search for within the judgment paragraphs (alternative to paragraph_number)'),
-}).refine(
-  (d) => d.paragraph_number !== undefined || d.phrase !== undefined,
-  { message: 'Provide at least one of paragraph_number or phrase' },
-);
+});
 
 export function registerGeneratePinpoint(server: McpServer): void {
   server.tool(
@@ -40,6 +37,16 @@ export function registerGeneratePinpoint(server: McpServer): void {
         tool: 'generate_pinpoint',
         input: input.citation_or_url,
       });
+
+      if (input.paragraph_number === undefined && !input.phrase) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'invalid_input',
+            message: 'Provide at least one of paragraph_number or phrase.',
+          }) }],
+          isError: true,
+        };
+      }
 
       // Resolve citation or URL → concrete AustLII URL
       let resolved;
