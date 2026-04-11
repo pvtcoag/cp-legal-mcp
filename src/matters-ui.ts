@@ -397,7 +397,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   }
 
   // Non-admin: ensure they have at least one query on this matter
-  if (!isAdmin(user) && !rows.some((r) => r.user_id === user)) {
+  if (!isAdmin(user) && !rows.some((r) => r.user_id === user || r.user_id === null)) {
     res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user));
     return;
   }

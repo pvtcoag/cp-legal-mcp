@@ -156,7 +156,7 @@ export async function listMattersForUser(userId: string): Promise<MatterSummaryR
       MIN(created_at)                            AS first_activity,
       MAX(created_at)                            AS last_activity
     FROM matter_queries
-    WHERE user_id = $1
+    WHERE user_id = $1 OR user_id IS NULL
     GROUP BY matter_ref
     ORDER BY last_activity DESC
   `, [userId]);
