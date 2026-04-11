@@ -36,32 +36,38 @@ app.use(oauthRouter);
 // Matter history UI — cookie-session auth, independent of MCP bearer auth
 app.use(mattersRouter);
 
-// Diagnostic: test auslaw-mcp connectivity — useful for debugging
-app.get('/health/auslaw', authMiddleware, async (_req, res) => {
-  const auslawUrl = config.AUSLAW_BASE_URL;
-  try {
-    const response = await fetch(new URL('/mcp', auslawUrl), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'health-check', version: '1' } }, id: 1 }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    res.json({
-      status: response.ok ? 'reachable' : 'error',
-      auslawUrl,
-      httpStatus: response.status,
-      httpStatusText: response.statusText,
-    });
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    res.status(502).json({
-      status: 'unreachable',
-      auslawUrl,
-      error: e.message,
-      cause: e.cause instanceof Error ? e.cause.message : String(e.cause ?? ''),
-      code: e.code,
-    });
+// Diagnostic: probe auslaw-mcp — no auth required, safe (read-only connectivity test)
+app.get('/health/auslaw', async (_req, res) => {
+  const base = config.AUSLAW_BASE_URL;
+  const results: Record<string, unknown> = { base };
+
+  // Probe several paths to discover what auslaw-mcp actually serves
+  const probes = [
+    { path: '/mcp',      method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'probe', version: '1' } }, id: 1 }) },
+    { path: '/mcp',      method: 'GET',  body: undefined },
+    { path: '/sse',      method: 'GET',  body: undefined },
+    { path: '/health',   method: 'GET',  body: undefined },
+    { path: '/',         method: 'GET',  body: undefined },
+  ] as const;
+
+  for (const probe of probes) {
+    const key = `${probe.method} ${probe.path}`;
+    try {
+      const r = await fetch(new URL(probe.path, base), {
+        method: probe.method,
+        headers: probe.body ? { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' } : {},
+        body: probe.body,
+        signal: AbortSignal.timeout(5_000),
+      });
+      const text = await r.text().catch(() => '');
+      results[key] = { status: r.status, statusText: r.statusText, body: text.slice(0, 200) };
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      results[key] = { error: e.message, cause: e.cause instanceof Error ? e.cause.message : String(e.cause ?? ''), code: e.code };
+    }
   }
+
+  res.json(results);
 });
 
 // Health check — used by Railway healthcheck
