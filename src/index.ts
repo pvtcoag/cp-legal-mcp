@@ -12,6 +12,9 @@ import { preRegisterClient } from './oauth-store.js';
 import { mattersRouter } from './matters-ui.js';
 
 const app = express();
+// Trust Railway/Cloudflare proxy — required for express-rate-limit to read
+// the real client IP from X-Forwarded-For without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // OAuth login form POST
 
@@ -32,6 +35,34 @@ app.use(oauthRouter);
 
 // Matter history UI — cookie-session auth, independent of MCP bearer auth
 app.use(mattersRouter);
+
+// Diagnostic: test auslaw-mcp connectivity — useful for debugging
+app.get('/health/auslaw', authMiddleware, async (_req, res) => {
+  const auslawUrl = config.AUSLAW_BASE_URL;
+  try {
+    const response = await fetch(new URL('/mcp', auslawUrl), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'health-check', version: '1' } }, id: 1 }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    res.json({
+      status: response.ok ? 'reachable' : 'error',
+      auslawUrl,
+      httpStatus: response.status,
+      httpStatusText: response.statusText,
+    });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    res.status(502).json({
+      status: 'unreachable',
+      auslawUrl,
+      error: e.message,
+      cause: e.cause instanceof Error ? e.cause.message : String(e.cause ?? ''),
+      code: e.code,
+    });
+  }
+});
 
 // Health check — used by Railway healthcheck
 app.get('/health', (_req, res) => {
