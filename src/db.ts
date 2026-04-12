@@ -29,6 +29,23 @@ export async function initDb(): Promise<void> {
     logger.error({ err }, 'DB pool error');
   });
 
+  // Activate extensions FIRST — GIN indexes below depend on pg_trgm being present.
+  // pg_trgm:            trigram similarity for fuzzy text search (% operator, GIN indexes).
+  // unaccent:           strip diacritical marks so "Müller" matches "Muller" in searches.
+  // pgcrypto:           cryptographic SQL functions available if ever needed.
+  // pg_stat_statements: per-query performance stats; requires shared_preload_libraries
+  //                     at the server level — Railway may or may not expose this.
+  try {
+    await pool.query(`
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+      CREATE EXTENSION IF NOT EXISTS unaccent;
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+      CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+    `);
+  } catch (err) {
+    logger.warn({ err }, 'DB: one or more extensions could not be activated (non-fatal)');
+  }
+
   // Create schema on first boot — idempotent
   await pool.query(`
     CREATE TABLE IF NOT EXISTS matter_queries (
@@ -127,24 +144,15 @@ export async function initDb(): Promise<void> {
     );
     ALTER TABLE matters ADD COLUMN IF NOT EXISTS notes TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
-  `);
 
-  // Activate installed extensions — idempotent, safe to run on every boot.
-  // pg_trgm:          trigram similarity operators for future fuzzy text search.
-  // pgcrypto:         cryptographic functions available to SQL if ever needed.
-  // pg_stat_statements: query-level performance stats (Railway loads it server-side;
-  //                   CREATE EXTENSION just makes it queryable in this database).
-  try {
-    await pool.query(`
-      CREATE EXTENSION IF NOT EXISTS pg_trgm;
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
-      CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-    `);
-  } catch (err) {
-    // pg_stat_statements requires shared_preload_libraries — log but don't crash
-    // if the Railway instance hasn't loaded it at the server level.
-    logger.warn({ err }, 'DB: one or more extensions could not be activated (non-fatal)');
-  }
+    -- Trigram GIN indexes for fuzzy / similarity search (require pg_trgm).
+    -- Partial index on display_name skips NULLs to keep index compact.
+    CREATE INDEX IF NOT EXISTS idx_mq_matter_ref_trgm  ON matter_queries USING GIN (matter_ref   gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS idx_mq_query_text_trgm  ON matter_queries USING GIN (query_text   gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS idx_matters_ref_trgm    ON matters        USING GIN (matter_ref   gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS idx_matters_name_trgm   ON matters        USING GIN (display_name gin_trgm_ops) WHERE display_name IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_users_username_trgm ON users          USING GIN (username     gin_trgm_ops);
+  `);
 
   logger.info('DB initialised — matter tracking enabled');
 }
@@ -282,9 +290,22 @@ export async function listMattersForUser(userId: string, search?: string, status
   if (!pool) return [];
   const params: unknown[] = [userId];
   const conditions: string[] = ['(mq.user_id = $1 OR mq.user_id IS NULL)'];
-  if (search) { params.push(`%${search}%`); conditions.push(`mq.matter_ref ILIKE $${params.length}`); }
-  if (from)   { params.push(from);           conditions.push(`mq.created_at >= $${params.length}::date`); }
-  if (to)     { params.push(to);             conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
+  if (search) {
+    params.push(`%${search}%`);                         // $N  — substring pattern
+    const iN = `$${params.length}`;
+    params.push(search);                                // $N+1 — raw term for trigram
+    const tN = `$${params.length}`;
+    // Match on matter_ref or display_name; substring (ILIKE) catches short/exact inputs,
+    // trigram (%) catches typos and partial matches. unaccent normalises diacritics.
+    conditions.push(
+      `(unaccent(mq.matter_ref) ILIKE unaccent(${iN})` +
+      ` OR unaccent(COALESCE(m.display_name,'')) ILIKE unaccent(${iN})` +
+      ` OR mq.matter_ref % ${tN}` +
+      ` OR COALESCE(m.display_name,'') % ${tN})`,
+    );
+  }
+  if (from)   { params.push(from); conditions.push(`mq.created_at >= $${params.length}::date`); }
+  if (to)     { params.push(to);   conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
@@ -310,9 +331,20 @@ export async function listMatters(search?: string, status?: string, orderBy?: st
   if (!pool) return [];
   const params: unknown[] = [];
   const conditions: string[] = [];
-  if (search) { params.push(`%${search}%`); conditions.push(`mq.matter_ref ILIKE $${params.length}`); }
-  if (from)   { params.push(from);           conditions.push(`mq.created_at >= $${params.length}::date`); }
-  if (to)     { params.push(to);             conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
+  if (search) {
+    params.push(`%${search}%`);
+    const iN = `$${params.length}`;
+    params.push(search);
+    const tN = `$${params.length}`;
+    conditions.push(
+      `(unaccent(mq.matter_ref) ILIKE unaccent(${iN})` +
+      ` OR unaccent(COALESCE(m.display_name,'')) ILIKE unaccent(${iN})` +
+      ` OR mq.matter_ref % ${tN}` +
+      ` OR COALESCE(m.display_name,'') % ${tN})`,
+    );
+  }
+  if (from)   { params.push(from); conditions.push(`mq.created_at >= $${params.length}::date`); }
+  if (to)     { params.push(to);   conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
@@ -1187,16 +1219,31 @@ export interface SearchResult {
 
 export async function searchQueries(query: string, userId?: string, limit = 50): Promise<SearchResult[]> {
   if (!pool) return [];
-  const userClause = userId ? 'AND user_id = $3' : '';
-  const params: unknown[] = [`%${query}%`, limit];
+  // $1 = substring pattern, $2 = raw term (trigram / similarity), $3 = limit, $4 = userId
+  const params: unknown[] = [`%${query}%`, query, limit];
   if (userId) params.push(userId);
+  const userClause = userId ? 'AND mq.user_id = $4' : '';
   const r = await pool.query<SearchResult>(`
     SELECT mq.matter_ref, m.display_name, mq.tool_name, mq.query_text, mq.created_at, mq.user_id
     FROM matter_queries mq
     LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
-    WHERE (mq.query_text ILIKE $1 OR mq.matter_ref ILIKE $1) ${userClause}
-    ORDER BY mq.created_at DESC
-    LIMIT $2
+    WHERE (
+      unaccent(mq.query_text)              ILIKE unaccent($1)
+      OR unaccent(mq.matter_ref)           ILIKE unaccent($1)
+      OR unaccent(COALESCE(m.display_name,'')) ILIKE unaccent($1)
+      OR mq.query_text  % $2
+      OR mq.matter_ref  % $2
+      OR COALESCE(m.display_name,'') % $2
+    ) ${userClause}
+    ORDER BY
+      -- word_similarity ranks query matches within longer text better than plain similarity
+      GREATEST(
+        word_similarity($2, mq.query_text),
+        similarity($2, mq.matter_ref),
+        similarity($2, COALESCE(m.display_name,''))
+      ) DESC,
+      mq.created_at DESC
+    LIMIT $3
   `, params);
   return r.rows;
 }
