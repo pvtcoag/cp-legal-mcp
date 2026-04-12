@@ -283,6 +283,13 @@ ${useSidebar
 
 // ── Cost helpers ──────────────────────────────────────────────────────────────
 
+function fmtTokens(n: number): string {
+  if (!n || n <= 0) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  return String(n);
+}
+
 const TOOL_COST_RATES: Record<string, number> = {
   ask_judgment: 1.50, ask_legislation: 1.50, compare_cases: 1.50,
   enrich_judgment: 3.50, summarise_judgment: 1.833,
@@ -665,7 +672,7 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
       </div>
       <div class="card">
         <div class="card-label">Total Tokens</div>
-        <div class="card-value">${stats.total_tokens > 0 ? Math.round(stats.total_tokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
+        <div class="card-value">${fmtTokens(stats.total_tokens)}</div>
       </div>
       <div class="card">
         <div class="card-label">Est. Cost</div>
@@ -1095,7 +1102,7 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
       <td class="date-small">${tsDateTime(m.first_seen)}</td>
       <td class="date-small">${tsDateTime(m.last_seen)}</td>
       <td style="text-align:right;font-weight:600">${m.query_count.toLocaleString('en-AU')}</td>
-      <td style="text-align:right">${m.total_tokens > 0 ? Math.round(m.total_tokens/1000).toLocaleString('en-AU')+'K' : '—'}</td>
+      <td style="text-align:right">${fmtTokens(m.total_tokens)}</td>
       <td style="text-align:right">${usd}</td>
     </tr>`;
   }).join('');

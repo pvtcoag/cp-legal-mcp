@@ -28,6 +28,7 @@ import {
   getAggregateAccuracy,
   getDashboardCostByTool,
   getUserByUsername,
+  updateUserLastActive,
   logLoginEvent,
   type MatterSummaryRow,
   type MatterHistoryRow,
@@ -372,6 +373,7 @@ export const CSS = `
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 img { max-width: 100%; height: auto; }
+.nav-brand img { height: 26px; width: auto; max-width: none; }
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
 h1 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.5rem; font-weight: 400; margin-bottom: .375rem; color: var(--primary); }
 h2 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.0625rem; font-weight: 400; margin-bottom: .875rem; color: var(--primary); }
@@ -402,7 +404,8 @@ tbody tr + tr td { border-top: 1px solid #F0EDE8; }
 tbody tr:hover td { background: #FAFAF8; }
 tbody tr.row-error td { background: #FFF8F8 !important; }
 tbody tr.row-error:hover td { background: #FFF1F1 !important; }
-td { padding: .625rem 1rem; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
+td { padding: .625rem 1rem; vertical-align: top; overflow: visible; }
+.td-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: var(--primary); text-decoration: none; }
 .matter-ref:hover { text-decoration: underline; }
 .date-small { color: #555; font-size: .75rem; white-space: nowrap; }
@@ -498,7 +501,7 @@ select.filter-input { cursor: pointer; min-width: 120px; }
 .tool-bar-label { width: 150px; font-size: .8125rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 .tool-bar-track { flex: 1; height: 8px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
 .tool-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
-.tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; min-width: 80px; max-width: 150px; text-align: right; flex-shrink: 0; }
+.tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; min-width: 200px; text-align: left; flex-shrink: 0; }
 
 /* Researcher cards */
 .researcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
@@ -817,6 +820,7 @@ mattersRouter.post('/matters/login', async (req: Request, res: Response) => {
     return;
   }
   setSessionCookie(res, user, validResult.isAdmin);
+  updateUserLastActive(user).catch(() => {/* ignore */});
   logger.info({ user, isAdmin: validResult.isAdmin }, 'matters-ui: login');
   getGeoForIp(req.ip).then((geo) => {
     logLoginEvent({
@@ -886,7 +890,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
               <td style="white-space:pre-wrap;word-break:break-word;color:#555;max-width:380px">${esc(r.query_text)}</td>
-              <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
+              <td style="text-align:center;overflow:visible">${accuracyBadge(r.accuracy_score)}</td>
             </tr>`).join('')}
         </tbody>
       </table></div>
@@ -1042,7 +1046,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <td class="count" style="text-align:right">${r.result_count ?? 0}</td>
       <td class="mono no-print-col" style="text-align:right">${fmtTokens(r.api_tokens_used ?? 0)}</td>
       <td style="text-align:right">${costCell}</td>
-      <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
+      <td style="text-align:center;overflow:visible">${accuracyBadge(r.accuracy_score)}</td>
       <td class="no-print-col"><div class="top-results-stack">${topLinks || '—'}</div></td>
     </tr>`;
   }).join('');
