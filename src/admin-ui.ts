@@ -246,7 +246,7 @@ const AUD_PER_USD = 1.57;
 
 function estCostUsd(tokens: number, toolName?: string): number {
   if (!tokens) return 0;
-  const rate = (toolName && TOOL_COST_RATES[toolName]) ?? 1.25;
+  const rate = (toolName ? TOOL_COST_RATES[toolName] : undefined) ?? 1.25;
   return (tokens / 1_000_000) * rate;
 }
 
