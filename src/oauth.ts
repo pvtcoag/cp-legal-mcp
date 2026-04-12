@@ -271,7 +271,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
   <div class="card">
     <div class="logo">CP Legal</div>
     <h1>Sign in to continue</h1>
-    <p class="subtitle">Authorise Claude to access your research tools.</p>
+    <p class="subtitle">Sign in to authorise access to your research tools.</p>
     <form method="POST" action="/oauth/authorize">
       <input type="hidden" name="client_id" value="${escHtml(client_id)}">
       <input type="hidden" name="redirect_uri" value="${escHtml(redirect_uri)}">
@@ -354,7 +354,7 @@ oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
   <div class="card">
     <div class="logo">CP Legal</div>
     <h1>Sign in to continue</h1>
-    <p class="subtitle">Authorise Claude to access your research tools.</p>
+    <p class="subtitle">Sign in to authorise access to your research tools.</p>
     <div class="error">Incorrect username or token. Please try again.</div>
     <form method="POST" action="/oauth/authorize">
       <input type="hidden" name="client_id" value="${escHtml(client_id)}">

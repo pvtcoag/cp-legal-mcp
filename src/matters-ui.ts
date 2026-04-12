@@ -359,6 +359,8 @@ function parseClientName(ua?: string): string {
   if (!ua) return 'Unknown';
   if (/ClaudeDesktop/i.test(ua)) return 'Claude Desktop';
   if (/claude\.ai/i.test(ua)) return 'Claude Web';
+  if (/ChatGPT/i.test(ua) || /openai/i.test(ua)) return 'ChatGPT';
+  if (/cursor/i.test(ua)) return 'Cursor';
   if (/mcp-remote/i.test(ua)) return 'mcp-remote';
   if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) return 'Chrome';
   if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return 'Safari';
