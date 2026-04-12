@@ -51,31 +51,6 @@ export class AuslawError extends Error {
   }
 }
 
-// Keywords that suggest a JADE session cookie has expired.
-// The AusLaw MCP propagates jade.io error text verbatim.
-const JADE_EXPIRY_PATTERNS = [
-  /session.*expir/i,
-  /login.*required/i,
-  /please.*log.*in/i,
-  /unauthorized/i,
-  /401/,
-  /jade.*cookie/i,
-];
-
-/**
- * Returns true if the error message looks like a JADE session expiry.
- * Used by tools to append an admin alert to their response.
- */
-export function isJadeExpiry(err: AuslawError): boolean {
-  return JADE_EXPIRY_PATTERNS.some((p) => p.test(err.message));
-}
-
-export const JADE_EXPIRY_NOTICE =
-  '\n\n⚠️  JADE session cookie may have expired. ' +
-  'An admin needs to update JADE_SESSION_COOKIE in Railway (auslaw-mcp service) ' +
-  'by copying a fresh session cookie from jade.io. ' +
-  'See .env.example for instructions.';
-
 // --- Internal: call one AusLaw tool via MCP-over-HTTP ---
 
 async function callAuslawToolRaw(
@@ -300,7 +275,7 @@ export async function resolveJudgmentUrl(input: string): Promise<ResolvedJudgmen
     try {
       validation = await validateCitation(value);
     } catch (err) {
-      // Upstream failure (JADE down, network error) — distinguish from genuine not-found
+      // Upstream failure (network error etc.) — distinguish from genuine not-found
       const detail = err instanceof AuslawError ? err.message : String(err);
       throw new AuslawError(
         `Could not validate citation "${value}" — the legal database may be temporarily unavailable. Detail: ${detail}`,

@@ -27,7 +27,7 @@ const inputSchema = z.object({
 export function registerFindCitingCases(server: McpServer): void {
   server.tool(
     'find_citing_cases',
-    'Find Australian cases that have cited a given judgment. Uses jade.io\'s citator service. Useful for tracing how a case has been applied, distinguished, or overruled.',
+    'Find Australian cases that have cited a given judgment. Uses LawCite (AustLII\'s citator service) to trace how a case has been applied, distinguished, or overruled.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'find_citing_cases', citation: input.citation });
@@ -62,7 +62,7 @@ export function registerFindCitingCases(server: McpServer): void {
       }
 
       // Rerank by the citation itself as query — surfaces most substantively relevant citing cases
-      // rather than relying solely on jade.io's opaque ordering.
+      // rather than relying solely on LawCite's default ordering.
       let ranked;
       let rerankTokens = 0;
       try {
@@ -70,7 +70,7 @@ export function registerFindCitingCases(server: McpServer): void {
         ranked = rerankResult.results;
         rerankTokens = rerankResult.tokensUsed;
       } catch (err) {
-        log.warn({ err }, 'Isaacus reranking failed, using jade.io order');
+        log.warn({ err }, 'Isaacus reranking failed, using LawCite order');
         ranked = results.slice(0, input.limit ?? 10).map((item) => ({ item, score: 1.0 }));
       }
 

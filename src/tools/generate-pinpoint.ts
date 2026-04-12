@@ -4,8 +4,6 @@ import {
   generatePinpoint,
   resolveJudgmentUrl,
   AuslawError,
-  isJadeExpiry,
-  JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { logger } from '../logger.js';
 
@@ -97,19 +95,14 @@ export function registerGeneratePinpoint(server: McpServer): void {
         };
       } catch (err) {
         if (err instanceof AuslawError) {
-          const jadeExpired = isJadeExpiry(err);
-          if (jadeExpired) logger.warn({ err }, 'JADE session cookie may have expired');
-          else log.warn({ err }, 'AusLaw generate_pinpoint failed');
-          const baseMessage = jadeExpired
-            ? 'Could not retrieve the judgment — the JADE session appears to have expired.'
-            : 'Could not generate pinpoint reference. The legal database may be temporarily unavailable.';
+          log.warn({ err }, 'fetch_document_text failed');
           return {
             content: [
               {
                 type: 'text' as const,
                 text: JSON.stringify({
-                  error: jadeExpired ? 'jade_session_expired' : 'upstream_unavailable',
-                  message: baseMessage + (jadeExpired ? JADE_EXPIRY_NOTICE : ''),
+                  error: 'upstream_unavailable',
+                  message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
                   detail: err.message,
                 }),
               },

@@ -4,8 +4,6 @@ import {
   fetchDocumentText,
   resolveJudgmentUrl,
   AuslawError,
-  isJadeExpiry,
-  JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { enrichDocument } from '../isaacus-client.js';
 import { truncateText } from '../text-utils.js';
@@ -57,16 +55,11 @@ export function registerEnrichJudgment(server: McpServer): void {
         doc = await fetchDocumentText(resolved.url);
       } catch (err) {
         if (err instanceof AuslawError) {
-          const jadeExpired = isJadeExpiry(err);
-          if (jadeExpired) logger.warn({ err }, 'JADE session cookie may have expired');
-          else log.warn({ err }, 'AusLaw fetch_document_text failed');
-          const baseMessage = jadeExpired
-            ? 'Could not retrieve the judgment — the JADE session appears to have expired.'
-            : 'Could not retrieve the judgment. The legal database may be temporarily unavailable.';
+          log.warn({ err }, 'fetch_document_text failed');
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({
-              error: jadeExpired ? 'jade_session_expired' : 'upstream_unavailable',
-              message: baseMessage + (jadeExpired ? JADE_EXPIRY_NOTICE : ''),
+              error: 'upstream_unavailable',
+              message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
               detail: err.message,
             }) }],
             isError: true,
