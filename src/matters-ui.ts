@@ -182,7 +182,7 @@ function computeMonthlyBilling(rows: MatterHistoryRow[]): {
   const monthOrder: string[] = [];
   const monthToolMap = new Map<string, Map<string, MonthlyBillingEntry>>();
 
-  for (const r of [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+  for (const r of [...rows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())) {
     const month = new Date(r.created_at).toLocaleDateString('en-AU', {
       month: 'short', year: 'numeric', timeZone: 'Australia/Sydney',
     });
