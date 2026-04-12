@@ -1034,11 +1034,13 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
   const search = typeof req.query['search'] === 'string' ? req.query['search'].trim() : undefined;
   const viewUser = userIsAdmin && typeof req.query['user'] === 'string' ? req.query['user'].trim() : undefined;
   const statusFilter = typeof req.query['status'] === 'string' ? req.query['status'].trim() : undefined;
+  const fromDate = typeof req.query['from'] === 'string' ? req.query['from'].trim() : undefined;
+  const toDate   = typeof req.query['to']   === 'string' ? req.query['to'].trim()   : undefined;
   const validSorts = ['last_activity', 'first_activity', 'queries', 'matter_ref'] as const;
   type SortKey = typeof validSorts[number];
   const sort: SortKey = validSorts.includes(req.query['sort'] as SortKey) ? (req.query['sort'] as SortKey) : 'last_activity';
   const adminBadge = userIsAdmin ? '<span class="admin-badge">Admin</span>' : '';
-  const allUsers = [...getCredentials().keys()];
+  const allUsers = userIsAdmin ? (await listUsers()).map((u) => u.username) : [];
 
   // Build a helper that preserves current filter params when changing sort
   const buildSortUrl = (s: string) => {
@@ -1046,14 +1048,16 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     if (search) params.set('search', search);
     if (viewUser) params.set('user', viewUser);
     if (statusFilter) params.set('status', statusFilter);
+    if (fromDate) params.set('from', fromDate);
+    if (toDate)   params.set('to', toDate);
     params.set('sort', s);
     return `/matters?${params.toString()}`;
   };
 
   // Admin: default to all matters; can filter by user via ?user=
   const matters: MatterSummaryRow[] = userIsAdmin
-    ? (viewUser ? await listMattersForUser(viewUser, search, statusFilter, sort) : await listMatters(search, statusFilter, sort))
-    : await listMattersForUser(user, search, statusFilter, sort);
+    ? (viewUser ? await listMattersForUser(viewUser, search, statusFilter, sort, fromDate, toDate) : await listMatters(search, statusFilter, sort, fromDate, toDate))
+    : await listMattersForUser(user, search, statusFilter, sort, fromDate, toDate);
 
   // Admin user toggle tabs
   const segTabs = userIsAdmin
@@ -1092,11 +1096,12 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
         <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
       </tr>`;
     }).join('');
+    const sortIcon = (col: string) => sort === col ? ' ↓' : ' <span style="color:#ccc;font-weight:400">↕</span>';
     tableHtml = `<div class="table-wrap"><table>
       <thead><tr>
-        <th><a href="${esc(buildSortUrl('matter_ref'))}" class="sort-link${sort === 'matter_ref' ? ' active' : ''}">Matter Ref</a></th>
-        <th><a href="${esc(buildSortUrl('last_activity'))}" class="sort-link${sort === 'last_activity' ? ' active' : ''}">Period ▼</a></th>
-        <th style="text-align:right"><a href="${esc(buildSortUrl('queries'))}" class="sort-link${sort === 'queries' ? ' active' : ''}">Queries</a></th>
+        <th><a href="${esc(buildSortUrl('matter_ref'))}" class="sort-link${sort === 'matter_ref' ? ' active' : ''}">Matter Ref${sortIcon('matter_ref')}</a></th>
+        <th><a href="${esc(buildSortUrl('last_activity'))}" class="sort-link${sort === 'last_activity' ? ' active' : ''}">Last Active${sortIcon('last_activity')}</a></th>
+        <th style="text-align:right"><a href="${esc(buildSortUrl('queries'))}" class="sort-link${sort === 'queries' ? ' active' : ''}">Queries${sortIcon('queries')}</a></th>
         <th>Researchers</th><th>Tools Used</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -1111,7 +1116,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     </div>
     ${segTabs}
     ${statusTabs}
-    ${renderFilterBar({ search, allUsers, isAdmin: userIsAdmin, viewUser, action: '/matters' })}
+    ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/matters' })}
     ${tableHtml}
   `, user, '/matters', 300, userIsAdmin));
 });
@@ -1148,6 +1153,37 @@ mattersRouter.get('/matters/search', requireSession, async (req: Request, res: R
           <tbody>${rows}</tbody>
         </table></div>`}
   `, user, '/matters', undefined, userIsAdmin));
+});
+
+// GET /matters/export-all.csv — summary CSV of all matters (MUST be before /:ref)
+mattersRouter.get('/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const matters: MatterSummaryRow[] = userIsAdmin
+    ? await listMatters()
+    : await listMattersForUser(user);
+
+  const csvEsc = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = ['Matter Ref', 'Display Name', 'Status', 'First Activity', 'Last Activity', 'Queries', 'Researchers', 'Tools Used']
+    .map(csvEsc).join(',');
+  const dataRows = matters.map((m) => [
+    m.matter_ref,
+    m.display_name ?? '',
+    m.status,
+    fmtDateTime(m.first_activity),
+    fmtDateTime(m.last_activity),
+    String(m.query_count),
+    (m.users ?? []).join('; '),
+    (m.tools_used ?? []).map(toolLabel).join('; '),
+  ].map(csvEsc).join(','));
+
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="cp-legal-matters-${date}.csv"`);
+  res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
 // GET /matters/:ref — matter detail
@@ -1334,19 +1370,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       ${toolFilter ? `<a href="/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
     </form>
     <div class="table-wrap">
-    <table>
-      <colgroup>
-        <col style="width:13%"><!-- Date/Time -->
-        <col style="width:9%"><!-- Tool -->
-        <col style="width:9%"><!-- Researcher -->
-        <col style="width:37%"><!-- Query -->
-        <col style="width:9%"><!-- Jurisdiction -->
-        <col style="width:7%"><!-- Results -->
-        <col class="no-print-col" style="width:7%"><!-- Tokens (hidden in print) -->
-        <col style="width:8%"><!-- Cost -->
-        <col style="width:7%"><!-- Accuracy -->
-        <col class="no-print-col"><!-- Top Results (hidden in print) -->
-      </colgroup>
+    <table style="table-layout:auto">
       <thead><tr>
         <th>Date &amp; Time</th><th>Tool</th><th>Researcher</th><th>Query</th>
         <th>Jurisdiction</th><th style="text-align:right">Results</th>
@@ -1482,35 +1506,4 @@ mattersRouter.post('/matters/:ref/rename', requireSession, async (req: Request, 
   const clean = (display_name ?? '').trim().slice(0, 200);
   await upsertMatter(ref, { displayName: clean || undefined });
   res.redirect(`/matters/${encodeURIComponent(ref)}`);
-});
-
-// GET /matters/export-all.csv
-mattersRouter.get('/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
-  const user = getSessionUser(req)!;
-  const userIsAdmin = getSessionIsAdmin(req);
-
-  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
-
-  const matters: MatterSummaryRow[] = userIsAdmin
-    ? await listMatters()
-    : await listMattersForUser(user);
-
-  const csvEsc = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const header = ['Matter Ref', 'Display Name', 'Status', 'First Activity', 'Last Activity', 'Queries', 'Researchers', 'Tools Used']
-    .map(csvEsc).join(',');
-  const dataRows = matters.map((m) => [
-    m.matter_ref,
-    m.display_name ?? '',
-    m.status,
-    fmtDateTime(m.first_activity),
-    fmtDateTime(m.last_activity),
-    String(m.query_count),
-    (m.users ?? []).join('; '),
-    (m.tools_used ?? []).map(toolLabel).join('; '),
-  ].map(csvEsc).join(','));
-
-  const date = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="cp-legal-matters-${date}.csv"`);
-  res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });

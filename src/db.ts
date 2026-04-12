@@ -250,11 +250,14 @@ function matterSortClause(orderBy?: string): string {
   }
 }
 
-export async function listMattersForUser(userId: string, search?: string, status?: string, orderBy?: string): Promise<MatterSummaryRow[]> {
+export async function listMattersForUser(userId: string, search?: string, status?: string, orderBy?: string, from?: string, to?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [userId];
-  const searchClause = search ? ` AND mq.matter_ref ILIKE $2` : '';
-  if (search) params.push(`%${search}%`);
+  const conditions: string[] = ['(mq.user_id = $1 OR mq.user_id IS NULL)'];
+  if (search) { params.push(`%${search}%`); conditions.push(`mq.matter_ref ILIKE $${params.length}`); }
+  if (from)   { params.push(from);           conditions.push(`mq.created_at >= $${params.length}::date`); }
+  if (to)     { params.push(to);             conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
@@ -268,18 +271,21 @@ export async function listMattersForUser(userId: string, search?: string, status
       MAX(mq.created_at)                         AS last_activity
     FROM matter_queries mq
     LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
-    WHERE (mq.user_id = $1 OR mq.user_id IS NULL)${searchClause}
+    ${whereClause}
     GROUP BY mq.matter_ref${statusClause}
     ${matterSortClause(orderBy)}
   `, params);
   return result.rows;
 }
 
-export async function listMatters(search?: string, status?: string, orderBy?: string): Promise<MatterSummaryRow[]> {
+export async function listMatters(search?: string, status?: string, orderBy?: string, from?: string, to?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [];
-  const searchClause = search ? `WHERE mq.matter_ref ILIKE $1` : '';
-  if (search) params.push(`%${search}%`);
+  const conditions: string[] = [];
+  if (search) { params.push(`%${search}%`); conditions.push(`mq.matter_ref ILIKE $${params.length}`); }
+  if (from)   { params.push(from);           conditions.push(`mq.created_at >= $${params.length}::date`); }
+  if (to)     { params.push(to);             conditions.push(`mq.created_at < ($${params.length}::date + interval '1 day')`); }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
@@ -293,7 +299,7 @@ export async function listMatters(search?: string, status?: string, orderBy?: st
       MAX(mq.created_at)                         AS last_activity
     FROM matter_queries mq
     LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
-    ${searchClause}
+    ${whereClause}
     GROUP BY mq.matter_ref${statusClause}
     ${matterSortClause(orderBy)}
   `, params);
@@ -707,7 +713,7 @@ export async function upsertMatter(ref: string, updates: { displayName?: string;
   if (!pool) return;
   await pool.query(`
     INSERT INTO matters (matter_ref, display_name, status, notes)
-    VALUES ($1, $2, $3, $4)
+    VALUES ($1, $2, COALESCE($3, 'open'), $4)
     ON CONFLICT (matter_ref) DO UPDATE SET
       display_name = COALESCE(EXCLUDED.display_name, matters.display_name),
       status       = COALESCE(EXCLUDED.status, matters.status),
