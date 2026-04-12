@@ -36,6 +36,10 @@ const ConfigSchema = z.object({
   // Session secret for HMAC-signed cookies (falls back to MCP_AUTH_TOKENS if not set).
   // Explicit SESSION_SECRET is recommended for production.
   SESSION_SECRET: z.string().optional(),
+
+  // Recovery token — allows admin access via login page when other credentials are unavailable.
+  // Remove this env var after recovering access.
+  RECOVERY_TOKEN: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

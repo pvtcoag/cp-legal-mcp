@@ -117,6 +117,14 @@ export async function initDb(): Promise<void> {
       updated_at  TIMESTAMPTZ DEFAULT NOW(),
       updated_by  TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS matters (
+      matter_ref   TEXT PRIMARY KEY,
+      display_name TEXT,
+      status       TEXT NOT NULL DEFAULT 'open',
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -140,13 +148,16 @@ export interface QueryLogEntry {
 export async function logMatterQuery(entry: QueryLogEntry): Promise<void> {
   if (!pool) return;
 
+  // If the matter is closed, redirect to a new suffixed ref automatically
+  const effectiveRef = await resolveOpenMatterRef(entry.matter_ref);
+
   await pool.query(
     `INSERT INTO matter_queries
        (matter_ref, user_id, tool_name, query_text, jurisdiction, result_count, top_results,
         api_tokens_used, is_error, error_message, accuracy_score)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
-      entry.matter_ref,
+      effectiveRef,
       entry.user_id ?? null,
       entry.tool_name,
       entry.query_text,
@@ -203,6 +214,8 @@ export async function getMatterHistory(
 
 export interface MatterSummaryRow {
   matter_ref: string;
+  display_name: string | null;
+  status: string;
   query_count: number;
   users: string[];
   tools_used: string[];
@@ -210,43 +223,51 @@ export interface MatterSummaryRow {
   last_activity: string;
 }
 
-export async function listMattersForUser(userId: string, search?: string): Promise<MatterSummaryRow[]> {
+export async function listMattersForUser(userId: string, search?: string, status?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [userId];
-  const searchClause = search ? ` AND matter_ref ILIKE $2` : '';
+  const searchClause = search ? ` AND mq.matter_ref ILIKE $2` : '';
   if (search) params.push(`%${search}%`);
+  const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
-      matter_ref,
+      mq.matter_ref,
+      MAX(m.display_name)                        AS display_name,
+      COALESCE(MAX(m.status), 'open')            AS status,
       COUNT(*)::int                              AS query_count,
-      ARRAY_AGG(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS users,
-      ARRAY_AGG(DISTINCT tool_name)              AS tools_used,
-      MIN(created_at)                            AS first_activity,
-      MAX(created_at)                            AS last_activity
-    FROM matter_queries
-    WHERE (user_id = $1 OR user_id IS NULL)${searchClause}
-    GROUP BY matter_ref
+      ARRAY_AGG(DISTINCT mq.user_id) FILTER (WHERE mq.user_id IS NOT NULL) AS users,
+      ARRAY_AGG(DISTINCT mq.tool_name)           AS tools_used,
+      MIN(mq.created_at)                         AS first_activity,
+      MAX(mq.created_at)                         AS last_activity
+    FROM matter_queries mq
+    LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
+    WHERE (mq.user_id = $1 OR mq.user_id IS NULL)${searchClause}
+    GROUP BY mq.matter_ref${statusClause}
     ORDER BY last_activity DESC
   `, params);
   return result.rows;
 }
 
-export async function listMatters(search?: string): Promise<MatterSummaryRow[]> {
+export async function listMatters(search?: string, status?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [];
-  const searchClause = search ? `WHERE matter_ref ILIKE $1` : '';
+  const searchClause = search ? `WHERE mq.matter_ref ILIKE $1` : '';
   if (search) params.push(`%${search}%`);
+  const statusClause = status && status !== 'all' ? ` HAVING COALESCE(MAX(m.status), 'open') = '${status === 'closed' ? 'closed' : 'open'}'` : '';
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
-      matter_ref,
+      mq.matter_ref,
+      MAX(m.display_name)                        AS display_name,
+      COALESCE(MAX(m.status), 'open')            AS status,
       COUNT(*)::int                              AS query_count,
-      ARRAY_AGG(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL) AS users,
-      ARRAY_AGG(DISTINCT tool_name)              AS tools_used,
-      MIN(created_at)                            AS first_activity,
-      MAX(created_at)                            AS last_activity
-    FROM matter_queries
+      ARRAY_AGG(DISTINCT mq.user_id) FILTER (WHERE mq.user_id IS NOT NULL) AS users,
+      ARRAY_AGG(DISTINCT mq.tool_name)           AS tools_used,
+      MIN(mq.created_at)                         AS first_activity,
+      MAX(mq.created_at)                         AS last_activity
+    FROM matter_queries mq
+    LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
     ${searchClause}
-    GROUP BY matter_ref
+    GROUP BY mq.matter_ref${statusClause}
     ORDER BY last_activity DESC
   `, params);
   return result.rows;
@@ -637,6 +658,55 @@ export async function updateUserLastActive(username: string): Promise<void> {
   );
 }
 
+// ── Matter status management ──────────────────────────────────────────────────
+
+export interface MatterRow {
+  matter_ref: string;
+  display_name: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getMatter(ref: string): Promise<MatterRow | null> {
+  if (!pool) return null;
+  const r = await pool.query<MatterRow>('SELECT * FROM matters WHERE matter_ref = $1', [ref]);
+  return r.rows[0] ?? null;
+}
+
+export async function upsertMatter(ref: string, updates: { displayName?: string; status?: string }): Promise<void> {
+  if (!pool) return;
+  await pool.query(`
+    INSERT INTO matters (matter_ref, display_name, status)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (matter_ref) DO UPDATE SET
+      display_name = COALESCE(EXCLUDED.display_name, matters.display_name),
+      status       = COALESCE(EXCLUDED.status, matters.status),
+      updated_at   = NOW()
+  `, [ref, updates.displayName ?? null, updates.status ?? null]);
+}
+
+export async function isMatterClosed(ref: string): Promise<boolean> {
+  if (!pool) return false;
+  const r = await pool.query<{ status: string }>('SELECT status FROM matters WHERE matter_ref = $1', [ref]);
+  return r.rows[0]?.status === 'closed';
+}
+
+async function resolveOpenMatterRef(ref: string): Promise<string> {
+  const closed = await isMatterClosed(ref);
+  if (!closed) return ref;
+  // Find next available suffix
+  const base = ref.replace(/-\d+$/, ''); // strip existing numeric suffix
+  const r = await pool!.query<{ matter_ref: string }>(
+    `SELECT DISTINCT matter_ref FROM matter_queries WHERE matter_ref LIKE $1`,
+    [base + '%'],
+  );
+  const existing = new Set(r.rows.map((row) => row.matter_ref));
+  let suffix = 2;
+  while (existing.has(`${base}-${suffix}`)) suffix++;
+  return `${base}-${suffix}`;
+}
+
 /** Seeds users table from MCP_AUTH_TOKENS env var if the table is empty. */
 export async function migrateUsersFromEnv(envTokens: string, adminUsers: string[]): Promise<void> {
   if (!pool) return;
@@ -934,23 +1004,39 @@ export async function getRecentErrors(limit: number = 10): Promise<MatterHistory
 
 export interface AdminMatterRow {
   matter_ref: string;
+  display_name: string | null;
+  status: string;
   first_seen: string;
   last_seen: string;
   query_count: number;
   total_tokens: number;
+  creator: string | null;
+  active_users: string[];
 }
 
-export async function listAdminMatters(): Promise<AdminMatterRow[]> {
+export async function listAdminMatters(period?: 'lifetime' | 'month' | 'week'): Promise<AdminMatterRow[]> {
   if (!pool) return [];
+  const dateClause = period === 'week'
+    ? `AND mq.created_at >= NOW() - INTERVAL '7 days'`
+    : period === 'month'
+    ? `AND mq.created_at >= NOW() - INTERVAL '30 days'`
+    : '';
   const r = await pool.query<AdminMatterRow>(`
-    SELECT matter_ref,
-           MIN(created_at) AS first_seen,
-           MAX(created_at) AS last_seen,
+    SELECT mq.matter_ref,
+           m.display_name,
+           COALESCE(m.status, 'open') AS status,
+           MIN(mq.created_at) AS first_seen,
+           MAX(mq.created_at) AS last_seen,
            COUNT(*)::int AS query_count,
-           COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens
-    FROM matter_queries
-    WHERE matter_ref IS NOT NULL
-    GROUP BY matter_ref
+           COALESCE(SUM(mq.api_tokens_used), 0)::int AS total_tokens,
+           (SELECT mq2.user_id FROM matter_queries mq2
+            WHERE mq2.matter_ref = mq.matter_ref AND mq2.user_id IS NOT NULL
+            ORDER BY mq2.created_at ASC LIMIT 1) AS creator,
+           ARRAY_AGG(DISTINCT mq.user_id) FILTER (WHERE mq.user_id IS NOT NULL) AS active_users
+    FROM matter_queries mq
+    LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
+    WHERE mq.matter_ref IS NOT NULL ${dateClause}
+    GROUP BY mq.matter_ref, m.display_name, m.status
     ORDER BY last_seen DESC
   `);
   return r.rows;

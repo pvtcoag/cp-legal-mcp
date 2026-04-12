@@ -943,6 +943,16 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
       document.getElementById('edit-value').focus();
     }
     </script>
+
+    <div class="section-title">Security</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:#555">
+        Recovery access: Set <code>RECOVERY_TOKEN</code> in Railway env vars.
+        This token can be used as the password at the login page (with any username) to gain temporary admin access.
+        Remove it after recovering access.
+        ${config.RECOVERY_TOKEN ? '<span style="color:#16a34a;font-weight:600">&#x2713; Recovery token is configured</span>' : '<span style="color:#888">Not configured — add RECOVERY_TOKEN env var to enable</span>'}
+      </p>
+    </div>
   `, session.user, '/admin/config'));
 });
 
@@ -1090,18 +1100,38 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
     return;
   }
 
-  const matters = await listAdminMatters();
+  const period = (['lifetime', 'month', 'week'] as const).includes(req.query['period'] as 'lifetime'|'month'|'week')
+    ? (req.query['period'] as 'lifetime'|'month'|'week')
+    : 'lifetime';
+
+  const matters = await listAdminMatters(period);
+
+  const periodTabHtml = `<div class="period-tabs">
+    <a href="?period=lifetime" class="period-tab${period==='lifetime'?' active':''}">Lifetime</a>
+    <a href="?period=month" class="period-tab${period==='month'?' active':''}">This Month</a>
+    <a href="?period=week" class="period-tab${period==='week'?' active':''}">This Week</a>
+  </div>`;
 
   const rows = matters.map((m: AdminMatterRow) => {
     const costUsd = estMatterCostUsd(m.total_tokens);
     const { usd } = fmtCost(costUsd);
+    const isClosed = m.status === 'closed';
+    const statusBadge = isClosed
+      ? '<span style="display:inline-block;background:#fee2e2;color:#991b1b;padding:.125rem .5rem;border-radius:10px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Closed</span>'
+      : '<span style="display:inline-block;background:#d1fae5;color:#065f46;padding:.125rem .5rem;border-radius:10px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Open</span>';
+    const displayLabel = m.display_name
+      ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:#888;font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
+      : esc(m.matter_ref);
+    const activeUsers = (m.active_users ?? []).join(', ') || '—';
     return `<tr>
       <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
-        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${esc(m.matter_ref)}</a>
+        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${displayLabel}</a>${statusBadge}
       </td>
+      <td class="date-small">${m.creator ? esc(m.creator) : '—'}</td>
       <td class="date-small">${tsDateTime(m.first_seen)}</td>
       <td class="date-small">${tsDateTime(m.last_seen)}</td>
       <td style="text-align:right;font-weight:600">${m.query_count.toLocaleString('en-AU')}</td>
+      <td style="font-size:.8125rem;color:#555">${esc(activeUsers)}</td>
       <td style="text-align:right">${fmtTokens(m.total_tokens)}</td>
       <td style="text-align:right">${usd}</td>
     </tr>`;
@@ -1112,9 +1142,11 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
     : `<div class="table-wrap"><table>
         <thead><tr>
           <th>Matter Ref</th>
+          <th>Creator</th>
           <th>First Seen</th>
-          <th>Last Seen</th>
+          <th>Last Active</th>
           <th style="text-align:right">Queries</th>
+          <th>Active Users</th>
           <th style="text-align:right">Tokens</th>
           <th style="text-align:right">Est. Cost (USD)</th>
         </tr></thead>
@@ -1124,6 +1156,7 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
   res.send(page('Matters', `
     <h1>Matters</h1>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''} on record, sorted by last activity</p>
+    ${periodTabHtml}
     ${tableHtml}
   `, session.user, '/admin/matters'));
 });
