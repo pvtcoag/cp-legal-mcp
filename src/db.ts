@@ -118,19 +118,21 @@ export interface MatterHistoryRow {
 export async function getMatterHistory(
   matter_ref: string,
   limit: number = 50,
+  toolFilter?: string,
 ): Promise<MatterHistoryRow[]> {
   if (!pool) return [];
-
+  const params: unknown[] = [matter_ref, limit];
+  const toolClause = toolFilter ? ` AND tool_name = $3` : '';
+  if (toolFilter) params.push(toolFilter);
   const result = await pool.query<MatterHistoryRow>(
     `SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
             result_count, top_results, api_tokens_used, created_at
      FROM matter_queries
-     WHERE matter_ref = $1
+     WHERE matter_ref = $1${toolClause}
      ORDER BY created_at DESC
      LIMIT $2`,
-    [matter_ref, limit],
+    params,
   );
-
   return result.rows;
 }
 
@@ -145,8 +147,11 @@ export interface MatterSummaryRow {
   last_activity: string;
 }
 
-export async function listMattersForUser(userId: string): Promise<MatterSummaryRow[]> {
+export async function listMattersForUser(userId: string, search?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
+  const params: unknown[] = [userId];
+  const searchClause = search ? ` AND matter_ref ILIKE $2` : '';
+  if (search) params.push(`%${search}%`);
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
       matter_ref,
@@ -156,15 +161,18 @@ export async function listMattersForUser(userId: string): Promise<MatterSummaryR
       MIN(created_at)                            AS first_activity,
       MAX(created_at)                            AS last_activity
     FROM matter_queries
-    WHERE user_id = $1 OR user_id IS NULL
+    WHERE (user_id = $1 OR user_id IS NULL)${searchClause}
     GROUP BY matter_ref
     ORDER BY last_activity DESC
-  `, [userId]);
+  `, params);
   return result.rows;
 }
 
-export async function listMatters(): Promise<MatterSummaryRow[]> {
+export async function listMatters(search?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
+  const params: unknown[] = [];
+  const searchClause = search ? `WHERE matter_ref ILIKE $1` : '';
+  if (search) params.push(`%${search}%`);
   const result = await pool.query<MatterSummaryRow>(`
     SELECT
       matter_ref,
@@ -174,11 +182,14 @@ export async function listMatters(): Promise<MatterSummaryRow[]> {
       MIN(created_at)                            AS first_activity,
       MAX(created_at)                            AS last_activity
     FROM matter_queries
+    ${searchClause}
     GROUP BY matter_ref
     ORDER BY last_activity DESC
-  `);
+  `, params);
   return result.rows;
 }
+
+
 
 // ── Judgment cache ────────────────────────────────────────────────────────────
 
@@ -313,5 +324,75 @@ export async function getRecentActivity(limit: number = 50): Promise<RecentActiv
     ORDER BY created_at DESC
     LIMIT $1
   `, [limit]);
+  return result.rows;
+}
+
+// ── Dashboard analytics ───────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  total_matters: number;
+  total_queries: number;
+  total_tokens: number;
+  active_matters_30d: number;
+}
+
+export async function getDashboardStats(userId?: string): Promise<DashboardStats> {
+  if (!pool) return { total_matters: 0, total_queries: 0, total_tokens: 0, active_matters_30d: 0 };
+  const where = userId ? `WHERE user_id = $1 OR user_id IS NULL` : '';
+  const params = userId ? [userId] : [];
+  const result = await pool.query<DashboardStats>(`
+    SELECT
+      COUNT(DISTINCT matter_ref)::int AS total_matters,
+      COUNT(*)::int AS total_queries,
+      COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens,
+      COUNT(DISTINCT CASE WHEN created_at > NOW() - INTERVAL '30 days' THEN matter_ref END)::int AS active_matters_30d
+    FROM matter_queries ${where}
+  `, params);
+  return result.rows[0] ?? { total_matters: 0, total_queries: 0, total_tokens: 0, active_matters_30d: 0 };
+}
+
+export interface ToolUsageStat {
+  tool_name: string;
+  query_count: number;
+  total_tokens: number;
+}
+
+export async function getToolUsageStats(userId?: string): Promise<ToolUsageStat[]> {
+  if (!pool) return [];
+  const where = userId ? `WHERE user_id = $1 OR user_id IS NULL` : '';
+  const params = userId ? [userId] : [];
+  const result = await pool.query<ToolUsageStat>(`
+    SELECT
+      tool_name,
+      COUNT(*)::int AS query_count,
+      COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens
+    FROM matter_queries ${where}
+    GROUP BY tool_name
+    ORDER BY query_count DESC
+  `, params);
+  return result.rows;
+}
+
+export interface UserStatRow {
+  user_id: string | null;
+  query_count: number;
+  matter_count: number;
+  total_tokens: number;
+  last_activity: string;
+}
+
+export async function getUserStats(): Promise<UserStatRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<UserStatRow>(`
+    SELECT
+      user_id,
+      COUNT(*)::int AS query_count,
+      COUNT(DISTINCT matter_ref)::int AS matter_count,
+      COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens,
+      MAX(created_at) AS last_activity
+    FROM matter_queries
+    GROUP BY user_id
+    ORDER BY query_count DESC
+  `);
   return result.rows;
 }
