@@ -115,9 +115,15 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 }
 
 function sendUnauthorized(res: Response): void {
-  res.setHeader('WWW-Authenticate', 'Bearer realm="cp-legal-mcp"');
+  const issuer = process.env.OAUTH_ISSUER ?? 'https://api.example.com';
+  // OAuth resource metadata URL tells Claude web and other OAuth-aware clients
+  // where to discover the authorization server and start the flow automatically.
+  res.setHeader(
+    'WWW-Authenticate',
+    `Bearer realm="${issuer}", resource_metadata="${issuer}/.well-known/oauth-protected-resource"`,
+  );
   res.status(401).json({
     error: 'Unauthorized',
-    message: 'A valid Bearer token is required. Configure your MCP client with your API token.',
+    message: 'A valid Bearer token is required. OAuth-aware clients will be redirected to authenticate automatically.',
   });
 }

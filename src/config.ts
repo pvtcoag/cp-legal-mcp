@@ -12,6 +12,20 @@ const ConfigSchema = z.object({
   // Admin — comma-separated user identities permitted to use admin tools
   ADMIN_USERS: z.string().default('admin'),
 
+  // OAuth 2.0 — public base URL of this service (no trailing slash).
+  // Used as the issuer in OAuth discovery endpoints and as the WWW-Authenticate realm.
+  OAUTH_ISSUER: z.string().url().default('https://api.example.com'),
+
+  // Static OAuth client ID for Claude Web and ChatGPT connectors.
+  // Claude Web: enter this value in claude.ai remote MCP settings.
+  // ChatGPT: enter this as the client_id in the GPT connector OAuth config.
+  OAUTH_CLIENT_ID: z.string().optional(),
+
+  // Client secret for the static OAuth client.
+  // Recommended for production but optional — dynamic clients (mcp-remote, Cursor, etc.)
+  // use PKCE only and do not require a secret.
+  OAUTH_CLIENT_SECRET: z.string().optional(),
+
   // Isaacus — legal AI reranking
   ISAACUS_API_KEY: z.string().min(1, 'ISAACUS_API_KEY is required'),
 

@@ -6,6 +6,8 @@ import { authMiddleware, buildAuthCache } from './auth.js';
 import { initDb, migrateUsersFromEnv, listUsers } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
+import { oauthRouter } from './oauth.js';
+import { preRegisterClient } from './oauth-store.js';
 import { mattersRouter, buildSessionVersionCache } from './matters-ui.js';
 import { adminRouter } from './admin-ui.js';
 
@@ -15,6 +17,9 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // OAuth login form POST
+
+// OAuth 2.0 — mounted before auth middleware (public discovery + token endpoints)
+app.use(oauthRouter);
 
 // CORS — allow any origin so browser-based MCP clients (OpenAI, Cursor, etc.) can connect
 app.use('/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -113,6 +118,20 @@ const server = app.listen(config.PORT, async () => {
     { port: config.PORT, env: config.NODE_ENV },
     'cp-legal-mcp listening',
   );
+
+  // Pre-register static OAuth client for Claude Web / ChatGPT connectors
+  if (config.OAUTH_CLIENT_ID) {
+    preRegisterClient(
+      config.OAUTH_CLIENT_ID,
+      [
+        'https://claude.ai/api/mcp/auth_callback',
+        'https://chatgpt.com/aip/g-ext-PLACEHOLDER/oauth/callback', // ChatGPT discovers and uses its own redirect; static entry kept for known patterns
+      ],
+      'Claude Web / ChatGPT',
+      config.OAUTH_CLIENT_SECRET,
+    );
+    logger.info({ clientId: config.OAUTH_CLIENT_ID }, 'OAuth static client pre-registered');
+  }
 
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
