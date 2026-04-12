@@ -115,10 +115,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 }
 
 function sendUnauthorized(res: Response): void {
-  const issuer = process.env.OAUTH_ISSUER ?? 'https://api.example.com';
-  res.setHeader(
-    'WWW-Authenticate',
-    `Bearer realm="${issuer}", resource_metadata="${issuer}/.well-known/oauth-protected-resource"`,
-  );
-  res.status(401).json({ error: 'Unauthorized' });
+  res.setHeader('WWW-Authenticate', 'Bearer realm="cp-legal-mcp"');
+  res.status(401).json({
+    error: 'Unauthorized',
+    message: 'A valid Bearer token is required. Configure your MCP client with your API token.',
+  });
 }

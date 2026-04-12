@@ -6,8 +6,6 @@ import { authMiddleware, buildAuthCache } from './auth.js';
 import { initDb, migrateUsersFromEnv, listUsers } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
-import { oauthRouter } from './oauth.js';
-import { preRegisterClient } from './oauth-store.js';
 import { mattersRouter, buildSessionVersionCache } from './matters-ui.js';
 import { adminRouter } from './admin-ui.js';
 
@@ -17,6 +15,16 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // OAuth login form POST
+
+// CORS — allow any origin so browser-based MCP clients (OpenAI, Cursor, etc.) can connect
+app.use('/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
+  if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  next();
+});
 
 // Rate limiting — 60 requests per minute per IP
 app.use(
@@ -29,9 +37,6 @@ app.use(
     message: { error: 'Too many requests, please slow down.' },
   }),
 );
-
-// OAuth 2.0 — mounted before auth middleware (public endpoints)
-app.use(oauthRouter);
 
 // Matter history UI — cookie-session auth, independent of MCP bearer auth
 app.use(mattersRouter);
@@ -108,16 +113,6 @@ const server = app.listen(config.PORT, async () => {
     { port: config.PORT, env: config.NODE_ENV },
     'cp-legal-mcp listening',
   );
-
-  // Pre-register static OAuth client for Claude Web
-  if (config.OAUTH_CLIENT_ID) {
-    preRegisterClient(
-      config.OAUTH_CLIENT_ID,
-      ['https://claude.ai/api/mcp/auth_callback'],
-      'Claude Web',
-      config.OAUTH_CLIENT_SECRET,
-    );
-  }
 
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));

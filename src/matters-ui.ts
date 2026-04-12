@@ -165,6 +165,54 @@ function computeDashboardCost(byTool: ToolTokenStat[]): { usd: string; aud: stri
   return fmtCostUsdAud(total);
 }
 
+interface MonthlyBillingEntry {
+  month: string;
+  tool_name: string;
+  queries: number;
+  tokens: number;
+  cost_usd: number;
+  cost_aud: number;
+}
+
+function computeMonthlyBilling(rows: MatterHistoryRow[]): {
+  monthly: MonthlyBillingEntry[];
+  grandTotal: { queries: number; tokens: number; cost_usd: number; cost_aud: number };
+} {
+  // ordered month → tool map
+  const monthOrder: string[] = [];
+  const monthToolMap = new Map<string, Map<string, MonthlyBillingEntry>>();
+
+  for (const r of [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    const month = new Date(r.created_at).toLocaleDateString('en-AU', {
+      month: 'short', year: 'numeric', timeZone: 'Australia/Sydney',
+    });
+    if (!monthToolMap.has(month)) { monthToolMap.set(month, new Map()); monthOrder.push(month); }
+    const toolMap = monthToolMap.get(month)!;
+    if (!toolMap.has(r.tool_name)) {
+      toolMap.set(r.tool_name, { month, tool_name: r.tool_name, queries: 0, tokens: 0, cost_usd: 0, cost_aud: 0 });
+    }
+    const entry = toolMap.get(r.tool_name)!;
+    const tokens = r.api_tokens_used ?? 0;
+    const cost = (tokens / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25);
+    entry.queries++;
+    entry.tokens += tokens;
+    entry.cost_usd += cost;
+    entry.cost_aud += cost * AUD_PER_USD;
+  }
+
+  const monthly: MonthlyBillingEntry[] = [];
+  for (const month of monthOrder) {
+    for (const entry of monthToolMap.get(month)!.values()) monthly.push(entry);
+  }
+
+  const grandTotal = monthly.reduce(
+    (acc, r) => ({ queries: acc.queries + r.queries, tokens: acc.tokens + r.tokens, cost_usd: acc.cost_usd + r.cost_usd, cost_aud: acc.cost_aud + r.cost_aud }),
+    { queries: 0, tokens: 0, cost_usd: 0, cost_aud: 0 },
+  );
+
+  return { monthly, grandTotal };
+}
+
 function fmtTokens(n: number): string {
   if (!n || n <= 0) return '—';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -616,6 +664,16 @@ input:focus { border-color: var(--primary); }
 .sort-link { color: inherit; text-decoration: none; }
 .sort-link:hover { color: var(--accent); }
 .sort-link.active { color: var(--accent); font-weight: 700; }
+
+/* Export dropdown */
+details.export-dd { position: relative; display: inline-block; }
+details.export-dd summary { list-style: none; cursor: pointer; }
+details.export-dd summary::-webkit-details-marker { display: none; }
+details.export-dd[open] summary { background: var(--secondary); color: #fff; border-color: var(--secondary); }
+details.export-dd .dd-menu { position: absolute; top: calc(100% + 4px); left: 0; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 180px; z-index: 200; padding: .25rem 0; }
+details.export-dd .dd-menu a { display: block; padding: .45rem 1rem; font-size: .8125rem; color: #333; text-decoration: none; white-space: nowrap; }
+details.export-dd .dd-menu a:hover { background: var(--light); color: var(--primary); }
+details.export-dd .dd-menu .dd-sep { border: none; border-top: 1px solid var(--border); margin: .25rem 0; }
 `;
 
 export const LOGO_SRC = '';
@@ -679,6 +737,9 @@ ${nav}
     }catch(e){}
   }
 })();
+document.querySelectorAll('details.export-dd .dd-menu a').forEach(function(a){
+  a.addEventListener('click',function(){var d=a.closest('details');if(d)d.removeAttribute('open');});
+});
 </script>
 </body>
 </html>`;
@@ -1112,7 +1173,14 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     <h1>Matters ${adminBadge}</h1>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''}${search ? ` matching "${esc(search)}"` : ''}</p>
     <div class="actions no-print" style="margin-bottom:1rem">
-      <a href="/matters/export-all.csv" class="btn btn-secondary" download>Download Summary CSV</a>
+      <details class="export-dd no-print">
+        <summary class="btn btn-secondary">Summary Report ▾</summary>
+        <div class="dd-menu">
+          <a href="/matters/export-all.csv" download>Download CSV</a>
+          <hr class="dd-sep">
+          <a href="/matters/export-all.pdf" target="_blank">Print as PDF</a>
+        </div>
+      </details>
     </div>
     ${segTabs}
     ${statusTabs}
@@ -1167,23 +1235,291 @@ mattersRouter.get('/matters/export-all.csv', requireSession, async (req: Request
     : await listMattersForUser(user);
 
   const csvEsc = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const header = ['Matter Ref', 'Display Name', 'Status', 'First Activity', 'Last Activity', 'Queries', 'Researchers', 'Tools Used']
-    .map(csvEsc).join(',');
-  const dataRows = matters.map((m) => [
-    m.matter_ref,
-    m.display_name ?? '',
-    m.status,
-    fmtDateTime(m.first_activity),
-    fmtDateTime(m.last_activity),
-    String(m.query_count),
-    (m.users ?? []).join('; '),
-    (m.tools_used ?? []).map(toolLabel).join('; '),
-  ].map(csvEsc).join(','));
+
+  const baseHeaders = ['Matter Ref', 'Display Name', 'Status', 'First Activity', 'Last Activity', 'Queries', 'Researchers', 'Tools Used'];
+  const costHeaders = userIsAdmin ? ['Total Tokens', 'Est Cost USD', 'Est Cost AUD'] : [];
+  const header = [...baseHeaders, ...costHeaders].map(csvEsc).join(',');
+
+  const dataRows = await Promise.all(matters.map(async (m) => {
+    const base = [
+      m.matter_ref,
+      m.display_name ?? '',
+      m.status,
+      fmtDateTime(m.first_activity),
+      fmtDateTime(m.last_activity),
+      String(m.query_count),
+      (m.users ?? []).join('; '),
+      (m.tools_used ?? []).map(toolLabel).join('; '),
+    ];
+    if (userIsAdmin) {
+      const rows = await getMatterHistory(m.matter_ref, 5000);
+      const totalTokens = rows.reduce((s, r) => s + (r.api_tokens_used ?? 0), 0);
+      const costUsd = rows.reduce((s, r) => {
+        const tokens = r.api_tokens_used ?? 0;
+        return s + (tokens / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25);
+      }, 0);
+      base.push(String(totalTokens), costUsd.toFixed(6), (costUsd * AUD_PER_USD).toFixed(6));
+    }
+    return base.map(csvEsc).join(',');
+  }));
 
   const date = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="cp-legal-matters-${date}.csv"`);
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
+});
+
+// GET /matters/export-all.pdf — printable matter list (MUST be before /:ref)
+mattersRouter.get('/matters/export-all.pdf', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const matters: MatterSummaryRow[] = userIsAdmin
+    ? await listMatters()
+    : await listMattersForUser(user);
+
+  const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+  const rows = matters.map((m) => `<tr>
+    <td>${esc(m.matter_ref)}${m.display_name ? `<br><span style="font-size:.7rem;color:#555">${esc(m.display_name)}</span>` : ''}</td>
+    <td>${esc(m.status)}</td>
+    <td style="text-align:right">${m.query_count}</td>
+    <td>${esc(fmtDateTime(m.first_activity))}</td>
+    <td>${esc(fmtDateTime(m.last_activity))}</td>
+    <td style="font-size:.7rem">${(m.users ?? []).map((u) => esc(u)).join(', ') || '—'}</td>
+    <td style="font-size:.7rem">${(m.tools_used ?? []).map((t) => esc(toolLabel(t))).join(', ')}</td>
+  </tr>`).join('');
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+    <title>Matters Summary</title>
+    <style>
+      body { font-family: Georgia, serif; font-size: 9pt; margin: 1.5cm; color: #000; }
+      h1 { font-size: 13pt; margin-bottom: .2rem; }
+      .sub { font-size: 8pt; color: #555; margin-bottom: 1rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+      th { background: #eee; padding: .2rem .4rem; text-align: left; border-bottom: 2px solid #ccc; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .03em; }
+      td { padding: .2rem .4rem; border-bottom: 1px solid #eee; vertical-align: top; }
+      @page { size: A4 landscape; margin: 1.5cm; }
+    </style>
+  </head><body>
+    <h1>Matters Summary</h1>
+    <div class="sub">CP Legal · Printed ${esc(today)} · ${matters.length} matter${matters.length !== 1 ? 's' : ''}</div>
+    <table>
+      <thead><tr>
+        <th>Matter Ref</th><th>Status</th><th>Queries</th>
+        <th>First Activity</th><th>Last Activity</th>
+        <th>Researchers</th><th>Tools Used</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <script>window.onload = function(){ window.print(); };</script>
+  </body></html>`);
+});
+
+// GET /matters/:ref/export-billing.pdf
+mattersRouter.get('/matters/:ref/export-billing.pdf', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const rows = await getMatterHistory(ref, 1000);
+  if (rows.length === 0) { res.status(404).send('Not found'); return; }
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send('Forbidden'); return;
+  }
+
+  const matterInfo = await getMatter(ref).catch(() => null);
+  const displayLabel = matterInfo?.display_name ? `${esc(matterInfo.display_name)} <span style="font-size:.75rem;color:#888">(${esc(ref)})</span>` : esc(ref);
+  const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const tableRows = rows.map((r) => {
+    const tokens = r.api_tokens_used ?? 0;
+    const costUsd = (tokens / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25);
+    return `<tr>
+      <td>${esc(fmtDateTime(r.created_at))}</td>
+      <td>${esc(toolLabel(r.tool_name))}</td>
+      <td>${esc(r.user_id ?? '—')}</td>
+      <td style="white-space:pre-wrap;word-break:break-word;max-width:250px">${esc(r.query_text.slice(0, 150))}</td>
+      <td style="text-align:right">${tokens.toLocaleString('en-AU')}</td>
+      <td style="text-align:right">${costUsd > 0 ? '$' + costUsd.toFixed(6) : '—'}</td>
+      <td style="text-align:right">${costUsd > 0 ? '$' + (costUsd * AUD_PER_USD).toFixed(6) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const totalUsd = rows.reduce((s, r) => s + ((r.api_tokens_used ?? 0) / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25), 0);
+  const totalTokens = rows.reduce((s, r) => s + (r.api_tokens_used ?? 0), 0);
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+    <title>Billing Detail — ${esc(ref)}</title>
+    <style>
+      body { font-family: Georgia, serif; font-size: 9pt; margin: 1.5cm; color: #000; }
+      h1 { font-size: 13pt; margin-bottom: .2rem; }
+      .sub { font-size: 8pt; color: #555; margin-bottom: 1rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+      th { background: #eee; padding: .2rem .4rem; text-align: left; border: 1px solid #ccc; font-size: 7.5pt; }
+      td { padding: .2rem .4rem; border: 1px solid #ddd; vertical-align: top; }
+      tfoot td { font-weight: bold; background: #f5f5f0; border-top: 2px solid #999; }
+      @page { size: A4 landscape; margin: 1.5cm; }
+    </style>
+  </head><body>
+    <h1>Billing Detail — ${displayLabel}</h1>
+    <div class="sub">CP Legal · Printed ${esc(today)}</div>
+    <table>
+      <thead><tr>
+        <th>Date/Time</th><th>Tool</th><th>Researcher</th><th>Query (truncated)</th>
+        <th style="text-align:right">Tokens</th><th style="text-align:right">Cost USD</th><th style="text-align:right">Cost AUD</th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+      <tfoot><tr>
+        <td colspan="4"><strong>Total</strong></td>
+        <td style="text-align:right">${totalTokens.toLocaleString('en-AU')}</td>
+        <td style="text-align:right">$${totalUsd.toFixed(6)}</td>
+        <td style="text-align:right">$${(totalUsd * AUD_PER_USD).toFixed(6)}</td>
+      </tr></tfoot>
+    </table>
+    <script>window.onload = function(){ window.print(); };</script>
+  </body></html>`);
+});
+
+// GET /matters/:ref/export-billing-summary.csv
+mattersRouter.get('/matters/:ref/export-billing-summary.csv', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const rows = await getMatterHistory(ref, 5000);
+  if (rows.length === 0) { res.status(404).send('Not found'); return; }
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send('Forbidden'); return;
+  }
+
+  const matterInfo = await getMatter(ref).catch(() => null);
+  const { monthly, grandTotal } = computeMonthlyBilling(rows);
+
+  const csvEsc = (v: string | number | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = ['Matter Ref', 'Display Name', 'Month', 'Tool', 'Queries', 'Tokens', 'Cost USD', 'Cost AUD'].map(csvEsc).join(',');
+
+  const dataRows: string[] = [];
+  let lastMonth = '';
+  let monthRows: typeof monthly = [];
+
+  const flushMonth = () => {
+    if (!monthRows.length) return;
+    const mt = monthRows.reduce((a, r) => ({ queries: a.queries + r.queries, tokens: a.tokens + r.tokens, cost_usd: a.cost_usd + r.cost_usd, cost_aud: a.cost_aud + r.cost_aud }), { queries: 0, tokens: 0, cost_usd: 0, cost_aud: 0 });
+    for (const r of monthRows) {
+      dataRows.push([ref, matterInfo?.display_name ?? '', r.month, toolLabel(r.tool_name), String(r.queries), String(r.tokens), r.cost_usd.toFixed(6), r.cost_aud.toFixed(6)].map(csvEsc).join(','));
+    }
+    dataRows.push([ref, '', lastMonth + ' SUBTOTAL', '', String(mt.queries), String(mt.tokens), mt.cost_usd.toFixed(6), mt.cost_aud.toFixed(6)].map(csvEsc).join(','));
+    monthRows = [];
+  };
+
+  for (const r of monthly) {
+    if (r.month !== lastMonth) { flushMonth(); lastMonth = r.month; }
+    monthRows.push(r);
+  }
+  flushMonth();
+
+  dataRows.push([ref, '', 'GRAND TOTAL', '', String(grandTotal.queries), String(grandTotal.tokens), grandTotal.cost_usd.toFixed(6), grandTotal.cost_aud.toFixed(6)].map(csvEsc).join(','));
+
+  const date = new Date().toISOString().slice(0, 10);
+  const safeRef = ref.replace(/[^a-zA-Z0-9\-_]/g, '_');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="cp-legal-billing-summary-${safeRef}-${date}.csv"`);
+  res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
+});
+
+// GET /matters/:ref/export-billing-summary.pdf
+mattersRouter.get('/matters/:ref/export-billing-summary.pdf', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const rows = await getMatterHistory(ref, 5000);
+  if (rows.length === 0) { res.status(404).send('Not found'); return; }
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send('Forbidden'); return;
+  }
+
+  const matterInfo = await getMatter(ref).catch(() => null);
+  const displayLabel = matterInfo?.display_name ? `${esc(matterInfo.display_name)} (${esc(ref)})` : esc(ref);
+  const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+  const { monthly, grandTotal } = computeMonthlyBilling(rows);
+
+  // Group by month for rendering
+  const byMonth = new Map<string, typeof monthly>();
+  for (const r of monthly) {
+    if (!byMonth.has(r.month)) byMonth.set(r.month, []);
+    byMonth.get(r.month)!.push(r);
+  }
+
+  let tableHtml = '';
+  for (const [month, mRows] of byMonth) {
+    const mt = mRows.reduce((a, r) => ({ queries: a.queries + r.queries, tokens: a.tokens + r.tokens, cost_usd: a.cost_usd + r.cost_usd, cost_aud: a.cost_aud + r.cost_aud }), { queries: 0, tokens: 0, cost_usd: 0, cost_aud: 0 });
+    tableHtml += `<tr class="month-header"><td colspan="5"><strong>${esc(month)}</strong></td></tr>`;
+    for (const r of mRows) {
+      tableHtml += `<tr>
+        <td style="padding-left:1.5rem">${esc(toolLabel(r.tool_name))}</td>
+        <td style="text-align:right">${r.queries}</td>
+        <td style="text-align:right">${r.tokens.toLocaleString('en-AU')}</td>
+        <td style="text-align:right">$${r.cost_usd.toFixed(4)}</td>
+        <td style="text-align:right">$${r.cost_aud.toFixed(4)}</td>
+      </tr>`;
+    }
+    tableHtml += `<tr class="subtotal">
+      <td><em>${esc(month)} subtotal</em></td>
+      <td style="text-align:right">${mt.queries}</td>
+      <td style="text-align:right">${mt.tokens.toLocaleString('en-AU')}</td>
+      <td style="text-align:right">$${mt.cost_usd.toFixed(4)}</td>
+      <td style="text-align:right">$${mt.cost_aud.toFixed(4)}</td>
+    </tr>`;
+  }
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+    <title>Billing Summary — ${esc(ref)}</title>
+    <style>
+      body { font-family: Georgia, serif; font-size: 9.5pt; margin: 1.5cm; color: #000; }
+      h1 { font-size: 13pt; margin-bottom: .2rem; }
+      .sub { font-size: 8pt; color: #555; margin-bottom: 1rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+      th { background: #eee; padding: .3rem .5rem; text-align: left; border-bottom: 2px solid #ccc; }
+      td { padding: .25rem .5rem; border-bottom: 1px solid #eee; }
+      tr.month-header td { background: #f0ede8; font-size: 9.5pt; padding-top: .75rem; border-bottom: none; }
+      tr.subtotal td { background: #f7f5f2; border-top: 1px solid #bbb; border-bottom: 2px solid #bbb; font-style: italic; }
+      tfoot td { font-weight: bold; background: #f0ede8; border-top: 2px solid #888; padding: .4rem .5rem; font-size: 10pt; }
+      @page { size: A4 portrait; margin: 1.5cm; }
+    </style>
+  </head><body>
+    <h1>Billing Summary — ${esc(displayLabel)}</h1>
+    <div class="sub">CP Legal · Printed ${esc(today)}</div>
+    <table>
+      <thead><tr>
+        <th>Tool</th>
+        <th style="text-align:right">Queries</th>
+        <th style="text-align:right">Tokens</th>
+        <th style="text-align:right">Cost USD</th>
+        <th style="text-align:right">Cost AUD</th>
+      </tr></thead>
+      <tbody>${tableHtml}</tbody>
+      <tfoot><tr>
+        <td>Grand Total</td>
+        <td style="text-align:right">${grandTotal.queries}</td>
+        <td style="text-align:right">${grandTotal.tokens.toLocaleString('en-AU')}</td>
+        <td style="text-align:right">$${grandTotal.cost_usd.toFixed(4)}</td>
+        <td style="text-align:right">$${grandTotal.cost_aud.toFixed(4)}</td>
+      </tr></tfoot>
+    </table>
+    <script>window.onload = function(){ window.print(); };</script>
+  </body></html>`);
 });
 
 // GET /matters/:ref — matter detail
@@ -1269,7 +1605,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <td class="mono no-print-col" style="text-align:right">${fmtTokens(r.api_tokens_used ?? 0)}</td>
       <td style="text-align:right">${costCell}</td>
       <td style="text-align:center;overflow:visible">${accuracyBadge(r.accuracy_score)}</td>
-      <td class="no-print-col"><div class="top-results-stack">${topLinks || '—'}</div></td>
+      <td><div class="top-results-stack">${topLinks || '—'}</div></td>
     </tr>`;
   }).join('');
 
@@ -1358,9 +1694,30 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
     </div>
     <div class="actions no-print">
-      <a href="/matters/${encodeURIComponent(ref)}/export.csv" class="btn btn-secondary" download>Download CSV</a>
-      <a href="/matters/${encodeURIComponent(ref)}/export-billing.csv" class="btn btn-secondary" download>Download Billing CSV</a>
-      <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
+      <details class="export-dd">
+        <summary class="btn btn-secondary">Research History ▾</summary>
+        <div class="dd-menu">
+          <a href="/matters/${encodeURIComponent(ref)}/export.csv" download>Download CSV</a>
+          <hr class="dd-sep">
+          <a href="#" onclick="window.print();return false;">Print as PDF</a>
+        </div>
+      </details>
+      <details class="export-dd">
+        <summary class="btn btn-secondary">Billing Detail ▾</summary>
+        <div class="dd-menu">
+          <a href="/matters/${encodeURIComponent(ref)}/export-billing.csv" download>Download CSV</a>
+          <hr class="dd-sep">
+          <a href="/matters/${encodeURIComponent(ref)}/export-billing.pdf" target="_blank">Print as PDF</a>
+        </div>
+      </details>
+      <details class="export-dd">
+        <summary class="btn btn-secondary">Billing Summary ▾</summary>
+        <div class="dd-menu">
+          <a href="/matters/${encodeURIComponent(ref)}/export-billing-summary.csv" download>Download CSV</a>
+          <hr class="dd-sep">
+          <a href="/matters/${encodeURIComponent(ref)}/export-billing-summary.pdf" target="_blank">Print as PDF</a>
+        </div>
+      </details>
     </div>
     <form method="GET" action="/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
       <div class="filter-group">
@@ -1379,7 +1736,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
         <th style="text-align:center">Accuracy
           <span class="tip tip-below tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:#aaa;margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
         </th>
-        <th class="no-print-col">Top Results</th>
+        <th>Top Results</th>
       </tr></thead>
       <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>

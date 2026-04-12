@@ -12,17 +12,6 @@ const ConfigSchema = z.object({
   // Admin — comma-separated user identities permitted to use admin tools
   ADMIN_USERS: z.string().default('admin'),
 
-  // OAuth — public base URL of this service (no trailing slash)
-  OAUTH_ISSUER: z.string().url().default('https://api.example.com'),
-
-  // Static OAuth client ID for Claude Web (enter this same value in claude.ai settings).
-  // Leave unset if only using mcp-remote (which does dynamic registration automatically).
-  OAUTH_CLIENT_ID: z.string().optional(),
-
-  // Client secret for the static OAuth client. Claude Web sends this in POST /oauth/token.
-  // Must match the value entered in claude.ai remote MCP settings.
-  OAUTH_CLIENT_SECRET: z.string().optional(),
-
   // Isaacus — legal AI reranking
   ISAACUS_API_KEY: z.string().min(1, 'ISAACUS_API_KEY is required'),
 
