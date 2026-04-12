@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { logger } from './logger.js';
-import { hashToken } from './token-utils.js';
+import { encryptToken, hashToken } from './token-utils.js';
 
 const { Pool } = pg;
 
@@ -71,16 +71,18 @@ export async function initDb(): Promise<void> {
     ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS accuracy_score FLOAT4;
 
     CREATE TABLE IF NOT EXISTS users (
-      id          SERIAL PRIMARY KEY,
-      username    TEXT UNIQUE NOT NULL,
-      token_salt  TEXT NOT NULL,
-      token_hash  TEXT NOT NULL,
-      is_admin    BOOLEAN DEFAULT FALSE,
-      is_active   BOOLEAN DEFAULT TRUE,
-      created_at  TIMESTAMPTZ DEFAULT NOW(),
-      created_by  TEXT,
-      last_active TIMESTAMPTZ
+      id               SERIAL PRIMARY KEY,
+      username         TEXT UNIQUE NOT NULL,
+      token_salt       TEXT NOT NULL,
+      token_hash       TEXT NOT NULL,
+      token_encrypted  TEXT,
+      is_admin         BOOLEAN DEFAULT FALSE,
+      is_active        BOOLEAN DEFAULT TRUE,
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      created_by       TEXT,
+      last_active      TIMESTAMPTZ
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS token_encrypted TEXT;
 
     CREATE TABLE IF NOT EXISTS login_events (
       id          SERIAL PRIMARY KEY,
@@ -563,6 +565,7 @@ export interface UserRow {
   username: string;
   token_salt: string;
   token_hash: string;
+  token_encrypted: string | null;
   is_admin: boolean;
   is_active: boolean;
   created_at: string;
@@ -574,14 +577,15 @@ export async function createUser(params: {
   username: string;
   tokenSalt: string;
   tokenHash: string;
+  tokenEncrypted?: string;
   isAdmin: boolean;
   createdBy: string;
 }): Promise<void> {
   if (!pool) return;
   await pool.query(
-    `INSERT INTO users (username, token_salt, token_hash, is_admin, created_by)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [params.username, params.tokenSalt, params.tokenHash, params.isAdmin, params.createdBy],
+    `INSERT INTO users (username, token_salt, token_hash, token_encrypted, is_admin, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [params.username, params.tokenSalt, params.tokenHash, params.tokenEncrypted ?? null, params.isAdmin, params.createdBy],
   );
 }
 
@@ -612,11 +616,11 @@ export async function updateUserActive(username: string, isActive: boolean): Pro
   await pool.query('UPDATE users SET is_active = $2 WHERE username = $1', [username, isActive]);
 }
 
-export async function rotateUserToken(username: string, tokenSalt: string, tokenHash: string): Promise<void> {
+export async function rotateUserToken(username: string, tokenSalt: string, tokenHash: string, tokenEncrypted?: string): Promise<void> {
   if (!pool) return;
   await pool.query(
-    'UPDATE users SET token_salt = $2, token_hash = $3 WHERE username = $1',
-    [username, tokenSalt, tokenHash],
+    'UPDATE users SET token_salt = $2, token_hash = $3, token_encrypted = $4 WHERE username = $1',
+    [username, tokenSalt, tokenHash, tokenEncrypted ?? null],
   );
 }
 
@@ -642,6 +646,7 @@ export async function migrateUsersFromEnv(envTokens: string, adminUsers: string[
   const count = parseInt(existing.rows[0]?.count ?? '0', 10);
   if (count > 0) return; // already migrated
 
+  const encKey = process.env.ENCRYPTION_KEY?.trim() ?? null;
   const pairs = envTokens.split(',');
   for (const pair of pairs) {
     const colon = pair.indexOf(':');
@@ -650,13 +655,14 @@ export async function migrateUsersFromEnv(envTokens: string, adminUsers: string[
     const token = pair.slice(colon + 1).trim();
     if (!username || !token) continue;
     const { salt, hash } = hashToken(token);
+    const tokenEncrypted = encKey ? encryptToken(token, encKey) : null;
     const isAdmin = adminUsers.includes(username);
     try {
       await pool.query(
-        `INSERT INTO users (username, token_salt, token_hash, is_admin, created_by)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO users (username, token_salt, token_hash, token_encrypted, is_admin, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (username) DO NOTHING`,
-        [username, salt, hash, isAdmin, 'migration'],
+        [username, salt, hash, tokenEncrypted, isAdmin, 'migration'],
       );
     } catch (err) {
       logger.error({ err, username }, 'migrateUsersFromEnv: failed to insert user');

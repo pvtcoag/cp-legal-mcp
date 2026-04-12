@@ -25,7 +25,7 @@ import {
   consumeAuthCode,
 } from './oauth-store.js';
 import { upsertOAuthAuthorization, logLoginEvent, getUserByUsername } from './db.js';
-import { verifyToken } from './token-utils.js';
+import { decryptToken, verifyToken } from './token-utils.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -414,32 +414,40 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     return;
   }
 
-  // Access token = the user's pre-configured bearer token from MCP_AUTH_TOKENS
-  // OR the token stored in the DB users table.
+  // Resolve access token — prefer DB (encrypted plaintext), fall back to MCP_AUTH_TOKENS.
   let accessToken: string | undefined;
 
-  // Try DB first
   const dbUser = await getUserByUsername(entry.userId).catch(() => null);
   if (dbUser && dbUser.is_active) {
-    // We can't un-hash the token — instead, look it up from env var as legacy behaviour,
-    // or use a temporary token lookup. Since DB tokens are hashed, we fall back to env for
-    // the actual token value to return (the issued token must match what auth.ts will verify).
-    // For DB-migrated users, the original token was stored in MCP_AUTH_TOKENS during migration.
-    // After rotation, there's no way to recover the plaintext — they must re-authenticate via
-    // the web UI. For OAuth flow, we use the env var token if available; otherwise error.
-    const creds = credentials();
-    accessToken = creds.get(entry.userId);
-    if (!accessToken) {
-      logger.error({ user: entry.userId }, 'OAuth: user in DB but no env token for OAuth flow');
-      res.status(500).json({ error: 'server_error', error_description: 'Token rotation required before OAuth can be used' });
-      return;
+    if (dbUser.token_encrypted) {
+      const encKey = process.env.ENCRYPTION_KEY?.trim();
+      if (!encKey) {
+        logger.error({ user: entry.userId }, 'OAuth: token_encrypted present but ENCRYPTION_KEY not set');
+        res.status(500).json({ error: 'server_error', error_description: 'Server misconfiguration: ENCRYPTION_KEY required' });
+        return;
+      }
+      try {
+        accessToken = decryptToken(dbUser.token_encrypted, encKey);
+      } catch (err) {
+        logger.error({ user: entry.userId, err }, 'OAuth: failed to decrypt token');
+        res.status(500).json({ error: 'server_error', error_description: 'Token decryption failed' });
+        return;
+      }
+    } else {
+      // Legacy: token not yet encrypted — fall back to env var
+      accessToken = credentials().get(entry.userId);
+      if (!accessToken) {
+        logger.error({ user: entry.userId }, 'OAuth: no encrypted token and no env token — rotate token in admin panel');
+        res.status(500).json({ error: 'server_error', error_description: 'Token not available — rotate via admin panel' });
+        return;
+      }
     }
   } else {
-    const creds = credentials();
-    accessToken = creds.get(entry.userId);
+    // No DB user — legacy env-var-only path
+    accessToken = credentials().get(entry.userId);
     if (!accessToken) {
-      logger.error({ user: entry.userId }, 'OAuth: user no longer in MCP_AUTH_TOKENS at token exchange');
-      res.status(500).json({ error: 'server_error' });
+      logger.error({ user: entry.userId }, 'OAuth: user not found in DB or env');
+      res.status(400).json({ error: 'invalid_grant', error_description: 'User not found' });
       return;
     }
   }

@@ -62,7 +62,7 @@ import {
   parseCookies,
   verifySession,
 } from './matters-ui.js';
-import { generateToken, hashToken } from './token-utils.js';
+import { encryptToken, generateToken, hashToken } from './token-utils.js';
 import { refreshAuthCache } from './auth.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -469,12 +469,15 @@ adminRouter.post('/admin/users/new', requireCsrf, async (req: Request, res: Resp
 
   const token = generateToken();
   const { salt, hash } = hashToken(token);
+  const encKey = process.env.ENCRYPTION_KEY?.trim();
+  const tokenEncrypted = encKey ? encryptToken(token, encKey) : undefined;
   const isAdmin = is_admin === '1';
 
   await createUser({
     username: cleanUsername,
     tokenSalt: salt,
     tokenHash: hash,
+    tokenEncrypted,
     isAdmin,
     createdBy: session.user,
   });
@@ -638,7 +641,9 @@ adminRouter.post('/admin/users/:username/rotate-token', requireCsrf, async (req:
 
   const token = generateToken();
   const { salt, hash } = hashToken(token);
-  await rotateUserToken(username, salt, hash);
+  const encKey = process.env.ENCRYPTION_KEY?.trim();
+  const tokenEncrypted = encKey ? encryptToken(token, encKey) : undefined;
+  await rotateUserToken(username, salt, hash, tokenEncrypted);
   await refreshAuthCache();
 
   logLoginEvent({ username, eventType: 'token_rotated', meta: { rotated_by: session.user } }).catch(() => {/* ignore */});
