@@ -125,6 +125,8 @@ export async function initDb(): Promise<void> {
       created_at   TIMESTAMPTZ DEFAULT NOW(),
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE matters ADD COLUMN IF NOT EXISTS notes TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -192,11 +194,14 @@ export async function getMatterHistory(
   matter_ref: string,
   limit: number = 50,
   toolFilter?: string,
+  offset: number = 0,
 ): Promise<MatterHistoryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [matter_ref, limit];
   const toolClause = toolFilter ? ` AND tool_name = $3` : '';
   if (toolFilter) params.push(toolFilter);
+  const offsetIdx = toolFilter ? 4 : 3;
+  params.push(offset);
   const result = await pool.query<MatterHistoryRow>(
     `SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
             result_count, top_results, api_tokens_used,
@@ -204,10 +209,22 @@ export async function getMatterHistory(
      FROM matter_queries
      WHERE matter_ref = $1${toolClause}
      ORDER BY created_at DESC
-     LIMIT $2`,
+     LIMIT $2 OFFSET $${offsetIdx}`,
     params,
   );
   return result.rows;
+}
+
+export async function getMatterHistoryCount(matter_ref: string, toolFilter?: string): Promise<number> {
+  if (!pool) return 0;
+  const params: unknown[] = [matter_ref];
+  const toolClause = toolFilter ? ` AND tool_name = $2` : '';
+  if (toolFilter) params.push(toolFilter);
+  const result = await pool.query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM matter_queries WHERE matter_ref = $1${toolClause}`,
+    params,
+  );
+  return parseInt(result.rows[0]?.count ?? '0', 10);
 }
 
 // ── Admin queries (admin-only) ─────────────────────────────────────────────
@@ -602,6 +619,7 @@ export interface UserRow {
   created_at: string;
   created_by: string | null;
   last_active: string | null;
+  session_version: number;
 }
 
 export async function createUser(params: {
@@ -674,6 +692,7 @@ export interface MatterRow {
   matter_ref: string;
   display_name: string | null;
   status: string;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -684,16 +703,17 @@ export async function getMatter(ref: string): Promise<MatterRow | null> {
   return r.rows[0] ?? null;
 }
 
-export async function upsertMatter(ref: string, updates: { displayName?: string; status?: string }): Promise<void> {
+export async function upsertMatter(ref: string, updates: { displayName?: string; status?: string; notes?: string }): Promise<void> {
   if (!pool) return;
   await pool.query(`
-    INSERT INTO matters (matter_ref, display_name, status)
-    VALUES ($1, $2, $3)
+    INSERT INTO matters (matter_ref, display_name, status, notes)
+    VALUES ($1, $2, $3, $4)
     ON CONFLICT (matter_ref) DO UPDATE SET
       display_name = COALESCE(EXCLUDED.display_name, matters.display_name),
       status       = COALESCE(EXCLUDED.status, matters.status),
+      notes        = CASE WHEN $4 IS NOT NULL THEN $4 ELSE matters.notes END,
       updated_at   = NOW()
-  `, [ref, updates.displayName ?? null, updates.status ?? null]);
+  `, [ref, updates.displayName ?? null, updates.status ?? null, updates.notes !== undefined ? (updates.notes || null) : null]);
 }
 
 export async function isMatterClosed(ref: string): Promise<boolean> {
@@ -1095,4 +1115,80 @@ export async function getAdminDashboardStatsV2(): Promise<AdminDashboardStatsV2>
     `SELECT COUNT(DISTINCT matter_ref)::int AS unique_matters_count FROM matter_queries WHERE matter_ref IS NOT NULL`,
   );
   return { ...base, unique_matters_count: r.rows[0]?.unique_matters_count ?? 0 };
+}
+
+// ── Daily query volume chart ──────────────────────────────────────────────────
+
+export interface DailyQueryCount {
+  day: string; // ISO date string
+  count: number;
+}
+
+export async function getDailyQueryVolume(userId?: string, days = 14): Promise<DailyQueryCount[]> {
+  if (!pool) return [];
+  const userClause = userId ? 'AND user_id = $2' : '';
+  const params: unknown[] = [days];
+  if (userId) params.push(userId);
+  const r = await pool.query<DailyQueryCount>(`
+    SELECT DATE_TRUNC('day', created_at)::date::text AS day,
+           COUNT(*)::int AS count
+    FROM matter_queries
+    WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL ${userClause}
+    GROUP BY DATE_TRUNC('day', created_at)
+    ORDER BY day ASC
+  `, params);
+  return r.rows;
+}
+
+// ── Global search ─────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  matter_ref: string;
+  display_name: string | null;
+  tool_name: string;
+  query_text: string;
+  created_at: string;
+  user_id: string | null;
+}
+
+export async function searchQueries(query: string, userId?: string, limit = 50): Promise<SearchResult[]> {
+  if (!pool) return [];
+  const userClause = userId ? 'AND user_id = $3' : '';
+  const params: unknown[] = [`%${query}%`, limit];
+  if (userId) params.push(userId);
+  const r = await pool.query<SearchResult>(`
+    SELECT mq.matter_ref, m.display_name, mq.tool_name, mq.query_text, mq.created_at, mq.user_id
+    FROM matter_queries mq
+    LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
+    WHERE (mq.query_text ILIKE $1 OR mq.matter_ref ILIKE $1) ${userClause}
+    ORDER BY mq.created_at DESC
+    LIMIT $2
+  `, params);
+  return r.rows;
+}
+
+// ── Query volume by user today ────────────────────────────────────────────────
+
+export interface UserQueryToday {
+  user_id: string;
+  count: number;
+}
+
+export async function getQueryVolumeByUserToday(): Promise<UserQueryToday[]> {
+  if (!pool) return [];
+  const r = await pool.query<UserQueryToday>(`
+    SELECT COALESCE(user_id, 'unattributed') AS user_id, COUNT(*)::int AS count
+    FROM matter_queries
+    WHERE created_at >= CURRENT_DATE
+    GROUP BY user_id
+    ORDER BY count DESC
+  `);
+  return r.rows;
+}
+
+// ── Session versioning ────────────────────────────────────────────────────────
+
+export async function incrementSessionVersion(username: string): Promise<void> {
+  if (!pool) return;
+  await pool.query('UPDATE users SET session_version = session_version + 1 WHERE username = $1', [username]);
 }

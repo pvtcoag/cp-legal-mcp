@@ -19,6 +19,7 @@ import {
   listMatters,
   listMattersForUser,
   getMatterHistory,
+  getMatterHistoryCount,
   getDashboardStats,
   getToolUsageStats,
   getUserStats,
@@ -32,6 +33,9 @@ import {
   logLoginEvent,
   getMatter,
   upsertMatter,
+  getDailyQueryVolume,
+  searchQueries,
+  listUsers,
   type MatterSummaryRow,
   type MatterHistoryRow,
   type DashboardStats,
@@ -40,6 +44,9 @@ import {
   type PopularCaseRow,
   type ErrorStatRow,
   type ToolTokenStat,
+  type DailyQueryCount,
+  type SearchResult,
+  type UserRow,
 } from './db.js';
 import { verifyToken } from './token-utils.js';
 import { config } from './config.js';
@@ -183,15 +190,23 @@ export function sessionSecret(): string {
   return process.env['SESSION_SECRET'] ?? process.env['MCP_AUTH_TOKENS'] ?? 'dev-fallback';
 }
 
-/** Session payload: `username:isAdmin:exp:sig` where isAdmin is '1' or '0'. */
-export function signSession(user: string, isAdminUser: boolean): string {
+/** Session payload: `username:isAdmin:sessionVersion:exp:sig` where isAdmin is '1' or '0'. */
+export function signSession(user: string, isAdminUser: boolean, sessionVersion = 0): string {
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = `${user}:${isAdminUser ? '1' : '0'}:${exp}`;
+  const payload = `${user}:${isAdminUser ? '1' : '0'}:${sessionVersion}:${exp}`;
   const sig = createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
   return `${payload}:${sig}`;
 }
 
-export interface SessionData { user: string; isAdmin: boolean; }
+export interface SessionData { user: string; isAdmin: boolean; sessionVersion: number; }
+
+// ── Session version cache ─────────────────────────────────────────────────────
+
+let sessionVersionCache: Map<string, number> = new Map();
+
+export function buildSessionVersionCache(users: UserRow[]): void {
+  sessionVersionCache = new Map(users.map((u) => [u.username, u.session_version ?? 0]));
+}
 
 export function verifySession(value: string): SessionData | null {
   const lastColon = value.lastIndexOf(':');
@@ -199,16 +214,35 @@ export function verifySession(value: string): SessionData | null {
   const payload = value.slice(0, lastColon);
   const sig = value.slice(lastColon + 1);
 
-  // Payload format: username:isAdmin:exp
+  // Payload format: username:isAdmin:sessionVersion:exp
+  // Also support legacy 3-part: username:isAdmin:exp
   const parts = payload.split(':');
   if (parts.length < 3) return null;
-  const expStr = parts[parts.length - 1]!;
-  const adminFlag = parts[parts.length - 2]!;
-  const user = parts.slice(0, parts.length - 2).join(':'); // username may theoretically contain colons
-  const exp = parseInt(expStr, 10);
+
+  let user: string;
+  let adminFlag: string;
+  let sessionVersion: number;
+  let exp: number;
+
+  if (parts.length >= 4) {
+    // New format: username:isAdmin:sessionVersion:exp
+    // (username itself may contain colons, so work from the right)
+    const expStr = parts[parts.length - 1]!;
+    const svStr = parts[parts.length - 2]!;
+    adminFlag = parts[parts.length - 3]!;
+    user = parts.slice(0, parts.length - 3).join(':');
+    exp = parseInt(expStr, 10);
+    sessionVersion = parseInt(svStr, 10);
+  } else {
+    // Legacy 3-part: username:isAdmin:exp
+    const expStr = parts[parts.length - 1]!;
+    adminFlag = parts[parts.length - 2]!;
+    user = parts.slice(0, parts.length - 2).join(':');
+    exp = parseInt(expStr, 10);
+    sessionVersion = 0;
+  }
 
   if (!user || isNaN(exp) || Date.now() > exp) return null;
-  // adminFlag may be '0', '1', or missing (legacy sessions without isAdmin)
   const isAdminUser = adminFlag === '1';
 
   const expected = createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
@@ -216,8 +250,14 @@ export function verifySession(value: string): SessionData | null {
     const a = Buffer.from(sig, 'base64url');
     const b = Buffer.from(expected, 'base64url');
     if (a.length !== b.length) return null;
-    return timingSafeEqual(a, b) ? { user, isAdmin: isAdminUser } : null;
+    if (!timingSafeEqual(a, b)) return null;
   } catch { return null; }
+
+  // Check session version against cache (invalidates old sessions after force-logout)
+  const cachedVersion = sessionVersionCache.get(user);
+  if (cachedVersion !== undefined && sessionVersion < cachedVersion) return null;
+
+  return { user, isAdmin: isAdminUser, sessionVersion };
 }
 
 export function parseCookies(req: Request): Record<string, string> {
@@ -244,8 +284,9 @@ function getSessionIsAdmin(req: Request): boolean {
 }
 
 function setSessionCookie(res: Response, user: string, isAdminUser: boolean): void {
+  const sv = sessionVersionCache.get(user) ?? 0;
   res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser))}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${8 * 3600}`);
+    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser, sv))}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${8 * 3600}`);
 }
 
 function clearSessionCookie(res: Response): void {
@@ -505,6 +546,13 @@ select.filter-input { cursor: pointer; min-width: 120px; }
 .tool-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
 .tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; min-width: 200px; text-align: left; flex-shrink: 0; }
 
+/* Daily query volume chart */
+.vol-chart { display: flex; align-items: flex-end; gap: 4px; height: 80px; padding-top: 8px; }
+.vol-col { display: flex; flex-direction: column; align-items: center; flex: 1; height: 100%; justify-content: flex-end; }
+.vol-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; transition: background .15s; }
+.vol-col:hover .vol-bar { background: var(--primary); }
+.vol-label { font-size: .5625rem; color: #aaa; margin-top: 3px; white-space: nowrap; }
+
 /* Researcher cards */
 .researcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
 .researcher-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .875rem 1rem; }
@@ -592,6 +640,9 @@ function page(title: string, body: string, user?: string, activePath?: string, a
           <a href="/matters/dashboard" class="nav-link${activePath === '/matters/dashboard' ? ' active' : ''}">Dashboard</a>
           ${isAdminUser ? `<a href="/admin" class="nav-link${activePath?.startsWith('/admin') ? ' active' : ''}">Admin</a>` : ''}
         </div>
+        <form method="GET" action="/matters/search" style="display:flex;gap:.375rem;align-items:center" class="no-print">
+          <input type="text" name="q" placeholder="Search…" style="padding:.25rem .625rem;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:rgba(255,255,255,.1);color:#fff;font-size:.8125rem;width:160px;outline:none" onfocus="this.style.width='220px'" onblur="this.style.width='160px'">
+        </form>
         <span class="nav-user">${esc(user)}</span>
         <a href="/matters/logout" class="nav-logout no-print">Sign out</a>
       </nav>`
@@ -700,6 +751,23 @@ function renderErrorStats(stats: ErrorStatRow[]): string {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
+  </div>`;
+}
+
+function renderQueryVolumeChart(data: DailyQueryCount[]): string {
+  if (data.length === 0) return '';
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const bars = data.map((d) => {
+    const pct = Math.round((d.count / max) * 100);
+    const label = new Date(d.day).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
+    return `<div class="vol-col" title="${esc(label)}: ${d.count} quer${d.count === 1 ? 'y' : 'ies'}">
+      <div class="vol-bar" style="height:${pct}%"></div>
+      <div class="vol-label">${esc(label.split(' ')[0]!)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="section-block no-print">
+    <h2>Query Volume — Last ${data.length} Days</h2>
+    <div class="vol-chart">${bars}</div>
   </div>`;
 }
 
@@ -889,7 +957,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   const scopedUserId = userIsAdmin ? undefined : user;
   const adminBadge = userIsAdmin ? '<span class="admin-badge">All researchers</span>' : '';
 
-  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy] = await Promise.all([
+  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy, queryVolume] = await Promise.all([
     getDashboardStats(scopedUserId),
     getToolUsageStats(scopedUserId),
     userIsAdmin ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
@@ -898,6 +966,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     getErrorStats(scopedUserId),
     getDashboardCostByTool(scopedUserId),
     getAggregateAccuracy(scopedUserId),
+    getDailyQueryVolume(scopedUserId, 14),
   ]);
 
   const recentHtml = recentActivity.length > 0 ? `
@@ -931,12 +1000,18 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney',
   });
 
+  const errorAlertBanner = userIsAdmin && errorStats.some((e) => e.error_rate_pct > 10)
+    ? `<div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:#713f12">⚠️ Some tools have elevated error rates. <a href="/admin" style="color:#713f12;font-weight:600">View in Admin →</a></div>`
+    : '';
+
   res.send(page('Dashboard', `
+    ${errorAlertBanner}
     <h1>Dashboard ${adminBadge}</h1>
     <p class="subtitle">Aggregated research analytics${userIsAdmin ? ' across all matters and researchers' : ' for your matters'}
       <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time></span>
     </p>
     ${renderDashboardCards(stats, costByTool, avgAccuracy)}
+    ${renderQueryVolumeChart(queryVolume)}
     ${renderToolChart(toolStats)}
     ${userIsAdmin ? renderResearcherCards(userStats) : ''}
     ${userIsAdmin ? renderPopularCases(popularCases) : ''}
@@ -1041,12 +1116,48 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
   `, user, '/matters', 300, userIsAdmin));
 });
 
+// GET /matters/search — global query search (MUST be before /matters/:ref)
+mattersRouter.get('/matters/search', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+  const q = typeof req.query['q'] === 'string' ? req.query['q'].trim() : '';
+  if (!q) { res.redirect('/matters'); return; }
+
+  const results = await searchQueries(q, userIsAdmin ? undefined : user, 50);
+
+  const rows = results.map((r: SearchResult) => `<tr>
+    <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.display_name ?? r.matter_ref)}</a></td>
+    <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
+    <td class="date-small">${tsDateTime(r.created_at)}</td>
+    ${userIsAdmin ? `<td class="users-cell">${esc(r.user_id ?? '—')}</td>` : ''}
+    <td style="max-width:400px;white-space:pre-wrap;word-break:break-word;color:#555">${esc(r.query_text.slice(0, 300))}</td>
+  </tr>`).join('');
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(page('Search Results', `
+    <form method="GET" action="/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
+      <input type="text" name="q" value="${esc(q)}" style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.9375rem;flex:1;max-width:400px">
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    <h1>Search: &ldquo;${esc(q)}&rdquo;</h1>
+    <p class="subtitle">${results.length} result${results.length !== 1 ? 's' : ''}</p>
+    ${results.length === 0
+      ? '<div class="empty">No results found.</div>'
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>Matter</th><th>Tool</th><th>Date</th>${userIsAdmin ? '<th>Researcher</th>' : ''}<th>Query</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>`}
+  `, user, '/matters', undefined, userIsAdmin));
+});
+
 // GET /matters/:ref — matter detail
 mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const toolFilter = typeof req.query['tool'] === 'string' ? req.query['tool'].trim() : undefined;
+  const PAGE_SIZE = 50;
+  const page_num = Math.max(1, parseInt(typeof req.query['page'] === 'string' ? req.query['page'] : '1', 10) || 1);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
@@ -1054,23 +1165,25 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     return;
   }
 
-  const [rows, matter] = await Promise.all([
-    getMatterHistory(ref, 1000, toolFilter),
+  // Fetch up to 500 rows for stats, plus paginated rows for display
+  const [allStatsRows, matter, totalCount] = await Promise.all([
+    getMatterHistory(ref, 500, toolFilter),
     getMatter(ref).catch(() => null),
+    getMatterHistoryCount(ref, toolFilter),
   ]);
 
-  if (rows.length === 0 && !toolFilter) {
+  if (allStatsRows.length === 0 && !toolFilter) {
     res.status(404).send(page('Not Found', '<div class="empty">Matter not found or no queries on record.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
-  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+  if (!userIsAdmin && !allStatsRows.some((r) => r.user_id === user || r.user_id === null)) {
     res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
-  // For access check when tool filter returns 0, fetch unfiltered
-  const allRows = toolFilter && rows.length === 0 ? await getMatterHistory(ref, 1000) : rows;
+  // For access check when tool filter returns 0, fetch unfiltered stats rows
+  const allRows = toolFilter && allStatsRows.length === 0 ? await getMatterHistory(ref, 500) : allStatsRows;
   if (allRows.length === 0) {
     res.status(404).send(page('Not Found', '<div class="empty">Matter not found.</div>', user, undefined, undefined, userIsAdmin));
     return;
@@ -1080,21 +1193,25 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     return;
   }
 
+  // Paginated rows for table display
+  const offset = (page_num - 1) * PAGE_SIZE;
+  const displayRows = await getMatterHistory(ref, PAGE_SIZE, toolFilter, offset);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   const isClosed = matter?.status === 'closed';
   const displayName = matter?.display_name ?? null;
 
-  const displayRows = rows.length > 0 ? rows : allRows;
   const firstRow = allRows[allRows.length - 1]!;
   const lastRow = allRows[0]!;
   const researchers = [...new Set(allRows.map((r) => r.user_id).filter(Boolean))].join(', ') || '—';
-  const totalResults = displayRows.reduce((s, r) => s + (r.result_count ?? 0), 0);
-  const totalTokens = displayRows.reduce((s, r) => s + (r.api_tokens_used ?? 0), 0);
+  const totalResults = allRows.reduce((s, r) => s + (r.result_count ?? 0), 0);
+  const totalTokens = allRows.reduce((s, r) => s + (r.api_tokens_used ?? 0), 0);
   const activeDays = new Set(allRows.map((r) => new Date(r.created_at).toISOString().slice(0, 10))).size;
   const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
 
   // Tool filter dropdown — use allRows distinct tools
   const distinctTools = [...new Set(allRows.map((r) => r.tool_name))].sort();
-  const toolOptions = `<option value="">All Tools (${allRows.length})</option>` +
+  const toolOptions = `<option value="">All Tools (${totalCount})</option>` +
     distinctTools.map((t) => {
       const cnt = allRows.filter((r) => r.tool_name === t).length;
       return `<option value="${esc(t)}"${toolFilter === t ? ' selected' : ''}>${esc(toolLabel(t))} (${cnt})</option>`;
@@ -1120,6 +1237,12 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </tr>`;
   }).join('');
 
+  const paginationHtml = totalPages > 1 ? `<div class="pagination no-print" style="display:flex;gap:.5rem;align-items:center;margin-top:1rem">
+    ${page_num > 1 ? `<a href="?page=${page_num - 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">← Prev</a>` : ''}
+    <span style="font-size:.8125rem;color:#888">Page ${page_num} of ${totalPages}</span>
+    ${page_num < totalPages ? `<a href="?page=${page_num + 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">Next →</a>` : ''}
+  </div>` : '';
+
   const closedBanner = isClosed
     ? `<div style="background:#fee2e2;border:1px solid #fca5a5;padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem">This matter is <strong>closed</strong>. New queries with this matter reference will be appended with a new identifier.</div>`
     : '';
@@ -1133,6 +1256,21 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </form>
   </details>`;
 
+  const notesForm = `<details class="no-print" style="margin-bottom:.75rem">
+    <summary style="font-size:.8125rem;color:#555;cursor:pointer">Matter notes…</summary>
+    <form method="POST" action="/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
+      <textarea name="notes" rows="4" maxlength="2000" style="width:100%;max-width:600px;padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.875rem;font-family:inherit;resize:vertical">${esc(matter?.notes ?? '')}</textarea>
+      <div style="margin-top:.375rem">
+        <button type="submit" class="btn btn-secondary" style="padding:.375rem .75rem;font-size:.8125rem">Save Notes</button>
+      </div>
+    </form>
+    ${matter?.notes ? `<div style="margin-top:.5rem;padding:.625rem .75rem;background:#fafaf8;border:1px solid var(--border);border-radius:5px;font-size:.8125rem;white-space:pre-wrap;color:#333">${esc(matter.notes)}</div>` : ''}
+  </details>`;
+
+  const notesPrint = matter?.notes
+    ? `<div style="margin-top:.5rem;padding:.5rem 0;font-size:8pt;white-space:pre-wrap;color:#333"><strong>Notes:</strong> ${esc(matter.notes)}</div>`
+    : '';
+
   const closeButton = userIsAdmin
     ? `<form method="POST" action="/matters/${encodeURIComponent(ref)}/set-status" class="no-print" style="display:inline">
         <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
@@ -1145,19 +1283,21 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     <div class="print-header">
       <div class="print-header-firm">CP Legal</div>
       <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
+      ${notesPrint}
     </div>
     ${closedBanner}
     ${displayName
       ? `<h1>${esc(displayName)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1><p style="font-size:.8125rem;color:#888;font-family:ui-monospace,monospace;margin-bottom:.375rem">${esc(ref)}</p>`
       : `<h1>${esc(ref)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1>`}
     ${renameForm}
+    ${notesForm}
     ${closeButton}
     <p class="subtitle" style="margin-top:.5rem">${tsDate(firstRow.created_at)} to ${tsDate(lastRow.created_at)}</p>
     <div class="summary-grid">
       <div class="card">
         <div class="card-label">Total Queries</div>
-        <div class="card-value">${allRows.length}</div>
-        ${toolFilter ? `<div class="card-sub">${displayRows.length} shown (filtered)</div>` : ''}
+        <div class="card-value">${totalCount}</div>
+        ${toolFilter ? `<div class="card-sub">${totalCount} shown (filtered)</div>` : ''}
       </div>
       <div class="card">
         <div class="card-label">Results Retrieved</div>
@@ -1174,7 +1314,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       <div class="card">
         <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
-        ${(() => { const c = computeMatterCost(displayRows); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
+        ${(() => { const c = computeMatterCost(allRows); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
       </div>
       <div class="card">
         <div class="card-label">Researchers</div>
@@ -1183,6 +1323,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </div>
     <div class="actions no-print">
       <a href="/matters/${encodeURIComponent(ref)}/export.csv" class="btn btn-secondary" download>Download CSV</a>
+      <a href="/matters/${encodeURIComponent(ref)}/export-billing.csv" class="btn btn-secondary" download>Download Billing CSV</a>
       <button class="btn btn-secondary" onclick="window.print()">Print / Save PDF</button>
     </div>
     <form method="GET" action="/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
@@ -1219,6 +1360,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>
     </div>
+    ${paginationHtml}
   `, user, '/matters', undefined, userIsAdmin));
 });
 
@@ -1264,6 +1406,58 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="cp-legal-${safeRef}-${date}.csv"`);
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
+});
+
+// GET /matters/:ref/export-billing.csv
+mattersRouter.get('/matters/:ref/export-billing.csv', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
+
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const rows = await getMatterHistory(ref, 1000);
+  if (rows.length === 0) { res.status(404).send('Not found'); return; }
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send('Forbidden'); return;
+  }
+
+  const csvEsc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const matterInfo = await getMatter(ref).catch(() => null);
+
+  const header = ['Matter Ref', 'Display Name', 'Date', 'Tool', 'Query Summary', 'Tokens', 'Cost USD', 'Cost AUD'].map(csvEsc).join(',');
+
+  const dataRows = rows.map((r) => {
+    const tokens = r.api_tokens_used ?? 0;
+    const costUsd = (tokens / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25);
+    return [ref, matterInfo?.display_name ?? '', fmtDateTime(r.created_at), toolLabel(r.tool_name),
+      r.query_text.slice(0, 100), String(tokens), costUsd.toFixed(6), (costUsd * AUD_PER_USD).toFixed(6),
+    ].map(csvEsc).join(',');
+  });
+
+  const totalUsd = rows.reduce((s, r) => {
+    const tokens = r.api_tokens_used ?? 0;
+    return s + (tokens / 1_000_000) * (TOOL_COST_RATES[r.tool_name] ?? 1.25);
+  }, 0);
+  const summaryRow = [ref, '', 'TOTAL', '', '', '', totalUsd.toFixed(6), (totalUsd * AUD_PER_USD).toFixed(6)].map(csvEsc).join(',');
+
+  const safeRef = ref.replace(/[^a-zA-Z0-9\-_]/g, '_');
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="cp-legal-billing-${safeRef}-${date}.csv"`);
+  res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
+});
+
+// POST /matters/:ref/notes
+mattersRouter.post('/matters/:ref/notes', requireSession, async (req: Request, res: Response) => {
+  const user = getSessionUser(req)!;
+  const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
+  const rows = await getMatterHistory(ref, 1);
+  if (!rows.length) { res.status(404).send('Not found'); return; }
+  if (!getSessionIsAdmin(req) && !rows.some((r) => r.user_id === user)) { res.status(403).send('Forbidden'); return; }
+  const { notes } = req.body as Record<string, string>;
+  await upsertMatter(ref, { notes: (notes ?? '').trim().slice(0, 2000) || undefined });
+  res.redirect(`/matters/${encodeURIComponent(ref)}`);
 });
 
 // POST /matters/:ref/set-status

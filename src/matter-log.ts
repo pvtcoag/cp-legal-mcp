@@ -3,6 +3,14 @@ import { config } from './config.js';
 import { getUser } from './request-context.js';
 import { logger } from './logger.js';
 
+/**
+ * Appends a standard support note to tool error messages returned to Claude.
+ * Wraps any error string to include the admin contact URL.
+ */
+export function fmtToolError(msg: string): string {
+  return `${msg}\n\nIf this error persists, contact your administrator.`;
+}
+
 // matter_ref validation: alphanumeric, hyphens, underscores, slashes, spaces. Max 100 chars.
 const MATTER_REF_RE = /^[a-zA-Z0-9\-_\/ ]{1,100}$/;
 

@@ -3,12 +3,12 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { authMiddleware, buildAuthCache } from './auth.js';
-import { initDb, migrateUsersFromEnv } from './db.js';
+import { initDb, migrateUsersFromEnv, listUsers } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
 import { preRegisterClient } from './oauth-store.js';
-import { mattersRouter } from './matters-ui.js';
+import { mattersRouter, buildSessionVersionCache } from './matters-ui.js';
 import { adminRouter } from './admin-ui.js';
 
 const app = express();
@@ -130,6 +130,10 @@ const server = app.listen(config.PORT, async () => {
 
   // Build in-memory auth token cache from DB
   await buildAuthCache().catch((err) => logger.error({ err }, 'Auth cache build failed'));
+
+  // Build session version cache (for force-logout invalidation)
+  const usersForCache = await listUsers().catch(() => []);
+  buildSessionVersionCache(usersForCache);
 
 });
 

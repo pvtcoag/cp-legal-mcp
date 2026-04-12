@@ -52,11 +52,16 @@ import {
   getRecentErrors,
   getRecentActivity,
   listAdminMatters,
+  getDailyQueryVolume,
+  getQueryVolumeByUserToday,
+  incrementSessionVersion,
   type UserRow,
   type LoginEventRow,
   type OAuthAuthRow,
   type AppConfigRow,
   type AdminMatterRow,
+  type DailyQueryCount,
+  type UserQueryToday,
 } from './db.js';
 import {
   COOKIE,
@@ -64,6 +69,7 @@ import {
   LOGO_SRC,
   parseCookies,
   verifySession,
+  buildSessionVersionCache,
 } from './matters-ui.js';
 import { decryptToken, encryptToken, generateToken, hashToken } from './token-utils.js';
 import { refreshAuthCache } from './auth.js';
@@ -314,6 +320,26 @@ function fmtCost(usd: number): { usd: string; aud: string } {
   return { usd: fmt(usd), aud: usd > 0 ? fmt(usd * AUD_PER_USD) : '—' };
 }
 
+// ── Volume chart ─────────────────────────────────────────────────────────────
+
+function renderAdminVolumeChart(data: DailyQueryCount[]): string {
+  if (data.length === 0) return '';
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const bars = data.map((d) => {
+    const pct = Math.round((d.count / max) * 100);
+    const label = new Date(d.day).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
+    const dayNum = label.split(' ')[0]!;
+    return `<div class="vol-col" title="${label}: ${d.count} quer${d.count === 1 ? 'y' : 'ies'}">
+      <div class="vol-bar" style="height:${pct}%;background:var(--accent);width:100%;border-radius:2px 2px 0 0;min-height:2px"></div>
+      <div style="font-size:.5625rem;color:#aaa;margin-top:3px;white-space:nowrap">${dayNum}</div>
+    </div>`;
+  }).join('');
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#555;margin-bottom:.75rem">Query Volume — Last ${data.length} Days</div>
+    <div style="display:flex;align-items:flex-end;gap:4px;height:80px;padding-top:8px">${bars}</div>
+  </div>`;
+}
+
 // ── Reusable table renderers ──────────────────────────────────────────────────
 
 function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showUsername = false): string {
@@ -379,10 +405,12 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
     return;
   }
 
-  const [stats, recentErrors, recentLogins] = await Promise.all([
+  const [stats, recentErrors, recentLogins, queryVolume, userToday] = await Promise.all([
     getAdminDashboardStatsV2(),
     getRecentErrors(10),
     getRecentLoginEvents(10),
+    getDailyQueryVolume(undefined, 14),
+    getQueryVolumeByUserToday(),
   ]);
 
   // Railway service health checks (fire concurrently, cap at 3s)
@@ -418,7 +446,27 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
       </table></div>`
     : '<p style="color:#888;font-size:.875rem;padding:.5rem 0">No errors in the last 24 hours.</p>';
 
+  const errorAlertBanner = stats.error_count_24h >= 3
+    ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:flex-start;gap:.75rem">
+        <span style="font-size:1.25rem">⚠️</span>
+        <div>
+          <div style="font-weight:600;color:#991b1b;margin-bottom:.25rem">${stats.error_count_24h} tool errors in the last 24 hours</div>
+          <div style="font-size:.875rem;color:#7f1d1d">Review the Recent Errors section below. Users may be experiencing failed tool calls.</div>
+        </div>
+      </div>`
+    : '';
+
+  const userTodayHtml = `<div class="section-title">Today's Activity by User</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      ${userToday.length === 0
+        ? '<p style="color:#888;font-size:.875rem">No queries today.</p>'
+        : `<div class="table-wrap"><table><thead><tr><th>User</th><th style="text-align:right">Queries Today</th></tr></thead><tbody>
+            ${(userToday as UserQueryToday[]).map((u) => `<tr><td>${esc(u.user_id)}</td><td style="text-align:right;font-weight:600">${u.count}</td></tr>`).join('')}
+           </tbody></table></div>`}
+    </div>`;
+
   res.send(page('Admin Dashboard', `
+    ${errorAlertBanner}
     <h1>Admin Dashboard</h1>
     <p class="subtitle">System overview and health</p>
 
@@ -478,6 +526,9 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
         <div class="card-value sm">${config.ISAACUS_API_KEY ? '<span class="status-ok">✓ Configured</span>' : '<span class="status-err">✗ Missing</span>'}</div>
       </div>
     </div>
+
+    ${renderAdminVolumeChart(queryVolume)}
+    ${userTodayHtml}
 
     <div class="section-title">Recent Errors</div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
@@ -710,6 +761,14 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
       </form>
     </div>
 
+    <div class="section-title">Sessions</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">Active sessions are cookie-based. Use Force Logout to invalidate all current sessions for this user.</p>
+      <form method="POST" action="/admin/users/${encodeURIComponent(username)}/force-logout">
+        <button type="submit" class="btn btn-secondary">Force Logout All Sessions</button>
+      </form>
+    </div>
+
     <div class="section-title">Actions</div>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:2rem">
       <form method="POST" action="/admin/users/${encodeURIComponent(username)}/rotate-token">
@@ -866,6 +925,23 @@ adminRouter.post('/admin/users/:username/delete', requireCsrf, async (req: Reque
   await refreshAuthCache();
   logger.info({ deletedBy: session.user, username }, 'admin: user deleted');
   res.redirect('/admin/users');
+});
+
+// ── POST /admin/users/:username/force-logout ──────────────────────────────────
+
+adminRouter.post('/admin/users/:username/force-logout', requireCsrf, async (req: Request, res: Response) => {
+  const session = getAdminSession(req)!;
+  const username = decodeURIComponent(req.params['username'] as string ?? '');
+
+  await incrementSessionVersion(username);
+  // Refresh auth cache and rebuild session version cache
+  await refreshAuthCache();
+  const updatedUsers = isDbEnabled() ? await listUsers() : [];
+  buildSessionVersionCache(updatedUsers);
+
+  logLoginEvent({ username, eventType: 'force_logout', meta: { forced_by: session.user } }).catch(() => {/* ignore */});
+  logger.info({ forcedBy: session.user, username }, 'admin: force-logged-out all sessions');
+  res.redirect(`/admin/users/${encodeURIComponent(username)}`);
 });
 
 // ── GET /admin/config — Configuration ─────────────────────────────────────────
