@@ -20,6 +20,12 @@ export interface MatterLogParams {
   top_results: Array<{ title: string; citation?: string; url: string }>;
   /** Total Isaacus API tokens consumed by this tool call. Used for per-matter cost attribution. */
   api_tokens_used?: number;
+  /** True if the tool returned an error response. */
+  is_error?: boolean;
+  /** Human-readable error code or message if is_error is true. */
+  error_message?: string;
+  /** Top answer confidence score (0–1) from extractive QA tools. Null for non-QA tools. */
+  accuracy_score?: number;
 }
 
 // Fire-and-forget: DB failures must never affect tool responses

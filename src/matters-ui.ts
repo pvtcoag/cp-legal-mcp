@@ -23,11 +23,15 @@ import {
   getToolUsageStats,
   getUserStats,
   getRecentActivity,
+  getPopularCases,
+  getErrorStats,
   type MatterSummaryRow,
   type MatterHistoryRow,
   type DashboardStats,
   type ToolUsageStat,
   type UserStatRow,
+  type PopularCaseRow,
+  type ErrorStatRow,
 } from './db.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -56,20 +60,70 @@ const TOOL_LABELS: Record<string, string> = {
   format_citation:     'Format Citation',
   generate_pinpoint:   'Pinpoint',
   get_matter_history:  'Matter History',
+  inspect_database:    'Inspect DB',
 };
 
-// ── Cost helper ───────────────────────────────────────────────────────────────
+// ── Cost helpers ──────────────────────────────────────────────────────────────
 
-/** Estimated Isaacus API cost. Rate configurable via ISAACUS_COST_PER_1M_TOKENS (default $2.00). */
-function estCost(tokens: number): string {
+/**
+ * Per-tool Isaacus cost rates (USD per 1M input tokens).
+ * Kanon Answer Extractor = $1.50/1M; Kanon Universal Classifier (reranking) = $1.00/1M.
+ * Tools that make no Isaacus calls = $0.
+ */
+const TOOL_COST_RATES: Record<string, number> = {
+  ask_judgment:        1.50,
+  ask_legislation:     1.50,
+  compare_cases:       1.50,
+  enrich_judgment:     1.50,
+  summarise_judgment:  1.38, // blended: enrichment + 5× QA
+  research_cases:      1.00,
+  research_legislation:1.00,
+  search_by_citation:  1.00,
+  find_citing_cases:   1.00,
+  find_related_cases:  1.00,
+  classify_legal_issue:1.00,
+  get_judgment:        0,
+  get_legislation:     0,
+  format_citation:     0,
+  generate_pinpoint:   0,
+  get_matter_history:  0,
+  inspect_database:    0,
+};
+
+function toolCostRate(toolName: string): number {
+  return TOOL_COST_RATES[toolName] ?? 1.25; // conservative default for unknown tools
+}
+
+/** Estimated Isaacus API cost for a given token count, using per-tool rate if provided. */
+function estCost(tokens: number, toolName?: string): string {
   if (!tokens) return '—';
-  const ratePerM = parseFloat(process.env['ISAACUS_COST_PER_1M_TOKENS'] ?? '2.00');
+  const ratePerM = toolName !== undefined ? toolCostRate(toolName) : 1.25;
+  if (ratePerM === 0) return '—';
   const cost = (tokens / 1_000_000) * ratePerM;
   return cost >= 0.01 ? `$${cost.toFixed(2)}` : '<$0.01';
 }
 
+/** Compute accurate total cost for a set of history rows using per-tool rates. */
+function computeMatterCost(rows: MatterHistoryRow[]): string {
+  const total = rows.reduce((sum, r) => {
+    const tokens = r.api_tokens_used ?? 0;
+    const rate = toolCostRate(r.tool_name);
+    return sum + (tokens / 1_000_000) * rate;
+  }, 0);
+  if (total === 0) return '—';
+  return total >= 0.01 ? `$${total.toFixed(2)}` : '<$0.01';
+}
+
 function fmtTokens(n: number): string {
   return n > 0 ? n.toLocaleString('en-AU') : '—';
+}
+
+/** Accuracy score badge: green >70%, amber 40–70%, red <40%. */
+function accuracyBadge(score: number | null | undefined): string {
+  if (score == null) return '<span style="color:#aaa">—</span>';
+  const pct = Math.round(score * 100);
+  const cls = score >= 0.7 ? 'acc-high' : score >= 0.4 ? 'acc-mid' : 'acc-low';
+  return `<span class="acc-badge ${cls}">${pct}%</span>`;
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
@@ -184,34 +238,48 @@ function fmtDateTime(iso: string): string {
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
 const CSS = `
+:root {
+  --primary:   #0B1F33;
+  --secondary: #2E3A46;
+  --accent:    #B79A5B;
+  --light:     #F5F3EF;
+  --text:      #1A1A1A;
+  --border:    #E0DDD6;
+  --surface:   #FAFAF8;
+}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f0; color: #1a1a1a; font-size: 14px; }
-nav { background: #1a1a1a; color: #fff; padding: .75rem 2rem; display: flex; align-items: center; gap: 1rem; }
-.nav-brand { font-weight: 700; font-size: 1rem; letter-spacing: -.5px; margin-right: auto; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
+h1 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.5rem; font-weight: 400; margin-bottom: .375rem; color: var(--primary); }
+h2 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.0625rem; font-weight: 400; margin-bottom: .875rem; color: var(--primary); }
+nav { background: var(--primary); color: #fff; padding: .75rem 2rem; display: flex; align-items: center; gap: 1rem; }
+.nav-brand { display: flex; align-items: center; gap: .625rem; margin-right: auto; text-decoration: none; }
+.nav-brand-fallback { font-weight: 700; font-size: 1rem; letter-spacing: -.5px; color: #fff; display: none; }
 .nav-links { display: flex; gap: .5rem; }
-.nav-link { font-size: .8125rem; color: #bbb; text-decoration: none; padding: .25rem .625rem; border-radius: 4px; }
-.nav-link:hover, .nav-link.active { background: #333; color: #fff; }
-.nav-user { font-size: .8125rem; color: #bbb; }
-.nav-logout { font-size: .8125rem; color: #bbb; text-decoration: none; border: 1px solid #555; border-radius: 4px; padding: .25rem .625rem; }
-.nav-logout:hover { background: #333; color: #fff; }
+.nav-link { font-size: .8125rem; color: rgba(255,255,255,.7); text-decoration: none; padding: .25rem .625rem; border-radius: 4px; }
+.nav-link:hover, .nav-link.active { background: var(--secondary); color: #fff; }
+.nav-user { font-size: .8125rem; color: rgba(255,255,255,.6); }
+.nav-logout { font-size: .8125rem; color: rgba(255,255,255,.7); text-decoration: none; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; padding: .25rem .625rem; }
+.nav-logout:hover { background: var(--secondary); color: #fff; }
 main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
-h1 { font-size: 1.375rem; font-weight: 600; margin-bottom: .375rem; }
-h2 { font-size: 1rem; font-weight: 600; margin-bottom: .875rem; }
 .subtitle { color: #666; font-size: .875rem; margin-bottom: 1.75rem; }
 .actions { display: flex; gap: .75rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
 .btn { padding: .5rem 1rem; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; border: 1px solid; transition: background .15s; }
-.btn-primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-.btn-primary:hover { background: #333; }
-.btn-secondary { background: #fff; color: #333; border-color: #d0cdc6; }
-.btn-secondary:hover { background: #f5f5f0; }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: var(--secondary); border-color: var(--secondary); }
+.btn-secondary { background: #fff; color: #333; border-color: var(--border); }
+.btn-secondary:hover { background: var(--light); }
 .btn-back { color: #555; text-decoration: none; font-size: .875rem; display: inline-flex; align-items: center; gap: .375rem; margin-bottom: 1.5rem; }
-.btn-back:hover { color: #1a1a1a; }
-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e0ddd6; font-size: .8125rem; }
-thead th { background: #f0ede8; padding: .625rem 1rem; text-align: left; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid #e0ddd6; }
-tbody tr + tr td { border-top: 1px solid #f0ede8; }
-tbody tr:hover td { background: #faf9f7; }
+.btn-back:hover { color: var(--primary); }
+.table-wrap { overflow-x: auto; border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; min-width: 600px; }
+.table-wrap table { border-radius: 0; border: none; }
+thead th { background: #F0EDE8; padding: .625rem 1rem; text-align: left; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid var(--border); }
+tbody tr + tr td { border-top: 1px solid #F0EDE8; }
+tbody tr:hover td { background: #FAFAF8; }
+tbody tr.row-error td { background: #FFF8F8 !important; }
+tbody tr.row-error:hover td { background: #FFF1F1 !important; }
 td { padding: .625rem 1rem; vertical-align: top; }
-.matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: #1a1a1a; text-decoration: none; }
+.matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: var(--primary); text-decoration: none; }
 .matter-ref:hover { text-decoration: underline; }
 .date-small { color: #555; font-size: .75rem; white-space: nowrap; }
 .count { font-weight: 600; }
@@ -222,81 +290,87 @@ td { padding: .625rem 1rem; vertical-align: top; }
 .top-results-stack a { color: #1a6b8a; text-decoration: none; display: block; word-break: break-word; margin-bottom: .3rem; font-size: .75rem; line-height: 1.4; }
 .top-results-stack a:hover { text-decoration: underline; }
 .summary-grid { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
-.card { background: #fff; border: 1px solid #e0ddd6; border-radius: 6px; padding: 1rem 1.25rem; min-width: 140px; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.25rem; min-width: 140px; }
 .card-label { font-size: .6875rem; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem; }
-.card-value { font-size: 1.375rem; font-weight: 700; line-height: 1.2; }
+.card-value { font-size: 1.375rem; font-weight: 700; line-height: 1.2; color: var(--primary); }
 .card-value.sm { font-size: .9375rem; margin-top: .125rem; }
 .card-sub { font-size: .75rem; color: #555; margin-top: .1875rem; }
-.tag { display: inline-block; background: #f0ede8; color: #555; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; margin: .125rem .125rem 0 0; white-space: nowrap; }
-.empty { text-align: center; padding: 3rem; color: #888; background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; }
+.tag { display: inline-block; background: #F0EDE8; color: #555; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; margin: .125rem .125rem 0 0; white-space: nowrap; }
+.empty { text-align: center; padding: 3rem; color: #888; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
 .admin-badge { display: inline-block; background: #e8f4e8; color: #2a6a2a; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; margin-left: .5rem; vertical-align: middle; }
 .est-badge { display: inline-block; background: #fef9e7; color: #7d6608; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 500; }
+.acc-badge { display: inline-block; padding: .125rem .4rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
+.acc-high { background: #d1fae5; color: #065f46; }
+.acc-mid  { background: #fef3c7; color: #92400e; }
+.acc-low  { background: #fee2e2; color: #991b1b; }
 
 /* Search / filter bar */
-.filter-bar { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+.filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
 .filter-group { display: flex; flex-direction: column; gap: .3rem; }
 .filter-group label { font-size: .6875rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .04em; }
 .filter-input { padding: .4rem .625rem; border: 1px solid #d0cdc6; border-radius: 5px; font-size: .875rem; background: #fff; height: 32px; }
 select.filter-input { cursor: pointer; min-width: 120px; }
-.filter-btn { padding: 0 .875rem; background: #1a1a1a; color: #fff; border: none; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; height: 32px; }
-.filter-btn:hover { background: #333; }
+.filter-btn { padding: 0 .875rem; background: var(--primary); color: #fff; border: none; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; height: 32px; }
+.filter-btn:hover { background: var(--secondary); }
 .filter-clear { font-size: .8125rem; color: #888; text-decoration: none; padding-bottom: .125rem; align-self: flex-end; }
 .filter-clear:hover { color: #333; }
 
 /* Segmented user tabs (admin) */
-.seg-tabs { display: flex; gap: .25rem; background: #f0ede8; border-radius: 6px; padding: .25rem; margin-bottom: 1.5rem; width: fit-content; }
+.seg-tabs { display: flex; gap: .25rem; background: #F0EDE8; border-radius: 6px; padding: .25rem; margin-bottom: 1.5rem; width: fit-content; flex-wrap: wrap; }
 .seg-tab { padding: .3125rem .875rem; border-radius: 4px; font-size: .8125rem; font-weight: 500; text-decoration: none; color: #555; transition: all .15s; }
-.seg-tab.active { background: #fff; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-.seg-tab:hover:not(.active) { color: #1a1a1a; }
+.seg-tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.seg-tab:hover:not(.active) { color: var(--primary); }
 
 /* Tool usage bar chart */
-.section-block { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
-.section-block h2 { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #555; margin-bottom: 1rem; }
+.section-block { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+.section-block h2 { font-family: inherit; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #555; margin-bottom: 1rem; }
 .tool-bar-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; }
 .tool-bar-label { width: 150px; font-size: .8125rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-.tool-bar-track { flex: 1; height: 8px; background: #f0ede8; border-radius: 4px; overflow: hidden; }
-.tool-bar-fill { height: 100%; background: #1a1a1a; border-radius: 4px; }
+.tool-bar-track { flex: 1; height: 8px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
+.tool-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
 .tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; width: 120px; text-align: right; }
 
 /* Researcher cards */
 .researcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
-.researcher-card { background: #f8f7f4; border: 1px solid #e0ddd6; border-radius: 6px; padding: .875rem 1rem; }
-.researcher-name { font-weight: 600; font-size: .9375rem; margin-bottom: .5rem; }
+.researcher-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .875rem 1rem; }
+.researcher-name { font-weight: 600; font-size: .9375rem; margin-bottom: .5rem; color: var(--primary); }
 .researcher-stats { font-size: .8125rem; color: #555; display: flex; flex-direction: column; gap: .2rem; }
 
-/* Recent activity */
-.activity-list { display: flex; flex-direction: column; gap: .5rem; }
-.activity-row { display: flex; gap: .875rem; align-items: baseline; font-size: .8125rem; padding: .4375rem .625rem; border-radius: 5px; }
-.activity-row:nth-child(odd) { background: #faf9f7; }
-.activity-time { color: #888; white-space: nowrap; width: 130px; flex-shrink: 0; }
-.activity-matter { font-weight: 600; font-family: ui-monospace, monospace; color: #1a1a1a; text-decoration: none; white-space: nowrap; }
-.activity-matter:hover { text-decoration: underline; }
-.activity-query { color: #555; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
-.activity-user { color: #888; font-size: .75rem; white-space: nowrap; }
+/* Popular cases */
+.popular-case-row { display: flex; gap: .75rem; align-items: baseline; padding: .4375rem 0; border-bottom: 1px solid #F0EDE8; font-size: .8125rem; }
+.popular-case-row:last-child { border-bottom: none; }
+.popular-case-rank { color: #aaa; font-size: .75rem; width: 1.25rem; flex-shrink: 0; text-align: right; }
+.popular-case-title { flex: 1; }
+.popular-case-title a { color: #1a6b8a; text-decoration: none; }
+.popular-case-title a:hover { text-decoration: underline; }
+.popular-case-citation { color: #555; font-size: .75rem; white-space: nowrap; }
+.popular-case-count { font-weight: 600; color: var(--primary); white-space: nowrap; font-size: .75rem; }
 
 /* Login */
-.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-.login-card { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 2.5rem 2rem; width: 100%; max-width: 380px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-.login-logo { font-weight: 700; letter-spacing: -.5px; margin-bottom: 1.5rem; font-size: 1.1rem; }
-.login-title { font-size: 1.25rem; font-weight: 600; margin-bottom: .25rem; }
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: var(--light); }
+.login-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 2.5rem 2rem; width: 100%; max-width: 380px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.login-logo { margin-bottom: 1.5rem; }
+.login-title { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.375rem; font-weight: 400; margin-bottom: .25rem; color: var(--primary); }
 .login-sub { font-size: .875rem; color: #666; margin-bottom: 2rem; }
 label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
 input[type="text"], input[type="password"] { width: 100%; padding: .625rem .75rem; border: 1px solid #d0cdc6; border-radius: 6px; font-size: .9375rem; outline: none; transition: border-color .15s; margin-bottom: 1.25rem; }
-input:focus { border-color: #1a1a1a; }
-.login-btn { width: 100%; padding: .75rem; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background .15s; }
-.login-btn:hover { background: #333; }
+input:focus { border-color: var(--primary); }
+.login-btn { width: 100%; padding: .75rem; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background .15s; }
+.login-btn:hover { background: var(--secondary); }
 .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #dc2626; font-size: .875rem; padding: .625rem .75rem; margin-bottom: 1.25rem; }
 
 /* Print */
 @media print {
-  body { background: #fff; font-size: 9pt; }
+  body { background: #fff; font-size: 9pt; font-family: Georgia, serif; }
   nav, .actions, .btn-back, .no-print, .filter-bar, .seg-tabs, .section-block { display: none !important; }
   main { max-width: none; padding: 0; }
-  h1 { font-size: 12pt; margin-bottom: .2rem; }
+  h1 { font-size: 13pt; font-family: Georgia, serif; margin-bottom: .2rem; color: #000; }
   .subtitle { margin-bottom: .5rem; }
   .summary-grid { display: none; }
-  .print-header { display: block !important; font-size: 9pt; color: #555; margin-bottom: 1rem; }
-  table { font-size: 7.5pt; border: 1px solid #aaa; }
+  .print-header { display: block !important; margin-bottom: 1rem; }
+  .print-header-firm { font-family: Georgia, serif; font-size: 12pt; font-weight: bold; color: #0B1F33; }
+  .print-header-sub { font-size: 8pt; color: #555; margin-top: .125rem; }
+  table { font-size: 7.5pt; border: 1px solid #aaa; min-width: 0; }
   thead th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: .2rem .4rem !important; }
   td { padding: .2rem .4rem !important; }
   .query-full { max-width: none; white-space: pre-wrap; word-break: break-word; }
@@ -307,10 +381,16 @@ input:focus { border-color: #1a1a1a; }
 .print-header { display: none; }
 `;
 
+const LOGO_SRC = '';
+
 function page(title: string, body: string, user?: string, activePath?: string): string {
   const nav = user
     ? `<nav>
-        <span class="nav-brand">CP Legal</span>
+        <a href="/matters" class="nav-brand">
+          <img src="${LOGO_SRC}" alt="CP Legal" height="26" style="display:block"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+          <span class="nav-brand-fallback">CP Legal</span>
+        </a>
         <div class="nav-links">
           <a href="/matters" class="nav-link${activePath === '/matters' ? ' active' : ''}">Matters</a>
           <a href="/matters/dashboard" class="nav-link${activePath === '/matters/dashboard' ? ' active' : ''}">Dashboard</a>
@@ -325,6 +405,9 @@ function page(title: string, body: string, user?: string, activePath?: string): 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)} — CP Legal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
 <body>
@@ -341,10 +424,11 @@ function renderToolChart(stats: ToolUsageStat[]): string {
   const max = stats[0]!.query_count;
   const bars = stats.map((s) => {
     const pct = max > 0 ? Math.round((s.query_count / max) * 100) : 0;
+    const costStr = estCost(s.total_tokens, s.tool_name);
     return `<div class="tool-bar-row">
       <div class="tool-bar-label">${esc(toolLabel(s.tool_name))}</div>
       <div class="tool-bar-track"><div class="tool-bar-fill" style="width:${pct}%"></div></div>
-      <div class="tool-bar-meta">${s.query_count} queries · ${fmtTokens(s.total_tokens)} tok</div>
+      <div class="tool-bar-meta">${s.query_count} queries · ${costStr !== '—' ? costStr : fmtTokens(s.total_tokens) + ' tok'}</div>
     </div>`;
   }).join('');
   return `<div class="section-block no-print"><h2>Tool Usage</h2>${bars}</div>`;
@@ -357,11 +441,46 @@ function renderResearcherCards(users: UserStatRow[]): string {
       <div class="researcher-name">${esc(u.user_id ?? 'Unattributed')}</div>
       <div class="researcher-stats">
         <span>${u.query_count} queries across ${u.matter_count} matter${u.matter_count !== 1 ? 's' : ''}</span>
-        <span>${fmtTokens(u.total_tokens)} tokens · ${estCost(u.total_tokens)} est.</span>
+        <span>${fmtTokens(u.total_tokens)} tokens</span>
         <span>Last active ${fmtDate(u.last_activity)}</span>
       </div>
     </div>`).join('');
   return `<div class="section-block no-print"><h2>Researchers</h2><div class="researcher-grid">${cards}</div></div>`;
+}
+
+function renderPopularCases(cases: PopularCaseRow[]): string {
+  if (cases.length === 0) return '';
+  const rows = cases.map((c, i) => `
+    <div class="popular-case-row">
+      <span class="popular-case-rank">${i + 1}.</span>
+      <span class="popular-case-title">
+        <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title ?? c.url)}</a>
+      </span>
+      ${c.citation ? `<span class="popular-case-citation">${esc(c.citation)}</span>` : ''}
+      <span class="popular-case-count">${c.mention_count}×</span>
+    </div>`).join('');
+  return `<div class="section-block no-print"><h2>Most Referenced Cases</h2>${rows}</div>`;
+}
+
+function renderErrorStats(stats: ErrorStatRow[]): string {
+  if (stats.length === 0) return '';
+  const rows = stats.map((s) => `<tr>
+    <td>${esc(toolLabel(s.tool_name))}</td>
+    <td style="text-align:right">${s.total_queries}</td>
+    <td style="text-align:right">${s.error_count}</td>
+    <td style="text-align:right">${s.error_rate_pct}%</td>
+  </tr>`).join('');
+  return `<div class="section-block no-print"><h2>Error Rates by Tool</h2>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>Tool</th>
+        <th style="text-align:right">Total Queries</th>
+        <th style="text-align:right">Errors</th>
+        <th style="text-align:right">Error Rate</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
 }
 
 function renderDashboardCards(stats: DashboardStats): string {
@@ -382,7 +501,7 @@ function renderDashboardCards(stats: DashboardStats): string {
     <div class="card">
       <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
       <div class="card-value sm">${estCost(Number(stats.total_tokens))}</div>
-      <div class="card-sub">@ $${parseFloat(process.env['ISAACUS_COST_PER_1M_TOKENS'] ?? '2.00').toFixed(2)}/1M tokens</div>
+      <div class="card-sub">Per-tool Isaacus rates</div>
     </div>
   </div>`;
 }
@@ -433,7 +552,11 @@ mattersRouter.get('/matters/login', (req: Request, res: Response) => {
   res.send(page('Sign in', `
     <div class="login-wrap">
       <div class="login-card">
-        <div class="login-logo">CP Legal</div>
+        <div class="login-logo">
+          <img src="${LOGO_SRC}" alt="CP Legal" height="28" style="display:block"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <span style="display:none;font-weight:700;font-size:1.1rem;color:#0B1F33">CP Legal</span>
+        </div>
         <h1 class="login-title">Matter Research</h1>
         <p class="login-sub">Sign in to view research history.</p>
         ${hasError ? '<div class="error-box">Incorrect username or token. Please try again.</div>' : ''}
@@ -491,26 +614,39 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   const scopedUserId = isAdmin(user) ? undefined : user;
   const adminBadge = isAdmin(user) ? '<span class="admin-badge">All researchers</span>' : '';
 
-  const [stats, toolStats, userStats, recentActivity] = await Promise.all([
+  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats] = await Promise.all([
     getDashboardStats(scopedUserId),
     getToolUsageStats(scopedUserId),
     isAdmin(user) ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
-    isAdmin(user) ? getRecentActivity(15) : Promise.resolve<MatterHistoryRow[]>([]),
+    isAdmin(user) ? getRecentActivity(20) : Promise.resolve<MatterHistoryRow[]>([]),
+    isAdmin(user) ? getPopularCases(10) : Promise.resolve<PopularCaseRow[]>([]),
+    isAdmin(user) ? getErrorStats() : Promise.resolve<ErrorStatRow[]>([]),
   ]);
 
   const recentHtml = recentActivity.length > 0 ? `
     <div class="section-block no-print">
       <h2>Recent Activity</h2>
-      <div class="activity-list">
-        ${recentActivity.map((r) => `
-          <div class="activity-row">
-            <span class="activity-time">${fmtDateTime(r.created_at)}</span>
-            <a href="/matters/${encodeURIComponent(r.matter_ref)}" class="activity-matter">${esc(r.matter_ref)}</a>
-            <span class="tag">${esc(toolLabel(r.tool_name))}</span>
-            <span class="activity-query">${esc(r.query_text)}</span>
-            <span class="activity-user">${esc(r.user_id ?? '—')}</span>
-          </div>`).join('')}
-      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Date &amp; Time</th>
+          <th>Matter</th>
+          <th>Tool</th>
+          <th>Researcher</th>
+          <th>Query</th>
+          <th style="text-align:center">Accuracy</th>
+        </tr></thead>
+        <tbody>
+          ${recentActivity.map((r) => `
+            <tr>
+              <td class="date-small">${fmtDateTime(r.created_at)}</td>
+              <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
+              <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
+              <td class="users-cell">${esc(r.user_id ?? '—')}</td>
+              <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555">${esc(r.query_text)}</td>
+              <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table></div>
     </div>` : '';
 
   res.send(page('Dashboard', `
@@ -519,6 +655,8 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     ${renderDashboardCards(stats)}
     ${renderToolChart(toolStats)}
     ${isAdmin(user) ? renderResearcherCards(userStats) : ''}
+    ${isAdmin(user) ? renderPopularCases(popularCases) : ''}
+    ${isAdmin(user) ? renderErrorStats(errorStats) : ''}
     ${recentHtml}
   `, user, '/matters/dashboard'));
 });
@@ -567,13 +705,13 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
         <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
       </tr>`;
     }).join('');
-    tableHtml = `<table>
+    tableHtml = `<div class="table-wrap"><table>
       <thead><tr>
         <th>Matter Ref</th><th>Period</th><th style="text-align:right">Queries</th>
         <th>Researchers</th><th>Tools Used</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table></div>`;
   }
 
   res.send(page('Matters', `
@@ -626,7 +764,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   const researchers = [...new Set(allRows.map((r) => r.user_id).filter(Boolean))].join(', ') || '—';
   const totalResults = displayRows.reduce((s, r) => s + (r.result_count ?? 0), 0);
   const totalTokens = displayRows.reduce((s, r) => s + (r.api_tokens_used ?? 0), 0);
-  const activeDays = new Set(allRows.map((r) => r.created_at.slice(0, 10))).size;
+  const activeDays = new Set(allRows.map((r) => new Date(r.created_at).toISOString().slice(0, 10))).size;
   const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
 
   // Tool filter dropdown — use allRows distinct tools
@@ -641,7 +779,9 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     const topLinks = (r.top_results ?? []).slice(0, 5)
       .map((tr) => `<a href="${esc(tr.url)}" target="_blank" rel="noopener">${esc(tr.title)}${tr.citation ? ` — ${esc(tr.citation)}` : ''}</a>`)
       .join('');
-    return `<tr>
+    const rowClass = r.is_error ? ' class="row-error"' : '';
+    const costCell = estCost(r.api_tokens_used ?? 0, r.tool_name);
+    return `<tr${rowClass}>
       <td class="date-small">${fmtDateTime(r.created_at)}</td>
       <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
       <td class="users-cell">${esc(r.user_id ?? '—')}</td>
@@ -649,13 +789,18 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <td class="date-small">${esc(r.jurisdiction ?? '—')}</td>
       <td class="count" style="text-align:right">${r.result_count ?? 0}</td>
       <td class="mono" style="text-align:right">${fmtTokens(r.api_tokens_used ?? 0)}</td>
+      <td style="text-align:right">${costCell}</td>
+      <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
       <td><div class="top-results-stack">${topLinks || '—'}</div></td>
     </tr>`;
   }).join('');
 
   res.send(page(`${ref} — Research History`, `
     <a href="/matters" class="btn-back no-print">← All Matters</a>
-    <div class="print-header">CP Legal Matter Research — printed ${esc(today)}</div>
+    <div class="print-header">
+      <div class="print-header-firm">CP Legal</div>
+      <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
+    </div>
     <h1>${esc(ref)}</h1>
     <p class="subtitle">${fmtDate(firstRow.created_at)} to ${fmtDate(lastRow.created_at)}</p>
     <div class="summary-grid">
@@ -679,7 +824,8 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       <div class="card">
         <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
-        <div class="card-value sm">${estCost(totalTokens)}</div>
+        <div class="card-value sm">${computeMatterCost(displayRows)}</div>
+        <div class="card-sub">Per-tool Isaacus rates</div>
       </div>
       <div class="card">
         <div class="card-label">Researchers</div>
@@ -697,14 +843,17 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       ${toolFilter ? `<a href="/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
     </form>
+    <div class="table-wrap">
     <table>
       <thead><tr>
         <th>Date &amp; Time</th><th>Tool</th><th>Researcher</th><th>Query</th>
         <th>Jurisdiction</th><th style="text-align:right">Results</th>
-        <th style="text-align:right">Tokens</th><th>Top Results</th>
+        <th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th>
+        <th style="text-align:center">Accuracy</th><th>Top Results</th>
       </tr></thead>
-      <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="8" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
+      <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>
+    </div>
   `, user, '/matters'));
 });
 
@@ -722,13 +871,14 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   }
 
   const csvEsc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-  const header = ['Date/Time', 'Tool', 'Researcher', 'Query', 'Jurisdiction', 'Results', 'Tokens', 'Est Cost', 'Top Results']
+  const header = ['Date/Time', 'Tool', 'Researcher', 'Query', 'Jurisdiction', 'Results', 'Tokens', 'Est Cost', 'Accuracy', 'Top Results']
     .map(csvEsc).join(',');
   const dataRows = rows.map((r) => {
     const topResults = (r.top_results ?? []).slice(0, 5)
       .map((tr) => `${tr.title}${tr.citation ? ` (${tr.citation})` : ''}: ${tr.url}`)
       .join(' | ');
     const tokens = r.api_tokens_used ?? 0;
+    const accuracyStr = r.accuracy_score != null ? `${Math.round(r.accuracy_score * 100)}%` : '';
     return [
       fmtDateTime(r.created_at),
       toolLabel(r.tool_name),
@@ -737,7 +887,8 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
       r.jurisdiction ?? '',
       String(r.result_count ?? 0),
       String(tokens),
-      estCost(tokens),
+      estCost(tokens, r.tool_name),
+      accuracyStr,
       topResults,
     ].map(csvEsc).join(',');
   });

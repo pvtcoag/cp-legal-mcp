@@ -137,6 +137,7 @@ export function registerResearchCases(server: McpServer): void {
         result_count: results.length,
         top_results: results.slice(0, 3).map((r) => ({ title: r.title, citation: r.citation, url: r.url })),
         api_tokens_used: rerankTokens,
+        accuracy_score: ranked[0]?.score,
       });
 
       return {

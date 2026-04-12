@@ -125,6 +125,10 @@ export function registerSummariseJudgment(server: McpServer): void {
       const citation = doc.citation ?? resolved.citation;
       const title = doc.title ?? citation ?? input.citation_or_url;
 
+      const qaScores = [holdingR, ordersR, factsR, principlesR, outcomeR]
+        .flatMap((r) => r.answers.map((a) => a.score));
+      const accuracy_score = qaScores.length > 0 ? Math.min(...qaScores) : undefined;
+
       recordMatterQuery({
         matter_ref: input.matter_ref,
         tool_name: 'summarise_judgment',
@@ -132,6 +136,7 @@ export function registerSummariseJudgment(server: McpServer): void {
         result_count: 1,
         top_results: [{ title, citation, url: resolved.url }],
         api_tokens_used: totalTokens,
+        accuracy_score,
       });
 
       return {

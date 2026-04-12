@@ -65,6 +65,9 @@ export async function initDb(): Promise<void> {
     );
 
     ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS api_tokens_used INTEGER DEFAULT 0;
+    ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS is_error BOOLEAN DEFAULT FALSE;
+    ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS error_message TEXT;
+    ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS accuracy_score FLOAT4;
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -79,6 +82,9 @@ export interface QueryLogEntry {
   result_count: number;
   top_results: Array<{ title: string; citation?: string; url: string }>;
   api_tokens_used?: number;
+  is_error?: boolean;
+  error_message?: string;
+  accuracy_score?: number;
 }
 
 // Fire-and-forget safe: caller should .catch() this
@@ -87,8 +93,9 @@ export async function logMatterQuery(entry: QueryLogEntry): Promise<void> {
 
   await pool.query(
     `INSERT INTO matter_queries
-       (matter_ref, user_id, tool_name, query_text, jurisdiction, result_count, top_results, api_tokens_used)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (matter_ref, user_id, tool_name, query_text, jurisdiction, result_count, top_results,
+        api_tokens_used, is_error, error_message, accuracy_score)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       entry.matter_ref,
       entry.user_id ?? null,
@@ -98,6 +105,9 @@ export async function logMatterQuery(entry: QueryLogEntry): Promise<void> {
       entry.result_count,
       JSON.stringify(entry.top_results),
       entry.api_tokens_used ?? 0,
+      entry.is_error ?? false,
+      entry.error_message ?? null,
+      entry.accuracy_score ?? null,
     ],
   );
 }
@@ -112,6 +122,9 @@ export interface MatterHistoryRow {
   result_count: number;
   top_results: Array<{ title: string; citation?: string; url: string }>;
   api_tokens_used: number;
+  is_error: boolean;
+  error_message: string | null;
+  accuracy_score: number | null;
   created_at: string;
 }
 
@@ -126,7 +139,8 @@ export async function getMatterHistory(
   if (toolFilter) params.push(toolFilter);
   const result = await pool.query<MatterHistoryRow>(
     `SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
-            result_count, top_results, api_tokens_used, created_at
+            result_count, top_results, api_tokens_used,
+            is_error, error_message, accuracy_score, created_at
      FROM matter_queries
      WHERE matter_ref = $1${toolClause}
      ORDER BY created_at DESC
@@ -319,7 +333,8 @@ export async function getRecentActivity(limit: number = 50): Promise<RecentActiv
   if (!pool) return [];
   const result = await pool.query<RecentActivityRow>(`
     SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
-           result_count, top_results, api_tokens_used, created_at
+           result_count, top_results, api_tokens_used,
+           is_error, error_message, accuracy_score, created_at
     FROM matter_queries
     ORDER BY created_at DESC
     LIMIT $1
@@ -393,6 +408,63 @@ export async function getUserStats(): Promise<UserStatRow[]> {
     FROM matter_queries
     GROUP BY user_id
     ORDER BY query_count DESC
+  `);
+  return result.rows;
+}
+
+// ── Popular cases ─────────────────────────────────────────────────────────────
+
+export interface PopularCaseRow {
+  url: string;
+  title: string | null;
+  citation: string | null;
+  mention_count: number;
+}
+
+export async function getPopularCases(limit: number = 10): Promise<PopularCaseRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<PopularCaseRow>(`
+    SELECT
+      item->>'url'      AS url,
+      item->>'title'    AS title,
+      item->>'citation' AS citation,
+      COUNT(*)::int     AS mention_count
+    FROM matter_queries,
+         LATERAL jsonb_array_elements(top_results) AS item
+    WHERE jsonb_typeof(top_results) = 'array'
+      AND jsonb_array_length(top_results) > 0
+      AND item->>'url' IS NOT NULL
+    GROUP BY item->>'url', item->>'title', item->>'citation'
+    ORDER BY mention_count DESC
+    LIMIT $1
+  `, [limit]);
+  return result.rows;
+}
+
+// ── Error statistics ──────────────────────────────────────────────────────────
+
+export interface ErrorStatRow {
+  tool_name: string;
+  total_queries: number;
+  error_count: number;
+  error_rate_pct: number;
+}
+
+export async function getErrorStats(): Promise<ErrorStatRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<ErrorStatRow>(`
+    SELECT
+      tool_name,
+      COUNT(*)::int                                        AS total_queries,
+      COUNT(*) FILTER (WHERE is_error = TRUE)::int         AS error_count,
+      ROUND(
+        COUNT(*) FILTER (WHERE is_error = TRUE)::numeric
+        / GREATEST(COUNT(*)::numeric, 1) * 100, 1
+      )::float                                             AS error_rate_pct
+    FROM matter_queries
+    GROUP BY tool_name
+    HAVING COUNT(*) FILTER (WHERE is_error = TRUE) > 0
+    ORDER BY error_count DESC
   `);
   return result.rows;
 }

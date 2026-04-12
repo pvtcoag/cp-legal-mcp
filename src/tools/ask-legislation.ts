@@ -87,6 +87,7 @@ export function registerAskLegislation(server: McpServer): void {
         result_count: extraction.answers.length,
         top_results: [{ title, url: input.url }],
         api_tokens_used: extraction.tokensUsed,
+        accuracy_score: extraction.answers[0]?.score,
       });
 
       if (extraction.inextractable || extraction.answers.length === 0) {
