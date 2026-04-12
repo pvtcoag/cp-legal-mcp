@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { authMiddleware, buildAuthCache } from './auth.js';
-import { initDb, migrateUsersFromEnv, listUsers } from './db.js';
+import { initDb, migrateUsersFromEnv, listUsers, pingDb, isDbEnabled } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
@@ -83,11 +83,15 @@ app.get('/health/auslaw', async (_req, res) => {
   res.json(results);
 });
 
-// Health check — used by Railway healthcheck
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
+// Health check — used by Railway to gate traffic onto new deployments.
+// Returns 503 if the DB is unreachable so Railway holds the old deployment live.
+app.get('/health', async (_req, res) => {
+  const dbOk = await pingDb();
+  const status = !isDbEnabled() || dbOk ? 'ok' : 'degraded';
+  res.status(status === 'ok' ? 200 : 503).json({
+    status,
     service: 'cp-legal-mcp',
+    db: isDbEnabled() ? (dbOk ? 'ok' : 'unreachable') : 'disabled',
     timestamp: new Date().toISOString(),
   });
 });

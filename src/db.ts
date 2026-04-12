@@ -129,7 +129,35 @@ export async function initDb(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
   `);
 
+  // Activate installed extensions — idempotent, safe to run on every boot.
+  // pg_trgm:          trigram similarity operators for future fuzzy text search.
+  // pgcrypto:         cryptographic functions available to SQL if ever needed.
+  // pg_stat_statements: query-level performance stats (Railway loads it server-side;
+  //                   CREATE EXTENSION just makes it queryable in this database).
+  try {
+    await pool.query(`
+      CREATE EXTENSION IF NOT EXISTS pg_trgm;
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+      CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+    `);
+  } catch (err) {
+    // pg_stat_statements requires shared_preload_libraries — log but don't crash
+    // if the Railway instance hasn't loaded it at the server level.
+    logger.warn({ err }, 'DB: one or more extensions could not be activated (non-fatal)');
+  }
+
   logger.info('DB initialised — matter tracking enabled');
+}
+
+/** Quick connectivity probe used by the /health endpoint. */
+export async function pingDb(): Promise<boolean> {
+  if (!pool) return false;
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export interface QueryLogEntry {
