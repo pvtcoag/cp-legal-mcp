@@ -46,9 +46,9 @@ export function registerResearchLegislation(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'research_legislation' });
 
-      // Fetch more candidates than needed — Kanon 2 Reranker scores all of them
-      // accurately so a larger pool yields better final results.
-      const fetchLimit = Math.min((input.limit ?? 5) * 4, 20);
+      // Fetch 3× candidates for the reranker. 3× gives the reranker a meaningful
+      // pool without inflating Isaacus input tokens the way 4× did.
+      const fetchLimit = Math.min((input.limit ?? 5) * 3, 20);
 
       let rawResults;
       try {

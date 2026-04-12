@@ -98,9 +98,17 @@ export function registerResearchCases(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'research_cases' });
 
-      // Fetch more candidates than needed — Kanon 2 Reranker scores all of them
-      // accurately so a larger pool yields better final results.
-      const fetchLimit = Math.min((input.limit ?? 5) * 4, 20);
+      // Neutral citations (e.g. "[2024] HCA 12") already resolve exactly via
+      // AustLII — reranking adds no value and wastes Isaacus tokens. Use
+      // search_by_citation for this case; if it arrives here anyway, skip rerank.
+      const isCitationQuery = /^\[\d{4}\]\s+[A-Z]+\s+\d+$/i.test(input.query.trim());
+
+      // Fetch 3× candidates for the reranker. 3× gives the reranker a meaningful
+      // pool without inflating Isaacus input tokens the way 4× did.
+      // Citation queries only need exact-match depth — no over-fetch required.
+      const fetchLimit = isCitationQuery
+        ? (input.limit ?? 5)
+        : Math.min((input.limit ?? 5) * 3, 20);
 
       let rawResults;
       try {
@@ -111,7 +119,7 @@ export function registerResearchCases(server: McpServer): void {
           fromYear: input.from_year,
           toYear: input.to_year,
         });
-        log.debug({ query: input.query, resultCount: rawResults.length }, 'AusLaw results received');
+        log.debug({ query: input.query, resultCount: rawResults.length, isCitationQuery }, 'AusLaw results received');
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_cases failed');
@@ -125,13 +133,19 @@ export function registerResearchCases(server: McpServer): void {
 
       let ranked;
       let rerankTokens = 0;
-      try {
-        const rerankResult = await rerank(input.query, rawResults, input.limit ?? 5, { isIql: input.use_iql });
-        ranked = rerankResult.results;
-        rerankTokens = rerankResult.tokensUsed;
-      } catch (err) {
-        log.warn({ err }, 'Isaacus reranking failed, using original order');
+      if (isCitationQuery || rawResults.length <= 1) {
+        // Citation lookups and single-result responses don't benefit from reranking.
         ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
+        log.debug({ reason: isCitationQuery ? 'citation_query' : 'single_result' }, 'Skipping rerank');
+      } else {
+        try {
+          const rerankResult = await rerank(input.query, rawResults, input.limit ?? 5, { isIql: input.use_iql });
+          ranked = rerankResult.results;
+          rerankTokens = rerankResult.tokensUsed;
+        } catch (err) {
+          log.warn({ err }, 'Isaacus reranking failed, using original order');
+          ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
+        }
       }
 
       const results = ranked.map(({ item, score }) => ({

@@ -15,6 +15,17 @@ const inputSchema = z.object({
     .describe(
       'Neutral citation (e.g. "[2024] HCA 12") or a full AustLII URL of the judgment to retrieve',
     ),
+  max_chars: z
+    .number()
+    .int()
+    .min(5000)
+    .max(500_000)
+    .optional()
+    .describe(
+      'Maximum characters to return. Omit for full text (may be very large for lengthy judgments). ' +
+      'Use 30000–80000 when you only need to read or quote a portion. ' +
+      'The response includes total_chars so you can request more if needed.',
+    ),
   matter_ref: z
     .string()
     .max(100)
@@ -25,7 +36,7 @@ const inputSchema = z.object({
 export function registerGetJudgment(server: McpServer): void {
   server.tool(
     'get_judgment',
-    'Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata.',
+    'Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata. Check total_chars in the response before requesting full text of lengthy judgments — use max_chars to limit context usage when you only need part of the text.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'get_judgment', input: input.citation_or_url });
@@ -69,6 +80,15 @@ export function registerGetJudgment(server: McpServer): void {
       }
 
       const citation = doc.citation ?? resolved.citation;
+      const totalChars = doc.text.length;
+
+      // Apply optional character cap — preserves full text by default so verbatim
+      // quoting is always possible, but lets callers limit context window usage.
+      const text =
+        input.max_chars !== undefined && totalChars > input.max_chars
+          ? doc.text.slice(0, input.max_chars)
+          : doc.text;
+      const truncated = text.length < totalChars;
 
       recordMatterQuery({
         matter_ref: input.matter_ref,
@@ -84,8 +104,9 @@ export function registerGetJudgment(server: McpServer): void {
           citation,
           url: resolved.url,
           canonical_url: resolved.canonicalUrl ?? resolved.url,
-          char_count: doc.text.length,
-          text: doc.text,
+          total_chars: totalChars,
+          ...(truncated ? { truncated: true, returned_chars: text.length } : {}),
+          text,
         }) }],
       };
     },

@@ -52,8 +52,51 @@ export interface RankedResult<T extends RerankCandidate> {
   score: number;
 }
 
+// Excerpt is truncated to 150 chars for reranking — the title and citation carry
+// the most discriminating signal; sending the full excerpt inflates input tokens
+// without meaningfully improving ranking quality.
+const RERANK_EXCERPT_CHARS = 150;
+
 function candidateToText(c: RerankCandidate): string {
-  return [c.title, c.citation, c.excerpt].filter(Boolean).join(' | ');
+  const excerpt = c.excerpt
+    ? c.excerpt.length > RERANK_EXCERPT_CHARS
+      ? c.excerpt.slice(0, RERANK_EXCERPT_CHARS) + '…'
+      : c.excerpt
+    : undefined;
+  return [c.title, c.citation, excerpt].filter(Boolean).join(' | ');
+}
+
+// ── In-memory rerank cache ────────────────────────────────────────────────────
+// Deduplicates Isaacus rerankings within a 5-minute window.
+// Covers retries, follow-up queries with the same candidates, and concurrent
+// users running the same search. LRU-like eviction when cap is reached.
+
+const RERANK_CACHE_MAX = 100;
+const RERANK_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const _rerankCache = new Map<string, {
+  results: Array<{ index: number; score: number }>;
+  expiresAt: number;
+}>();
+
+function rerankKey(query: string, texts: string[], topK: number, isIql: boolean): string {
+  const textHash = createHash('sha1').update(texts.join('\0')).digest('hex').slice(0, 16);
+  const qHash    = createHash('sha1').update(query).digest('hex').slice(0, 8);
+  return `r:${qHash}:${textHash}:${topK}:${isIql ? 1 : 0}`;
+}
+
+function rerankCacheGet(key: string) {
+  const entry = _rerankCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) { _rerankCache.delete(key); return undefined; }
+  return entry.results;
+}
+
+function rerankCacheSet(key: string, results: Array<{ index: number; score: number }>) {
+  if (_rerankCache.size >= RERANK_CACHE_MAX) {
+    _rerankCache.delete(_rerankCache.keys().next().value as string);
+  }
+  _rerankCache.set(key, { results, expiresAt: Date.now() + RERANK_CACHE_TTL_MS });
 }
 
 // ── Extractive QA ─────────────────────────────────────────────────────────────
@@ -193,20 +236,36 @@ export async function rerank<T extends RerankCandidate>(
     return { results: [], tokensUsed: 0 };
   }
 
+  const isIql = options?.isIql ?? false;
+  const texts = candidates.map(candidateToText);
+  const cacheKey = rerankKey(query, texts, topK, isIql);
+  const cached = rerankCacheGet(cacheKey);
+
+  if (cached) {
+    logger.debug({ cacheKey, candidateCount: candidates.length }, 'Rerank cache hit — skipping Isaacus call');
+    return {
+      results: cached.map((r) => ({ item: candidates[r.index]!, score: r.score })),
+      tokensUsed: 0,
+    };
+  }
+
   logger.debug({ candidateCount: candidates.length, topK }, 'Isaacus reranking');
 
   const response = await client.rerankings.create({
     model: 'kanon-universal-classifier',
     query,
-    texts: candidates.map(candidateToText),
+    texts,
     top_n: topK,
-    is_iql: options?.isIql ?? false,
+    is_iql: isIql,
     chunking_options: { size: 512, overlap_ratio: 0.1 },
   });
 
+  const rawResults = response.results as Array<{ index: number; score: number }>;
+  rerankCacheSet(cacheKey, rawResults);
+
   return {
-    results: response.results.map((result: { index: number; score: number }) => ({
-      item: candidates[result.index],
+    results: rawResults.map((result) => ({
+      item: candidates[result.index]!,
       score: result.score,
     })),
     tokensUsed: inputTokens(response),
