@@ -83,7 +83,7 @@ export function registerResearchLegislation(server: McpServer): void {
       const results = ranked.map(({ item, score }) => ({
         title: item.title,
         url: item.url,
-        excerpt: item.excerpt,
+        ...(item.excerpt ? { excerpt: item.excerpt.length > 200 ? item.excerpt.slice(0, 200) + '…' : item.excerpt } : {}),
         ...(item.jurisdiction ? { jurisdiction: item.jurisdiction } : {}),
         ...(item.date ? { date: item.date } : {}),
         relevance_score: Math.round(score * 1000) / 1000,
@@ -111,7 +111,7 @@ export function registerResearchLegislation(server: McpServer): void {
             _suggested_next: results.length > 0
               ? 'Use ask_legislation with the URL to extract answers to specific questions (definitions, offence elements, penalty amounts, scope). Use get_legislation only if you need the full consolidated text verbatim.'
               : 'No results found — try different search terms or broaden the jurisdiction.',
-          }, null, 2),
+          }),
         }],
       };
     },

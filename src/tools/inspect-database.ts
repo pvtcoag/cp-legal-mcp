@@ -91,7 +91,7 @@ export function registerInspectDatabase(server: McpServer): void {
             return {
               content: [{
                 type: 'text' as const,
-                text: JSON.stringify({ command: 'list_matters', matter_count: rows.length, matters: rows }, null, 2),
+                text: JSON.stringify({ command: 'list_matters', matter_count: rows.length, matters: rows }),
               }],
             };
           }
@@ -107,7 +107,7 @@ export function registerInspectDatabase(server: McpServer): void {
                   date_to: input.date_to ?? 'now',
                   row_count: rows.length,
                   activity: rows,
-                }, null, 2),
+                }),
               }],
             };
           }
@@ -130,7 +130,7 @@ export function registerInspectDatabase(server: McpServer): void {
                     results: r.result_count,
                     at: r.created_at,
                   })),
-                }, null, 2),
+                }),
               }],
             };
           }
@@ -154,7 +154,7 @@ export function registerInspectDatabase(server: McpServer): void {
                   matter_ref: input.matter_ref,
                   record_count: rows.length,
                   records: rows,
-                }, null, 2),
+                }),
               }],
             };
           }

@@ -1,6 +1,31 @@
+import { createHash } from 'node:crypto';
 import Isaacus from 'isaacus';
 import { config } from './config.js';
 import { logger } from './logger.js';
+
+// ── In-memory QA result cache ─────────────────────────────────────────────────
+// Avoids repeat Kanon Answer Extractor calls for identical (document, question) pairs.
+// LRU-like: evicts oldest entry when limit is reached. Survives server restarts
+// only via the 30-day PostgreSQL judgment cache feeding consistent document text.
+
+const QA_CACHE_MAX = 200;
+const _qaCache = new Map<string, { answers: ExtractedAnswer[]; inextractable: boolean; inextractability_score: number; tokensUsed: 0 }>();
+
+function qaKey(question: string, documentText: string, topK: number): string {
+  const docHash = createHash('sha1').update(documentText).digest('hex').slice(0, 16);
+  const qHash   = createHash('sha1').update(question).digest('hex').slice(0, 8);
+  return `${docHash}:${qHash}:${topK}`;
+}
+
+function qaCacheGet(key: string) { return _qaCache.get(key); }
+
+function qaCacheSet(key: string, value: typeof _qaCache extends Map<string, infer V> ? V : never) {
+  if (_qaCache.size >= QA_CACHE_MAX) {
+    // Evict oldest (first insertion order)
+    _qaCache.delete(_qaCache.keys().next().value as string);
+  }
+  _qaCache.set(key, value);
+}
 
 // Singleton — Isaacus client is stateless, safe to share across requests
 const client = new Isaacus({ apiKey: config.ISAACUS_API_KEY });
@@ -41,12 +66,20 @@ export interface ExtractedAnswer {
 /**
  * Extract direct answers to a question from a document using Kanon Answer Extractor.
  * chunking_options enables accurate extraction from long judgments via a sliding window.
+ * Results are cached in-memory by (document, question, topK) hash to avoid repeat API calls.
  */
 export async function extractAnswer(
   question: string,
   documentText: string,
   topK = 5,
 ): Promise<{ answers: ExtractedAnswer[]; inextractable: boolean; inextractability_score: number; tokensUsed: number }> {
+  const cacheKey = qaKey(question, documentText, topK);
+  const cached = qaCacheGet(cacheKey);
+  if (cached) {
+    logger.debug({ cacheKey }, 'QA cache hit — skipping Isaacus call');
+    return cached;
+  }
+
   const response = await client.extractions.qa.create({
     model: 'kanon-answer-extractor',
     query: question,
@@ -66,12 +99,14 @@ export async function extractAnswer(
   }
 
   const { inextractability_score } = extraction;
-  return {
+  const result = {
     answers: extraction.answers as ExtractedAnswer[],
     inextractable: inextractability_score > 0.7,
     inextractability_score,
     tokensUsed: inputTokens(response),
   };
+  qaCacheSet(cacheKey, { ...result, tokensUsed: 0 }); // cache with 0 tokensUsed — subsequent hits are free
+  return result;
 }
 
 // ── Enrichment ────────────────────────────────────────────────────────────────

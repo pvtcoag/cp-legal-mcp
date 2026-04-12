@@ -153,7 +153,7 @@ function accuracyBadge(score: number | null | undefined): string {
   if (score == null) return '<span style="color:#aaa">—</span>';
   const pct = Math.round(score * 100);
   const cls = score >= 0.45 ? 'acc-high' : score >= 0.20 ? 'acc-mid' : 'acc-low';
-  return `<span class="acc-badge ${cls}" title="Extractive confidence: ${pct}% (legal text typically 5–45%)">${pct}%</span>`;
+  return `<span class="acc-badge ${cls} tip" data-tip="Extractive confidence: ${pct}%. Legal text typically scores 5–45% — reflects extractability, not correctness." tabindex="0">${pct}%</span>`;
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
@@ -256,13 +256,23 @@ function toolLabel(name: string): string {
 }
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Australia/Sydney' });
 }
 
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-AU', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney',
   });
+}
+
+/** Wrap a date in a <time data-utc> element so client JS can reformat to device timezone. */
+function tsDate(iso: string): string {
+  return `<time data-utc="${esc(iso)}">${fmtDate(iso)}</time>`;
+}
+
+/** Wrap a datetime in a <time data-utc data-fmt="datetime"> element for client-side timezone reformat. */
+function tsDateTime(iso: string): string {
+  return `<time data-utc="${esc(iso)}" data-fmt="datetime">${fmtDateTime(iso)}</time>`;
 }
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -333,6 +343,49 @@ td { padding: .625rem 1rem; vertical-align: top; }
 .acc-high { background: #d1fae5; color: #065f46; }
 .acc-mid  { background: #fef3c7; color: #92400e; }
 .acc-low  { background: #fee2e2; color: #991b1b; }
+
+/* CSS tooltip — works on hover and tap (via :focus on tabindex elements) */
+.tip { position: relative; cursor: help; display: inline-block; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1A1A1A;
+  color: #fff;
+  padding: .375rem .625rem;
+  border-radius: 5px;
+  font-size: .75rem;
+  font-weight: 400;
+  font-family: 'Inter', sans-serif;
+  white-space: normal;
+  width: 220px;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s .1s;
+  z-index: 200;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  text-align: left;
+}
+.tip::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1A1A1A;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s .1s;
+  z-index: 200;
+}
+.tip:hover::after, .tip:focus::after { opacity: 1; }
+.tip:hover::before, .tip:focus::before { opacity: 1; }
+.tip-right::after { left: auto; right: 0; transform: none; }
+.tip-right::before { left: auto; right: 12px; transform: none; }
 
 /* Search / filter bar */
 .filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
@@ -454,6 +507,24 @@ function page(title: string, body: string, user?: string, activePath?: string, a
 <body>
 ${nav}
 <main>${body}</main>
+<script>
+(function(){
+  var tz='Australia/Sydney';
+  try{var det=Intl.DateTimeFormat().resolvedOptions().timeZone;if(det)tz=det;}catch(e){}
+  if(tz==='Australia/Sydney')return;
+  var els=document.querySelectorAll('time[data-utc]');
+  for(var i=0;i<els.length;i++){
+    var el=els[i];var iso=el.getAttribute('data-utc');var fmt=el.getAttribute('data-fmt');
+    try{
+      var d=new Date(iso);
+      var opts=fmt==='datetime'
+        ?{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:tz}
+        :{day:'2-digit',month:'short',year:'numeric',timeZone:tz};
+      el.textContent=d.toLocaleString('en-AU',opts);
+    }catch(e){}
+  }
+})();
+</script>
 </body>
 </html>`;
 }
@@ -483,50 +554,10 @@ function renderResearcherCards(users: UserStatRow[]): string {
       <div class="researcher-stats">
         <span>${u.query_count} queries across ${u.matter_count} matter${u.matter_count !== 1 ? 's' : ''}</span>
         <span>${fmtTokens(u.total_tokens)} tokens</span>
-        <span>Last active ${fmtDate(u.last_activity)}</span>
+        <span>Last active ${tsDate(u.last_activity)}</span>
       </div>
     </div>`).join('');
   return `<div class="section-block no-print"><h2>Researchers</h2><div class="researcher-grid">${cards}</div></div>`;
-}
-
-function renderRailwayCosts(): string {
-  const uptimeDays = process.uptime() / 86400;
-  const memMB = process.memoryUsage().rss / (1024 * 1024);
-  const memGB = memMB / 1024;
-  // Estimate since deploy: memory cost (current RSS × uptime as lower bound)
-  const estMemCost = memGB * (uptimeDays * 24 * 60) * 0.000231;
-  const estCpuCost = 0.5 * (uptimeDays * 24 * 60) * 0.000463; // ~0.5 vCPU est
-  const estInfraCost = estMemCost + estCpuCost;
-  return `<div class="section-block no-print"><h2>Railway Infrastructure Costs</h2>
-    <p style="font-size:.8125rem;color:#555;margin-bottom:.875rem">
-      Infrastructure costs run independently of per-query API usage.
-      Egress and volume costs are not tracked per-query.
-    </p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem;margin-bottom:.875rem">
-      <div class="card" style="min-width:0">
-        <div class="card-label">Memory</div>
-        <div class="card-value sm">$0.000231<span style="font-size:.6875rem;font-weight:400;color:#888">/GB/min</span></div>
-        <div class="card-sub">~${memMB.toFixed(0)} MB current RSS</div>
-      </div>
-      <div class="card" style="min-width:0">
-        <div class="card-label">CPU</div>
-        <div class="card-value sm">$0.000463<span style="font-size:.6875rem;font-weight:400;color:#888">/vCPU/min</span></div>
-      </div>
-      <div class="card" style="min-width:0">
-        <div class="card-label">Egress</div>
-        <div class="card-value sm">$0.05<span style="font-size:.6875rem;font-weight:400;color:#888">/GB</span></div>
-      </div>
-      <div class="card" style="min-width:0">
-        <div class="card-label">Volume Storage</div>
-        <div class="card-value sm">$0.00000347<span style="font-size:.6875rem;font-weight:400;color:#888">/GB/min</span></div>
-      </div>
-      <div class="card" style="min-width:0">
-        <div class="card-label">Est. Since Deploy <span class="est-badge">est</span></div>
-        <div class="card-value sm">${fmtCostValue(estInfraCost)}</div>
-        <div class="card-sub">${(uptimeDays).toFixed(1)} day uptime · excl. egress &amp; volume</div>
-      </div>
-    </div>
-  </div>`;
 }
 
 function renderPopularCases(cases: PopularCaseRow[]): string {
@@ -544,7 +575,11 @@ function renderPopularCases(cases: PopularCaseRow[]): string {
 }
 
 function renderErrorStats(stats: ErrorStatRow[]): string {
-  if (stats.length === 0) return '';
+  if (stats.length === 0) {
+    return `<div class="section-block no-print"><h2>Error Rates by Tool</h2>
+      <p style="color:#888;font-size:.8125rem;padding:.25rem 0">No errors recorded.</p>
+    </div>`;
+  }
   const rows = stats.map((s) => `<tr>
     <td>${esc(toolLabel(s.tool_name))}</td>
     <td style="text-align:right">${s.total_queries}</td>
@@ -572,7 +607,7 @@ function renderDashboardCards(
   const accuracyHtml = avgAccuracy != null
     ? `<div class="card">
         <div class="card-label">Avg Extraction Accuracy
-          <span title="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not answer correctness." style="cursor:help;color:#aaa;margin-left:.25rem">ⓘ</span>
+          <span class="tip" data-tip="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not whether the answer is correct." tabindex="0" style="color:#aaa;margin-left:.25rem">ⓘ</span>
         </div>
         <div class="card-value sm">${accuracyBadge(avgAccuracy)}</div>
         <div class="card-sub">across QA-capable tools</div>
@@ -593,7 +628,7 @@ function renderDashboardCards(
       <div class="card-value">${stats.total_tokens > 0 ? Math.round(stats.total_tokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
     </div>
     <div class="card">
-      <div class="card-label">Est. Isaacus Cost <span class="est-badge">est</span></div>
+      <div class="card-label">Est. Isaacus Cost <span class="est-badge tip" data-tip="Per-tool rates: Enricher $3.50/1M, Answer Extractor $1.50/1M, Classifier $1.00/1M. Excludes Railway infrastructure." tabindex="0">est</span></div>
       <div class="card-value sm">${computeDashboardCost(costByTool)}</div>
       <div class="card-sub">Per-tool rates</div>
     </div>
@@ -738,7 +773,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
         <tbody>
           ${recentActivity.map((r) => `
             <tr${r.is_error ? ' class="row-error"' : ''}>
-              <td class="date-small">${fmtDateTime(r.created_at)}</td>
+              <td class="date-small">${tsDateTime(r.created_at)}</td>
               <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
@@ -749,20 +784,20 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
       </table></div>
     </div>` : '';
 
+  const nowIso = new Date().toISOString();
   const lastUpdated = new Date().toLocaleString('en-AU', {
-    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney',
   });
 
   res.send(page('Dashboard', `
     <h1>Dashboard ${adminBadge}</h1>
     <p class="subtitle">Aggregated research analytics${isAdmin(user) ? ' across all matters and researchers' : ' for your matters'}
-      <span style="float:right;font-size:.75rem;color:#aaa">Updated ${esc(lastUpdated)} · auto-refreshes every 5 min</span>
+      <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time> · auto-refreshes every 5 min</span>
     </p>
     ${renderDashboardCards(stats, costByTool, avgAccuracy)}
     ${renderToolChart(toolStats)}
     ${isAdmin(user) ? renderResearcherCards(userStats) : ''}
     ${isAdmin(user) ? renderPopularCases(popularCases) : ''}
-    ${isAdmin(user) ? renderRailwayCosts() : ''}
     ${renderErrorStats(errorStats)}
     ${recentHtml}
   `, user, '/matters/dashboard', 300));
@@ -805,7 +840,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
       const tools = (m.tools_used ?? []).map((t) => `<span class="tag">${esc(toolLabel(t))}</span>`).join('');
       return `<tr>
         <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref">${esc(m.matter_ref)}</a></td>
-        <td class="date-small">${fmtDate(m.first_activity)}<br>${fmtDate(m.last_activity)}</td>
+        <td class="date-small">${tsDate(m.first_activity)}<br>${tsDate(m.last_activity)}</td>
         <td class="count" style="text-align:right">${m.query_count}</td>
         <td class="users-cell">${esc(researchers)}</td>
         <td>${tools}</td>
@@ -889,7 +924,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     const rowClass = r.is_error ? ' class="row-error"' : '';
     const costCell = estCost(r.api_tokens_used ?? 0, r.tool_name);
     return `<tr${rowClass}>
-      <td class="date-small">${fmtDateTime(r.created_at)}</td>
+      <td class="date-small">${tsDateTime(r.created_at)}</td>
       <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
       <td class="users-cell">${esc(r.user_id ?? '—')}</td>
       <td><div class="query-full">${esc(r.query_text)}</div></td>
@@ -909,7 +944,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
     </div>
     <h1>${esc(ref)}</h1>
-    <p class="subtitle">${fmtDate(firstRow.created_at)} to ${fmtDate(lastRow.created_at)}</p>
+    <p class="subtitle">${tsDate(firstRow.created_at)} to ${tsDate(lastRow.created_at)}</p>
     <div class="summary-grid">
       <div class="card">
         <div class="card-label">Total Queries</div>
@@ -958,7 +993,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
         <th class="no-print-col" style="text-align:right">Tokens</th>
         <th style="text-align:right">Cost</th>
         <th style="text-align:center">Accuracy
-          <span class="no-print-col" title="Isaacus extractive confidence. Legal text typically scores 5–45%." style="cursor:help;color:#aaa;margin-left:.2rem;font-weight:400">ⓘ</span>
+          <span class="tip tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:#aaa;margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
         </th>
         <th class="no-print-col">Top Results</th>
       </tr></thead>

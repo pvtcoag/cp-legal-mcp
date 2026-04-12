@@ -88,7 +88,7 @@ export function registerGetMatterHistory(server: McpServer): void {
             matter_ref: input.matter_ref,
             record_count: records.length,
             records,
-          }, null, 2),
+          }),
         }],
       };
     },

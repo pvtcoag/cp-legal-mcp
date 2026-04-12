@@ -8,6 +8,7 @@ import {
   JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { extractAnswer, type ExtractedAnswer } from '../isaacus-client.js';
+import { extractRelevantPassages } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
@@ -152,8 +153,8 @@ export function registerCompareCases(server: McpServer): void {
       let extractionA, extractionB;
       try {
         [extractionA, extractionB] = await Promise.all([
-          extractAnswer(input.question, docA.text, input.top_k ?? 2),
-          extractAnswer(input.question, docB.text, input.top_k ?? 2),
+          extractAnswer(input.question, extractRelevantPassages(docA.text, input.question, 24_000), input.top_k ?? 2),
+          extractAnswer(input.question, extractRelevantPassages(docB.text, input.question, 24_000), input.top_k ?? 2),
         ]);
       } catch (err) {
         log.warn({ err }, 'Isaacus extractAnswer failed');
@@ -203,7 +204,7 @@ export function registerCompareCases(server: McpServer): void {
           case_b: panelB,
           agreement_note,
           _suggested_next: 'Use ask_judgment on either case for follow-up questions on specific aspects of the reasoning. Use enrich_judgment to check whether one case cited the other and with what reception sentiment.',
-        }, null, 2) }],
+        }) }],
       };
     },
   );

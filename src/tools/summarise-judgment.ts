@@ -8,6 +8,7 @@ import {
   JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { enrichDocument, extractAnswer, type ExtractedAnswer } from '../isaacus-client.js';
+import { extractRelevantPassages, truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
@@ -16,6 +17,14 @@ const inputSchema = z.object({
     .string()
     .min(5)
     .describe('Neutral citation (e.g. "[2024] HCA 12") or full AustLII URL of the judgment'),
+  include_metadata: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Include enriched metadata: parties, key dates, cases cited with reception sentiment, and defined terms. ' +
+      'Set false for a faster summary containing only the five narrative dimensions (holding, orders, key facts, ' +
+      'legal principles, outcome). Reduces cost by ~32% — use when you need the summary only, not the citation network.',
+    ),
   matter_ref: z
     .string()
     .max(100)
@@ -45,7 +54,7 @@ function qaField(
 export function registerSummariseJudgment(server: McpServer): void {
   server.tool(
     'summarise_judgment',
-    'Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome — combined with enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Runs enrichment and five parallel extractive QA calls in a single operation. More efficient than get_judgment for a quick overview, and more comprehensive than ask_judgment for a single question. Ideal as a first step before deeper research.',
+    'Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome. By default also includes enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Set include_metadata: false for a faster, cheaper summary covering only the five narrative dimensions — useful when you just need the substance and not the citation network. Ideal as a first step before deeper research.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'summarise_judgment', input: input.citation_or_url });
@@ -91,17 +100,30 @@ export function registerSummariseJudgment(server: McpServer): void {
         throw err;
       }
 
-      // Enrichment + all five QA calls run in parallel for maximum throughput
-      let enrichResult, holdingR, ordersR, factsR, principlesR, outcomeR;
+      // Pre-process document text to reduce token costs:
+      // - For QA: extract only relevant passages via keyword pre-filter (up to 24K chars)
+      // - For enrichment: hard-truncate preserving start + end (up to 50K chars)
+      const combinedQaQuery = Object.values(QA_QUESTIONS).join(' ');
+      const qaText = extractRelevantPassages(doc.text, combinedQaQuery, 24_000);
+      const enrichText = input.include_metadata ? truncateText(doc.text, 50_000) : '';
+
+      // Run QA + (optionally) enrichment in parallel
+      let enrichResult: Awaited<ReturnType<typeof enrichDocument>> | null = null;
+      let holdingR, ordersR, factsR, principlesR, outcomeR;
       try {
-        [enrichResult, holdingR, ordersR, factsR, principlesR, outcomeR] = await Promise.all([
-          enrichDocument(doc.text),
-          extractAnswer(QA_QUESTIONS.holding, doc.text, 1),
-          extractAnswer(QA_QUESTIONS.orders, doc.text, 1),
-          extractAnswer(QA_QUESTIONS.key_facts, doc.text, 1),
-          extractAnswer(QA_QUESTIONS.legal_principles, doc.text, 1),
-          extractAnswer(QA_QUESTIONS.outcome, doc.text, 1),
-        ]);
+        const promises: Promise<unknown>[] = [
+          extractAnswer(QA_QUESTIONS.holding,          qaText, 1),
+          extractAnswer(QA_QUESTIONS.orders,           qaText, 1),
+          extractAnswer(QA_QUESTIONS.key_facts,        qaText, 1),
+          extractAnswer(QA_QUESTIONS.legal_principles, qaText, 1),
+          extractAnswer(QA_QUESTIONS.outcome,          qaText, 1),
+          ...(input.include_metadata ? [enrichDocument(enrichText)] : []),
+        ];
+        const results = await Promise.all(promises);
+        [holdingR, ordersR, factsR, principlesR, outcomeR] = results as [
+          typeof holdingR, typeof ordersR, typeof factsR, typeof principlesR, typeof outcomeR
+        ];
+        enrichResult = input.include_metadata ? (results[5] as typeof enrichResult) : null;
       } catch (err) {
         log.warn({ err }, 'Isaacus summarisation failed');
         return {
@@ -116,16 +138,16 @@ export function registerSummariseJudgment(server: McpServer): void {
         };
       }
 
-      const enriched = enrichResult.data;
+      const enriched = enrichResult?.data ?? null;
       const totalTokens =
-        enrichResult.tokensUsed +
-        holdingR.tokensUsed + ordersR.tokensUsed + factsR.tokensUsed +
-        principlesR.tokensUsed + outcomeR.tokensUsed;
+        (enrichResult?.tokensUsed ?? 0) +
+        holdingR!.tokensUsed + ordersR!.tokensUsed + factsR!.tokensUsed +
+        principlesR!.tokensUsed + outcomeR!.tokensUsed;
 
       const citation = doc.citation ?? resolved.citation;
       const title = doc.title ?? citation ?? input.citation_or_url;
 
-      const qaScores = [holdingR, ordersR, factsR, principlesR, outcomeR]
+      const qaScores = [holdingR!, ordersR!, factsR!, principlesR!, outcomeR!]
         .flatMap((r) => r.answers.map((a) => a.score));
       const accuracy_score = qaScores.length > 0 ? Math.min(...qaScores) : undefined;
 
@@ -147,21 +169,27 @@ export function registerSummariseJudgment(server: McpServer): void {
             url: resolved.url,
             canonical_url: resolved.canonicalUrl ?? resolved.url,
           },
-          document_type: enriched.document_type,
-          jurisdiction: enriched.jurisdiction,
-          parties: enriched.parties,
-          key_dates: enriched.key_dates,
+          ...(enriched ? {
+            document_type: enriched.document_type,
+            jurisdiction: enriched.jurisdiction,
+            parties: enriched.parties,
+            key_dates: enriched.key_dates,
+          } : {}),
           summary: {
-            holding: qaField(holdingR),
-            orders: qaField(ordersR),
-            key_facts: qaField(factsR),
-            legal_principles: qaField(principlesR),
-            outcome: qaField(outcomeR),
+            holding: qaField(holdingR!),
+            orders: qaField(ordersR!),
+            key_facts: qaField(factsR!),
+            legal_principles: qaField(principlesR!),
+            outcome: qaField(outcomeR!),
           },
-          cases_cited: enriched.citations_made,
-          defined_terms: enriched.defined_terms,
-          _suggested_next: 'Use ask_judgment for questions not covered by the five summary dimensions above. Use find_citing_cases to trace subsequent treatment. Use find_related_cases to discover cases addressing similar issues. Do NOT call enrich_judgment — enrichment data is already included above.',
-        }, null, 2) }],
+          ...(enriched ? {
+            cases_cited: enriched.citations_made,
+            defined_terms: enriched.defined_terms,
+          } : {}),
+          _suggested_next: enriched
+            ? 'Use ask_judgment for questions not covered by the five summary dimensions above. Use find_citing_cases to trace subsequent treatment. Use find_related_cases to discover cases addressing similar issues. Do NOT call enrich_judgment — enrichment data is already included above.'
+            : 'Metadata (parties, citations made) was skipped (include_metadata: false). Call enrich_judgment if you need the citation network. Use ask_judgment for targeted follow-up questions.',
+        }) }],
       };
     },
   );

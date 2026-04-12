@@ -8,6 +8,7 @@ import {
   JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { enrichDocument } from '../isaacus-client.js';
+import { truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
@@ -78,7 +79,7 @@ export function registerEnrichJudgment(server: McpServer): void {
       let enriched;
       let enrichTokens = 0;
       try {
-        const enrichResult = await enrichDocument(doc.text);
+        const enrichResult = await enrichDocument(truncateText(doc.text, 50_000));
         enriched = enrichResult.data;
         enrichTokens = enrichResult.tokensUsed;
       } catch (err) {
@@ -120,7 +121,7 @@ export function registerEnrichJudgment(server: McpServer): void {
           citations_made: enriched.citations_made,
           defined_terms: enriched.defined_terms,
           _suggested_next: 'Review citations_made sentiment (positive/negative/distinguished/neutral) to assess how cited cases were received. Use find_citing_cases to see who has cited this judgment in turn. Use ask_judgment for substantive questions about the reasoning.',
-        }, null, 2) }],
+        }) }],
       };
     },
   );

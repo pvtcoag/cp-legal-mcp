@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { fetchDocumentText, AuslawError } from '../auslaw-client.js';
 import { extractAnswer } from '../isaacus-client.js';
+import { extractRelevantPassages } from '../text-utils.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery } from '../matter-log.js';
+import { recordMatterQuery, recordMatterError } from '../matter-log.js';
 
 const inputSchema = z.object({
   url: z
@@ -63,11 +64,14 @@ export function registerAskLegislation(server: McpServer): void {
         throw err;
       }
 
+      const filteredText = extractRelevantPassages(doc.text, input.question, 24_000);
+
       let extraction;
       try {
-        extraction = await extractAnswer(input.question, doc.text, input.top_k ?? 3);
+        extraction = await extractAnswer(input.question, filteredText, input.top_k ?? 3);
       } catch (err) {
         log.warn({ err }, 'Isaacus extractAnswer failed');
+        recordMatterError({ matter_ref: input.matter_ref, tool_name: 'ask_legislation', query_text: input.question, error_message: 'extraction_failed' });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'extraction_failed',
@@ -100,7 +104,7 @@ export function registerAskLegislation(server: McpServer): void {
               'The answer to this question does not appear to be present in this legislation. ' +
               'Try rephrasing the question, or use get_legislation to read the full text.',
             inextractability_score: extraction.inextractability_score,
-          }, null, 2) }],
+          }) }],
         };
       }
 
@@ -115,7 +119,7 @@ export function registerAskLegislation(server: McpServer): void {
             char_range: [a.start, a.end],
           })),
           _suggested_next: 'Use research_cases to find judgments that have interpreted or applied this provision. Use ask_legislation with a follow-up question to extract related provisions (e.g. definitions, penalty provisions, exceptions).',
-        }, null, 2) }],
+        }) }],
       };
     },
   );

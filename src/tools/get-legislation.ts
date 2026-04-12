@@ -64,7 +64,7 @@ export function registerGetLegislation(server: McpServer): void {
           char_count: doc.text.length,
           text: doc.text,
           _suggested_next: 'Use ask_legislation for targeted questions about specific provisions — it is faster than reading the full text. Use research_cases to find judgments that have interpreted key sections.',
-        }, null, 2) }],
+        }) }],
       };
     },
   );

@@ -8,8 +8,9 @@ import {
   JADE_EXPIRY_NOTICE,
 } from '../auslaw-client.js';
 import { extractAnswer } from '../isaacus-client.js';
+import { extractRelevantPassages } from '../text-utils.js';
 import { logger } from '../logger.js';
-import { recordMatterQuery } from '../matter-log.js';
+import { recordMatterQuery, recordMatterError } from '../matter-log.js';
 
 const inputSchema = z.object({
   citation_or_url: z
@@ -88,12 +89,16 @@ export function registerAskJudgment(server: McpServer): void {
         throw err;
       }
 
+      // Pre-filter document to relevant passages before sending to Kanon (reduces token cost ~50–70%)
+      const filteredText = extractRelevantPassages(doc.text, input.question, 24_000);
+
       // Extract answers using Isaacus
       let extraction;
       try {
-        extraction = await extractAnswer(input.question, doc.text, input.top_k ?? 3);
+        extraction = await extractAnswer(input.question, filteredText, input.top_k ?? 3);
       } catch (err) {
         log.warn({ err }, 'Isaacus extractAnswer failed');
+        recordMatterError({ matter_ref: input.matter_ref, tool_name: 'ask_judgment', query_text: input.question, error_message: 'extraction_failed' });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'extraction_failed',
@@ -127,7 +132,7 @@ export function registerAskJudgment(server: McpServer): void {
               'The answer to this question does not appear to be present in the judgment text. ' +
               'Try rephrasing the question, or use get_judgment to read the full text.',
             inextractability_score: extraction.inextractability_score,
-          }, null, 2) }],
+          }) }],
         };
       }
 
@@ -142,7 +147,7 @@ export function registerAskJudgment(server: McpServer): void {
             char_range: [a.start, a.end],
           })),
           _suggested_next: 'Use compare_cases to contrast this answer with how another case addressed the same question. Use generate_pinpoint with the char_range offsets to produce a citable pinpoint reference.',
-        }, null, 2) }],
+        }) }],
       };
     },
   );

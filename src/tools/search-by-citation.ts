@@ -105,7 +105,7 @@ export function registerSearchByCitation(server: McpServer): void {
             _suggested_next: results.length > 0
               ? 'Call summarise_judgment with the top result URL for a structured overview. Use find_citing_cases to trace how this case has been applied or distinguished.'
               : 'No match found — check the citation format or try research_cases with the party names as a natural language query.',
-          }, null, 2),
+          }),
         }],
       };
     },

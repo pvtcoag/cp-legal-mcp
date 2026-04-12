@@ -122,7 +122,7 @@ export function registerResearchCases(server: McpServer): void {
         title: item.title,
         ...(input.include_citations && item.citation ? { citation: item.citation } : {}),
         url: item.url,
-        excerpt: item.excerpt,
+        ...(item.excerpt ? { excerpt: item.excerpt.length > 200 ? item.excerpt.slice(0, 200) + '…' : item.excerpt } : {}),
         ...(item.court ? { court: item.court } : {}),
         ...(item.date ? { date: item.date } : {}),
         ...(item.jurisdiction ? { jurisdiction: item.jurisdiction } : {}),
@@ -151,7 +151,7 @@ export function registerResearchCases(server: McpServer): void {
             _suggested_next: results.length > 0
               ? 'Call summarise_judgment on the 1–2 most relevant results for a structured overview (holding, orders, facts, principles, outcome) before going deeper. Use ask_judgment only for questions outside those five dimensions.'
               : 'No results found — try broadening the query, removing jurisdiction filters, or using classify_legal_issue to identify better jurisdiction codes.',
-          }, null, 2),
+          }),
         }],
       };
     },

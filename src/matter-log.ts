@@ -39,3 +39,23 @@ export function recordMatterQuery(params: MatterLogParams): void {
     user_id: getUser(),
   }).catch((err) => logger.warn({ err }, 'Matter query log failed — continuing'));
 }
+
+/**
+ * Convenience wrapper for recording tool error events.
+ * Calls recordMatterQuery with is_error: true, result_count: 0, top_results: [].
+ * Fire-and-forget — never throws.
+ */
+export function recordMatterError(params: {
+  matter_ref?: string;
+  tool_name: string;
+  query_text: string;
+  error_message: string;
+}): void {
+  recordMatterQuery({
+    ...params,
+    result_count: 0,
+    top_results: [],
+    is_error: true,
+    error_message: params.error_message,
+  });
+}

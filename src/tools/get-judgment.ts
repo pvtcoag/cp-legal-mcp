@@ -93,7 +93,7 @@ export function registerGetJudgment(server: McpServer): void {
           canonical_url: resolved.canonicalUrl ?? resolved.url,
           char_count: doc.text.length,
           text: doc.text,
-        }, null, 2) }],
+        }) }],
       };
     },
   );
