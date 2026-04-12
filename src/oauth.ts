@@ -23,6 +23,7 @@ import {
   getClient,
   createAuthCode,
   consumeAuthCode,
+  listClientsDebug,
 } from './oauth-store.js';
 import { upsertOAuthAuthorization, logLoginEvent, getUserByUsername } from './db.js';
 import { decryptToken, verifyToken } from './token-utils.js';
@@ -115,6 +116,7 @@ oauthRouter.use((req: Request, res: Response, next) => {
 // Tells mcp-remote where to find the authorization server.
 oauthRouter.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
   const base = issuer();
+  res.setHeader('Cache-Control', 'no-store');
   res.json({
     resource: base,
     authorization_servers: [base],
@@ -125,6 +127,7 @@ oauthRouter.get('/.well-known/oauth-protected-resource', (_req: Request, res: Re
 // Tells mcp-remote which endpoints to use and what features are supported.
 oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: Response) => {
   const base = issuer();
+  res.setHeader('Cache-Control', 'no-store');
   res.json({
     issuer: base,
     authorization_endpoint: `${base}/oauth/authorize`,
@@ -420,22 +423,40 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     code_verifier,
   } = req.body as Record<string, string | undefined>;
 
+  // Log every token request so Railway shows exactly what was received.
+  logger.info(
+    {
+      grant_type,
+      client_id,
+      redirect_uri,
+      has_code: !!code,
+      has_code_verifier: !!code_verifier,
+      has_client_secret: !!client_secret,
+      content_type: req.headers['content-type'],
+    },
+    'OAuth: token request received',
+  );
+
   if (grant_type !== 'authorization_code') {
+    logger.warn({ grant_type }, 'OAuth: unsupported grant_type');
     res.status(400).json({ error: 'unsupported_grant_type' });
     return;
   }
   if (!code || !redirect_uri || !client_id || !code_verifier) {
+    logger.warn({ has_code: !!code, has_redirect_uri: !!redirect_uri, has_client_id: !!client_id, has_code_verifier: !!code_verifier }, 'OAuth: token request missing required fields');
     res.status(400).json({ error: 'invalid_request', error_description: 'Missing required parameters' });
     return;
   }
 
   const entry = consumeAuthCode(code);
   if (!entry) {
+    logger.warn({ client_id }, 'OAuth: auth code invalid or expired');
     res.status(400).json({ error: 'invalid_grant', error_description: 'Code invalid or expired' });
     return;
   }
 
   if (entry.clientId !== client_id) {
+    logger.warn({ expected: entry.clientId, got: client_id }, 'OAuth: client_id mismatch');
     res.status(400).json({ error: 'invalid_grant', error_description: 'client_id mismatch' });
     return;
   }
@@ -454,12 +475,13 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
   }
 
   if (entry.redirectUri !== redirect_uri) {
+    logger.warn({ stored: entry.redirectUri, got: redirect_uri }, 'OAuth: redirect_uri mismatch at token exchange');
     res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
     return;
   }
 
   if (!verifyPkce(code_verifier, entry.codeChallenge, entry.codeChallengeMethod)) {
-    logger.warn({ user: entry.userId }, 'OAuth: PKCE verification failed');
+    logger.warn({ user: entry.userId, method: entry.codeChallengeMethod }, 'OAuth: PKCE verification failed');
     res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
     return;
   }
@@ -525,6 +547,18 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     // No expiry — token is valid until MCP_AUTH_TOKENS is changed in Railway
     scope: 'mcp',
   });
+});
+
+// GET /oauth/debug — Diagnostic endpoint: registered clients (no secrets).
+// Only accessible when DEBUG_SECRET env var is set and ?secret=<value> matches.
+oauthRouter.get('/oauth/debug', (req: Request, res: Response) => {
+  const debugSecret = process.env.DEBUG_SECRET;
+  if (!debugSecret || req.query['secret'] !== debugSecret) {
+    res.status(403).json({ error: 'forbidden' });
+    return;
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ clients: listClientsDebug() });
 });
 
 // ── Utility ───────────────────────────────────────────────────────────────────

@@ -76,6 +76,23 @@ export function getClient(clientId: string): OAuthClient | undefined {
   return undefined;
 }
 
+/** Return a redacted view of all registered clients (no secrets) for diagnostics. */
+export function listClientsDebug(): Array<{
+  clientId: string;
+  clientName?: string;
+  redirectUris: string[];
+  allowedRedirectPrefixes?: string[];
+  hasSecret: boolean;
+}> {
+  return [...clients.values()].map(({ clientId, clientName, redirectUris, allowedRedirectPrefixes, clientSecret }) => ({
+    clientId,
+    clientName,
+    redirectUris,
+    allowedRedirectPrefixes,
+    hasSecret: !!clientSecret,
+  }));
+}
+
 // ── Auth codes ────────────────────────────────────────────────────────────────
 // Short-lived (5 min), single-use. Deleted on consumption or expiry.
 
