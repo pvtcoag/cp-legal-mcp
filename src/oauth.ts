@@ -126,31 +126,39 @@ oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: 
 });
 
 // RFC 7591 — Dynamic Client Registration
-// mcp-remote registers itself before starting the flow.
+// Used by ChatGPT, mcp-remote, Cursor, Windsurf, and other MCP clients that
+// self-register before starting the OAuth flow. No client secret is issued —
+// PKCE S256 handles the security.
 oauthRouter.post('/oauth/register', (req: Request, res: Response) => {
-  const { redirect_uris, client_name } = req.body as {
-    redirect_uris?: unknown;
-    client_name?: unknown;
-  };
+  const body = req.body as Record<string, unknown>;
+  const { redirect_uris, client_name, scope } = body;
 
   if (!Array.isArray(redirect_uris) || redirect_uris.length === 0) {
     res.status(400).json({ error: 'invalid_client_metadata', error_description: 'redirect_uris is required' });
     return;
   }
 
-  const uris = redirect_uris as string[];
+  const uris = (redirect_uris as unknown[]).filter((u) => typeof u === 'string') as string[];
+  if (uris.length === 0) {
+    res.status(400).json({ error: 'invalid_client_metadata', error_description: 'redirect_uris must contain at least one string URI' });
+    return;
+  }
+
   const name = typeof client_name === 'string' ? client_name : undefined;
-
   const clientId = registerClient({ redirectUris: uris, clientName: name });
-  logger.debug({ clientId, clientName: name }, 'OAuth: dynamic client registered');
+  logger.info({ clientId, clientName: name, redirectUris: uris }, 'OAuth: dynamic client registered');
 
+  // RFC 7591 §3.2.1 — echo back all registered metadata plus server-assigned fields
   res.status(201).json({
     client_id: clientId,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
     redirect_uris: uris,
-    client_name: name,
+    ...(name ? { client_name: name } : {}),
+    ...(typeof scope === 'string' ? { scope } : { scope: 'mcp' }),
     token_endpoint_auth_method: 'none',
     grant_types: ['authorization_code'],
     response_types: ['code'],
+    code_challenge_methods_supported: ['S256'],
   });
 });
 
