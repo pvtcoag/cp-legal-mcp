@@ -27,6 +27,8 @@ import {
   getErrorStats,
   getAggregateAccuracy,
   getDashboardCostByTool,
+  getUserByUsername,
+  logLoginEvent,
   type MatterSummaryRow,
   type MatterHistoryRow,
   type DashboardStats,
@@ -36,6 +38,7 @@ import {
   type ErrorStatRow,
   type ToolTokenStat,
 } from './db.js';
+import { verifyToken } from './token-utils.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
@@ -43,7 +46,7 @@ export const mattersRouter = Router();
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const COOKIE = 'cvn_matters';
+export const COOKIE = 'cvn_matters';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 const TOOL_LABELS: Record<string, string> = {
@@ -169,37 +172,48 @@ function accuracyBadge(score: number | null | undefined): string {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
-function sessionSecret(): string {
+export function sessionSecret(): string {
   return process.env['SESSION_SECRET'] ?? process.env['MCP_AUTH_TOKENS'] ?? 'dev-fallback';
 }
 
-function signSession(user: string): string {
+/** Session payload: `username:isAdmin:exp:sig` where isAdmin is '1' or '0'. */
+export function signSession(user: string, isAdminUser: boolean): string {
   const exp = Date.now() + SESSION_TTL_MS;
-  const payload = `${user}:${exp}`;
+  const payload = `${user}:${isAdminUser ? '1' : '0'}:${exp}`;
   const sig = createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
   return `${payload}:${sig}`;
 }
 
-function verifySession(value: string): string | null {
+export interface SessionData { user: string; isAdmin: boolean; }
+
+export function verifySession(value: string): SessionData | null {
   const lastColon = value.lastIndexOf(':');
   if (lastColon < 0) return null;
   const payload = value.slice(0, lastColon);
   const sig = value.slice(lastColon + 1);
-  const colonIdx = payload.indexOf(':');
-  if (colonIdx < 0) return null;
-  const user = payload.slice(0, colonIdx);
-  const exp = parseInt(payload.slice(colonIdx + 1), 10);
+
+  // Payload format: username:isAdmin:exp
+  const parts = payload.split(':');
+  if (parts.length < 3) return null;
+  const expStr = parts[parts.length - 1]!;
+  const adminFlag = parts[parts.length - 2]!;
+  const user = parts.slice(0, parts.length - 2).join(':'); // username may theoretically contain colons
+  const exp = parseInt(expStr, 10);
+
   if (!user || isNaN(exp) || Date.now() > exp) return null;
+  // adminFlag may be '0', '1', or missing (legacy sessions without isAdmin)
+  const isAdminUser = adminFlag === '1';
+
   const expected = createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
   try {
     const a = Buffer.from(sig, 'base64url');
     const b = Buffer.from(expected, 'base64url');
     if (a.length !== b.length) return null;
-    return timingSafeEqual(a, b) ? user : null;
+    return timingSafeEqual(a, b) ? { user, isAdmin: isAdminUser } : null;
   } catch { return null; }
 }
 
-function parseCookies(req: Request): Record<string, string> {
+export function parseCookies(req: Request): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const eq = part.indexOf('=');
@@ -209,32 +223,55 @@ function parseCookies(req: Request): Record<string, string> {
   return out;
 }
 
-function getSessionUser(req: Request): string | null {
+function getSessionData(req: Request): SessionData | null {
   const raw = parseCookies(req)[COOKIE];
   return raw ? verifySession(raw) : null;
 }
 
-function setSessionCookie(res: Response, user: string): void {
+function getSessionUser(req: Request): string | null {
+  return getSessionData(req)?.user ?? null;
+}
+
+function getSessionIsAdmin(req: Request): boolean {
+  return getSessionData(req)?.isAdmin ?? false;
+}
+
+function setSessionCookie(res: Response, user: string, isAdminUser: boolean): void {
   res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(signSession(user))}; HttpOnly; Secure; SameSite=Strict; Path=/matters; Max-Age=${8 * 3600}`);
+    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser))}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${8 * 3600}`);
 }
 
 function clearSessionCookie(res: Response): void {
   res.setHeader('Set-Cookie',
-    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/matters; Max-Age=0`);
+    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`);
 }
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
-function adminUsers(): Set<string> {
+function adminUsersFromEnv(): Set<string> {
   return new Set(config.ADMIN_USERS.split(',').map((u) => u.trim().toLowerCase()).filter(Boolean));
 }
 
-function isAdmin(user: string): boolean {
-  return adminUsers().has(user.toLowerCase());
+/** Check if user is admin — reads from session cookie (no DB query per request). */
+function isAdmin(user: string, req?: Request): boolean {
+  if (req) return getSessionIsAdmin(req);
+  return adminUsersFromEnv().has(user.toLowerCase());
 }
 
-function getCredentials(): Map<string, string> {
+/** Parse client name from User-Agent string. */
+function parseClientName(ua?: string): string {
+  if (!ua) return 'Unknown';
+  if (/ClaudeDesktop/i.test(ua)) return 'Claude Desktop';
+  if (/claude\.ai/i.test(ua)) return 'Claude Web';
+  if (/mcp-remote/i.test(ua)) return 'mcp-remote';
+  if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) return 'Chrome';
+  if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return 'Safari';
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/Edg\//.test(ua)) return 'Edge';
+  return 'Browser';
+}
+
+function getEnvCredentials(): Map<string, string> {
   const map = new Map<string, string>();
   for (const pair of (process.env['MCP_AUTH_TOKENS'] ?? '').split(',')) {
     const colon = pair.indexOf(':');
@@ -244,6 +281,37 @@ function getCredentials(): Map<string, string> {
     if (u && t) map.set(u, t);
   }
   return map;
+}
+
+/** Get list of known usernames from env var (for filter tabs). */
+function getCredentials(): Map<string, string> {
+  return getEnvCredentials();
+}
+
+/**
+ * Validate username + token against DB first, then env var fallback.
+ * Returns isAdmin status if valid, null if invalid.
+ */
+async function validateCredentials(username: string, token: string): Promise<{ isAdmin: boolean } | null> {
+  // Try DB first
+  const dbUser = await getUserByUsername(username).catch(() => null);
+  if (dbUser) {
+    if (!dbUser.is_active) return null;
+    if (verifyToken(token, dbUser.token_salt, dbUser.token_hash)) {
+      return { isAdmin: dbUser.is_admin };
+    }
+    return null;
+  }
+  // Fall back to env var
+  const creds = getEnvCredentials();
+  const expected = creds.get(username);
+  if (!expected) return null;
+  let ok = false;
+  if (expected.length === token.length) {
+    try { ok = timingSafeEqual(Buffer.from(token), Buffer.from(expected)); } catch { /* */ }
+  }
+  if (!ok) return null;
+  return { isAdmin: adminUsersFromEnv().has(username) };
 }
 
 function requireSession(req: Request, res: Response, next: NextFunction): void {
@@ -288,7 +356,7 @@ function tsDateTime(iso: string): string {
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
-const CSS = `
+export const CSS = `
 :root {
   --primary:   #0B1F33;
   --secondary: #2E3A46;
@@ -481,7 +549,7 @@ input:focus { border-color: var(--primary); }
 .print-header { display: none; }
 `;
 
-const LOGO_SRC = '';
+export const LOGO_SRC = '';
 
 /** No-cache middleware — prevents Cloudflare and browsers from serving stale matter pages. */
 function noCache(_req: Request, res: Response, next: NextFunction): void {
@@ -490,7 +558,7 @@ function noCache(_req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-function page(title: string, body: string, user?: string, activePath?: string, autoRefreshSecs?: number): string {
+function page(title: string, body: string, user?: string, activePath?: string, autoRefreshSecs?: number, isAdminUser?: boolean): string {
   const nav = user
     ? `<nav>
         <a href="/matters" class="nav-brand">
@@ -501,6 +569,7 @@ function page(title: string, body: string, user?: string, activePath?: string, a
         <div class="nav-links">
           <a href="/matters" class="nav-link${activePath === '/matters' ? ' active' : ''}">Matters</a>
           <a href="/matters/dashboard" class="nav-link${activePath === '/matters/dashboard' ? ' active' : ''}">Dashboard</a>
+          ${isAdminUser ? `<a href="/admin" class="nav-link${activePath?.startsWith('/admin') ? ' active' : ''}">Admin</a>` : ''}
         </div>
         <span class="nav-user">${esc(user)}</span>
         <a href="/matters/logout" class="nav-logout no-print">Sign out</a>
@@ -720,29 +789,43 @@ mattersRouter.get('/matters/login', (req: Request, res: Response) => {
 });
 
 // POST /matters/login
-mattersRouter.post('/matters/login', (req: Request, res: Response) => {
+mattersRouter.post('/matters/login', async (req: Request, res: Response) => {
   const { username, password, next } = req.body as Record<string, string | undefined>;
   const user = (username ?? '').trim().toLowerCase();
   const token = (password ?? '').trim();
-  const redirectTo = typeof next === 'string' && next.startsWith('/matters') ? next : '/matters';
-  const creds = getCredentials();
-  const expected = creds.get(user);
-  let ok = false;
-  if (expected && token.length === expected.length) {
-    try { ok = timingSafeEqual(Buffer.from(token), Buffer.from(expected)); } catch { /* */ }
-  }
-  if (!ok) {
+  const redirectTo = typeof next === 'string' && (next.startsWith('/matters') || next.startsWith('/admin')) ? next : '/matters';
+
+  const validResult = await validateCredentials(user, token);
+  if (!validResult) {
     logger.warn({ user }, 'matters-ui: failed login attempt');
+    logLoginEvent({
+      username: user,
+      eventType: 'login_failed',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      clientName: parseClientName(req.headers['user-agent']),
+    }).catch(() => {/* ignore */});
     res.redirect('/matters/login?error=1');
     return;
   }
-  setSessionCookie(res, user);
-  logger.info({ user }, 'matters-ui: login');
+  setSessionCookie(res, user, validResult.isAdmin);
+  logger.info({ user, isAdmin: validResult.isAdmin }, 'matters-ui: login');
+  logLoginEvent({
+    username: user,
+    eventType: 'login',
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+    clientName: parseClientName(req.headers['user-agent']),
+  }).catch(() => {/* ignore */});
   res.redirect(redirectTo);
 });
 
 // GET /matters/logout
-mattersRouter.get('/matters/logout', (_req: Request, res: Response) => {
+mattersRouter.get('/matters/logout', (req: Request, res: Response) => {
+  const user = getSessionUser(req);
+  if (user) {
+    logLoginEvent({ username: user, eventType: 'logout', ip: req.ip }).catch(() => {/* ignore */});
+  }
   clearSessionCookie(res);
   res.redirect('/matters/login');
 });
@@ -750,22 +833,23 @@ mattersRouter.get('/matters/logout', (_req: Request, res: Response) => {
 // GET /matters/dashboard
 mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters/dashboard'));
+    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters/dashboard', undefined, userIsAdmin));
     return;
   }
 
-  const scopedUserId = isAdmin(user) ? undefined : user;
-  const adminBadge = isAdmin(user) ? '<span class="admin-badge">All researchers</span>' : '';
+  const scopedUserId = userIsAdmin ? undefined : user;
+  const adminBadge = userIsAdmin ? '<span class="admin-badge">All researchers</span>' : '';
 
   const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy] = await Promise.all([
     getDashboardStats(scopedUserId),
     getToolUsageStats(scopedUserId),
-    isAdmin(user) ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
+    userIsAdmin ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
     getRecentActivity(20, scopedUserId),
-    isAdmin(user) ? getPopularCases(10) : Promise.resolve<PopularCaseRow[]>([]),
+    userIsAdmin ? getPopularCases(10) : Promise.resolve<PopularCaseRow[]>([]),
     getErrorStats(scopedUserId),
     getDashboardCostByTool(scopedUserId),
     getAggregateAccuracy(scopedUserId),
@@ -804,40 +888,41 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
 
   res.send(page('Dashboard', `
     <h1>Dashboard ${adminBadge}</h1>
-    <p class="subtitle">Aggregated research analytics${isAdmin(user) ? ' across all matters and researchers' : ' for your matters'}
+    <p class="subtitle">Aggregated research analytics${userIsAdmin ? ' across all matters and researchers' : ' for your matters'}
       <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time> · auto-refreshes every 5 min</span>
     </p>
     ${renderDashboardCards(stats, costByTool, avgAccuracy)}
     ${renderToolChart(toolStats)}
-    ${isAdmin(user) ? renderResearcherCards(userStats) : ''}
-    ${isAdmin(user) ? renderPopularCases(popularCases) : ''}
+    ${userIsAdmin ? renderResearcherCards(userStats) : ''}
+    ${userIsAdmin ? renderPopularCases(popularCases) : ''}
     ${renderErrorStats(errorStats)}
     ${recentHtml}
-  `, user, '/matters/dashboard', 300));
+  `, user, '/matters/dashboard', 300, userIsAdmin));
 });
 
 // GET /matters — matter list
 mattersRouter.get('/matters', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters'));
+    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters', undefined, userIsAdmin));
     return;
   }
 
   const search = typeof req.query['search'] === 'string' ? req.query['search'].trim() : undefined;
-  const viewUser = isAdmin(user) && typeof req.query['user'] === 'string' ? req.query['user'].trim() : undefined;
-  const adminBadge = isAdmin(user) ? '<span class="admin-badge">Admin</span>' : '';
+  const viewUser = userIsAdmin && typeof req.query['user'] === 'string' ? req.query['user'].trim() : undefined;
+  const adminBadge = userIsAdmin ? '<span class="admin-badge">Admin</span>' : '';
   const allUsers = [...getCredentials().keys()];
 
   // Admin: default to all matters; can filter by user via ?user=
-  const matters: MatterSummaryRow[] = isAdmin(user)
+  const matters: MatterSummaryRow[] = userIsAdmin
     ? (viewUser ? await listMattersForUser(viewUser, search) : await listMatters(search))
     : await listMattersForUser(user, search);
 
   // Admin user toggle tabs
-  const segTabs = isAdmin(user)
+  const segTabs = userIsAdmin
     ? `<div class="seg-tabs no-print">
         <a href="/matters" class="seg-tab${!viewUser ? ' active' : ''}">All Matters</a>
         ${allUsers.map((u) => `<a href="/matters?user=${encodeURIComponent(u)}" class="seg-tab${viewUser === u ? ' active' : ''}">${esc(u)}</a>`).join('')}
@@ -873,43 +958,44 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     <h1>Matters ${adminBadge}</h1>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''}${search ? ` matching "${esc(search)}"` : ''}</p>
     ${segTabs}
-    ${renderFilterBar({ search, allUsers, isAdmin: isAdmin(user), viewUser, action: '/matters' })}
+    ${renderFilterBar({ search, allUsers, isAdmin: userIsAdmin, viewUser, action: '/matters' })}
     ${tableHtml}
-  `, user, '/matters', 300));
+  `, user, '/matters', 300, userIsAdmin));
 });
 
 // GET /matters/:ref — matter detail
 mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const toolFilter = typeof req.query['tool'] === 'string' ? req.query['tool'].trim() : undefined;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.status(503).send(page('Error', '<div class="empty">Database not enabled.</div>', user));
+    res.status(503).send(page('Error', '<div class="empty">Database not enabled.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
   const rows: MatterHistoryRow[] = await getMatterHistory(ref, 1000, toolFilter);
 
   if (rows.length === 0 && !toolFilter) {
-    res.status(404).send(page('Not Found', '<div class="empty">Matter not found or no queries on record.</div>', user));
+    res.status(404).send(page('Not Found', '<div class="empty">Matter not found or no queries on record.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
-  if (!isAdmin(user) && !rows.some((r) => r.user_id === user || r.user_id === null)) {
-    res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user));
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
   // For access check when tool filter returns 0, fetch unfiltered
   const allRows = toolFilter && rows.length === 0 ? await getMatterHistory(ref, 1000) : rows;
   if (allRows.length === 0) {
-    res.status(404).send(page('Not Found', '<div class="empty">Matter not found.</div>', user));
+    res.status(404).send(page('Not Found', '<div class="empty">Matter not found.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
-  if (!isAdmin(user) && !allRows.some((r) => r.user_id === user || r.user_id === null)) {
-    res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user));
+  if (!userIsAdmin && !allRows.some((r) => r.user_id === user || r.user_id === null)) {
+    res.status(403).send(page('Access Denied', '<div class="empty">You do not have access to this matter.</div>', user, undefined, undefined, userIsAdmin));
     return;
   }
 
@@ -1012,19 +1098,20 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>
     </div>
-  `, user, '/matters'));
+  `, user, '/matters', undefined, userIsAdmin));
 });
 
 // GET /matters/:ref/export.csv
 mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
+  const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
 
   if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
 
   const rows = await getMatterHistory(ref, 1000);
   if (rows.length === 0) { res.status(404).send('Not found'); return; }
-  if (!isAdmin(user) && !rows.some((r) => r.user_id === user || r.user_id === null)) {
+  if (!userIsAdmin && !rows.some((r) => r.user_id === user || r.user_id === null)) {
     res.status(403).send('Forbidden'); return;
   }
 

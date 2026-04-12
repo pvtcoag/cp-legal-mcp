@@ -2,13 +2,14 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { authMiddleware } from './auth.js';
-import { initDb } from './db.js';
+import { authMiddleware, buildAuthCache } from './auth.js';
+import { initDb, migrateUsersFromEnv } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
 import { preRegisterClient } from './oauth-store.js';
 import { mattersRouter } from './matters-ui.js';
+import { adminRouter } from './admin-ui.js';
 
 const app = express();
 // Trust Railway/Cloudflare proxy — required for express-rate-limit to read
@@ -34,6 +35,9 @@ app.use(oauthRouter);
 
 // Matter history UI — cookie-session auth, independent of MCP bearer auth
 app.use(mattersRouter);
+
+// Admin panel — same session cookie, admin flag required
+app.use(adminRouter);
 
 // Diagnostic: probe auslaw-mcp — no auth required, safe (read-only connectivity test)
 app.get('/health/auslaw', async (_req, res) => {
@@ -116,6 +120,15 @@ const server = app.listen(config.PORT, async () => {
 
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
+
+  // Migrate users from MCP_AUTH_TOKENS env var if users table is empty
+  await migrateUsersFromEnv(
+    process.env.MCP_AUTH_TOKENS ?? '',
+    (config.ADMIN_USERS ?? 'admin').split(',').map((u) => u.trim().toLowerCase()),
+  ).catch((err) => logger.error({ err }, 'User migration failed'));
+
+  // Build in-memory auth token cache from DB
+  await buildAuthCache().catch((err) => logger.error({ err }, 'Auth cache build failed'));
 
 });
 

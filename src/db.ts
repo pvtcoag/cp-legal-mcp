@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { logger } from './logger.js';
+import { hashToken } from './token-utils.js';
 
 const { Pool } = pg;
 
@@ -68,6 +69,52 @@ export async function initDb(): Promise<void> {
     ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS is_error BOOLEAN DEFAULT FALSE;
     ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS error_message TEXT;
     ALTER TABLE matter_queries ADD COLUMN IF NOT EXISTS accuracy_score FLOAT4;
+
+    CREATE TABLE IF NOT EXISTS users (
+      id          SERIAL PRIMARY KEY,
+      username    TEXT UNIQUE NOT NULL,
+      token_salt  TEXT NOT NULL,
+      token_hash  TEXT NOT NULL,
+      is_admin    BOOLEAN DEFAULT FALSE,
+      is_active   BOOLEAN DEFAULT TRUE,
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      created_by  TEXT,
+      last_active TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS login_events (
+      id          SERIAL PRIMARY KEY,
+      username    TEXT NOT NULL,
+      event_type  TEXT NOT NULL,
+      ip          TEXT,
+      user_agent  TEXT,
+      client_name TEXT,
+      meta        JSONB,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_le_username   ON login_events(username);
+    CREATE INDEX IF NOT EXISTS idx_le_created_at ON login_events(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS oauth_authorizations (
+      id           SERIAL PRIMARY KEY,
+      username     TEXT NOT NULL,
+      client_id    TEXT NOT NULL,
+      client_name  TEXT,
+      redirect_uri TEXT,
+      first_auth   TIMESTAMPTZ DEFAULT NOW(),
+      last_auth    TIMESTAMPTZ DEFAULT NOW(),
+      auth_count   INT DEFAULT 1,
+      UNIQUE(username, client_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_oa_username ON oauth_authorizations(username);
+
+    CREATE TABLE IF NOT EXISTS app_config (
+      key         TEXT PRIMARY KEY,
+      value       TEXT NOT NULL,
+      description TEXT,
+      updated_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_by  TEXT
+    );
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -506,5 +553,373 @@ export async function getDashboardCostByTool(userId?: string): Promise<ToolToken
     FROM matter_queries ${where}
     GROUP BY tool_name
   `, params);
+  return result.rows;
+}
+
+// ── User management ───────────────────────────────────────────────────────────
+
+export interface UserRow {
+  id: number;
+  username: string;
+  token_salt: string;
+  token_hash: string;
+  is_admin: boolean;
+  is_active: boolean;
+  created_at: string;
+  created_by: string | null;
+  last_active: string | null;
+}
+
+export async function createUser(params: {
+  username: string;
+  tokenSalt: string;
+  tokenHash: string;
+  isAdmin: boolean;
+  createdBy: string;
+}): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO users (username, token_salt, token_hash, is_admin, created_by)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [params.username, params.tokenSalt, params.tokenHash, params.isAdmin, params.createdBy],
+  );
+}
+
+export async function getUserByUsername(username: string): Promise<UserRow | null> {
+  if (!pool) return null;
+  const result = await pool.query<UserRow>(
+    'SELECT * FROM users WHERE username = $1',
+    [username],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function listUsers(): Promise<UserRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<UserRow>(
+    'SELECT * FROM users ORDER BY created_at ASC',
+  );
+  return result.rows;
+}
+
+export async function updateUserAdmin(username: string, isAdmin: boolean): Promise<void> {
+  if (!pool) return;
+  await pool.query('UPDATE users SET is_admin = $2 WHERE username = $1', [username, isAdmin]);
+}
+
+export async function updateUserActive(username: string, isActive: boolean): Promise<void> {
+  if (!pool) return;
+  await pool.query('UPDATE users SET is_active = $2 WHERE username = $1', [username, isActive]);
+}
+
+export async function rotateUserToken(username: string, tokenSalt: string, tokenHash: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    'UPDATE users SET token_salt = $2, token_hash = $3 WHERE username = $1',
+    [username, tokenSalt, tokenHash],
+  );
+}
+
+export async function deleteUser(username: string): Promise<void> {
+  if (!pool) return;
+  await pool.query('DELETE FROM users WHERE username = $1', [username]);
+}
+
+export async function updateUserLastActive(username: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    'UPDATE users SET last_active = NOW() WHERE username = $1',
+    [username],
+  );
+}
+
+/** Seeds users table from MCP_AUTH_TOKENS env var if the table is empty. */
+export async function migrateUsersFromEnv(envTokens: string, adminUsers: string[]): Promise<void> {
+  if (!pool) return;
+  if (!envTokens.trim()) return;
+
+  const existing = await pool.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM users');
+  const count = parseInt(existing.rows[0]?.count ?? '0', 10);
+  if (count > 0) return; // already migrated
+
+  const pairs = envTokens.split(',');
+  for (const pair of pairs) {
+    const colon = pair.indexOf(':');
+    if (colon < 1) continue;
+    const username = pair.slice(0, colon).trim().toLowerCase();
+    const token = pair.slice(colon + 1).trim();
+    if (!username || !token) continue;
+    const { salt, hash } = hashToken(token);
+    const isAdmin = adminUsers.includes(username);
+    try {
+      await pool.query(
+        `INSERT INTO users (username, token_salt, token_hash, is_admin, created_by)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (username) DO NOTHING`,
+        [username, salt, hash, isAdmin, 'migration'],
+      );
+    } catch (err) {
+      logger.error({ err, username }, 'migrateUsersFromEnv: failed to insert user');
+    }
+  }
+  logger.info({ users: pairs.length }, 'migrateUsersFromEnv: migrated users from MCP_AUTH_TOKENS');
+}
+
+// ── Login events ──────────────────────────────────────────────────────────────
+
+export interface LoginEventRow {
+  id: number;
+  username: string;
+  event_type: string;
+  ip: string | null;
+  user_agent: string | null;
+  client_name: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export async function logLoginEvent(params: {
+  username: string;
+  eventType: string;
+  ip?: string;
+  userAgent?: string;
+  clientName?: string;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO login_events (username, event_type, ip, user_agent, client_name, meta)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        params.username,
+        params.eventType,
+        params.ip ?? null,
+        params.userAgent ?? null,
+        params.clientName ?? null,
+        params.meta ? JSON.stringify(params.meta) : null,
+      ],
+    );
+  } catch (err) {
+    logger.error({ err }, 'logLoginEvent: failed');
+  }
+}
+
+export async function getLoginEvents(username: string, limit: number = 20): Promise<LoginEventRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<LoginEventRow>(
+    `SELECT * FROM login_events WHERE username = $1 ORDER BY created_at DESC LIMIT $2`,
+    [username, limit],
+  );
+  return result.rows;
+}
+
+export async function getRecentLoginEvents(limit: number = 10): Promise<LoginEventRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<LoginEventRow>(
+    'SELECT * FROM login_events ORDER BY created_at DESC LIMIT $1',
+    [limit],
+  );
+  return result.rows;
+}
+
+// ── OAuth authorizations ──────────────────────────────────────────────────────
+
+export interface OAuthAuthRow {
+  id: number;
+  username: string;
+  client_id: string;
+  client_name: string | null;
+  redirect_uri: string | null;
+  first_auth: string;
+  last_auth: string;
+  auth_count: number;
+}
+
+export async function upsertOAuthAuthorization(params: {
+  username: string;
+  clientId: string;
+  clientName?: string;
+  redirectUri?: string;
+}): Promise<void> {
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO oauth_authorizations (username, client_id, client_name, redirect_uri)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (username, client_id) DO UPDATE SET
+         client_name  = COALESCE(EXCLUDED.client_name, oauth_authorizations.client_name),
+         redirect_uri = COALESCE(EXCLUDED.redirect_uri, oauth_authorizations.redirect_uri),
+         last_auth    = NOW(),
+         auth_count   = oauth_authorizations.auth_count + 1`,
+      [params.username, params.clientId, params.clientName ?? null, params.redirectUri ?? null],
+    );
+  } catch (err) {
+    logger.error({ err }, 'upsertOAuthAuthorization: failed');
+  }
+}
+
+export async function getOAuthAuthorizations(username: string): Promise<OAuthAuthRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<OAuthAuthRow>(
+    'SELECT * FROM oauth_authorizations WHERE username = $1 ORDER BY last_auth DESC',
+    [username],
+  );
+  return result.rows;
+}
+
+// ── App config ────────────────────────────────────────────────────────────────
+
+export interface AppConfigRow {
+  key: string;
+  value: string;
+  description: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export async function getAppConfig(key: string): Promise<string | null> {
+  if (!pool) return null;
+  const result = await pool.query<{ value: string }>(
+    'SELECT value FROM app_config WHERE key = $1',
+    [key],
+  );
+  return result.rows[0]?.value ?? null;
+}
+
+export async function setAppConfig(
+  key: string,
+  value: string,
+  updatedBy: string,
+  description?: string,
+): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO app_config (key, value, description, updated_by)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (key) DO UPDATE SET
+       value      = EXCLUDED.value,
+       description = COALESCE(EXCLUDED.description, app_config.description),
+       updated_at  = NOW(),
+       updated_by  = EXCLUDED.updated_by`,
+    [key, value, description ?? null, updatedBy],
+  );
+}
+
+export async function listAppConfig(): Promise<AppConfigRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<AppConfigRow>(
+    'SELECT * FROM app_config ORDER BY key',
+  );
+  return result.rows;
+}
+
+// ── Admin stats ───────────────────────────────────────────────────────────────
+
+export interface AdminDashboardStats {
+  total_users: number;
+  active_users_7d: number;
+  total_queries_today: number;
+  total_queries_7d: number;
+  error_count_24h: number;
+  judgment_cache_count: number;
+  judgment_cache_mb: number;
+  matter_queries_count: number;
+  embeddings_count: number;
+}
+
+export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
+  if (!pool) {
+    return {
+      total_users: 0, active_users_7d: 0, total_queries_today: 0, total_queries_7d: 0,
+      error_count_24h: 0, judgment_cache_count: 0, judgment_cache_mb: 0,
+      matter_queries_count: 0, embeddings_count: 0,
+    };
+  }
+  const result = await pool.query<AdminDashboardStats>(`
+    SELECT
+      (SELECT COUNT(*)::int FROM users)                                                             AS total_users,
+      (SELECT COUNT(*)::int FROM users WHERE last_active > NOW() - INTERVAL '7 days')              AS active_users_7d,
+      (SELECT COUNT(*)::int FROM matter_queries WHERE created_at > NOW() - INTERVAL '1 day')       AS total_queries_today,
+      (SELECT COUNT(*)::int FROM matter_queries WHERE created_at > NOW() - INTERVAL '7 days')      AS total_queries_7d,
+      (SELECT COUNT(*)::int FROM matter_queries WHERE is_error = TRUE AND created_at > NOW() - INTERVAL '24 hours') AS error_count_24h,
+      (SELECT COUNT(*)::int FROM judgment_cache)                                                    AS judgment_cache_count,
+      (SELECT COALESCE(ROUND(SUM(char_count)::numeric / 1048576.0, 1), 0)::float FROM judgment_cache) AS judgment_cache_mb,
+      (SELECT COUNT(*)::int FROM matter_queries)                                                    AS matter_queries_count,
+      (SELECT COUNT(*)::int FROM judgment_embeddings)                                               AS embeddings_count
+  `);
+  return result.rows[0] ?? {
+    total_users: 0, active_users_7d: 0, total_queries_today: 0, total_queries_7d: 0,
+    error_count_24h: 0, judgment_cache_count: 0, judgment_cache_mb: 0,
+    matter_queries_count: 0, embeddings_count: 0,
+  };
+}
+
+export interface UserDetailStats {
+  query_count: number;
+  matter_count: number;
+  total_tokens: number;
+  first_query: string | null;
+  last_query: string | null;
+}
+
+export async function getUserDetailStats(username: string): Promise<UserDetailStats> {
+  if (!pool) return { query_count: 0, matter_count: 0, total_tokens: 0, first_query: null, last_query: null };
+  const result = await pool.query<UserDetailStats>(`
+    SELECT
+      COUNT(*)::int                               AS query_count,
+      COUNT(DISTINCT matter_ref)::int             AS matter_count,
+      COALESCE(SUM(api_tokens_used), 0)::int      AS total_tokens,
+      MIN(created_at)                             AS first_query,
+      MAX(created_at)                             AS last_query
+    FROM matter_queries
+    WHERE user_id = $1
+  `, [username]);
+  return result.rows[0] ?? { query_count: 0, matter_count: 0, total_tokens: 0, first_query: null, last_query: null };
+}
+
+// ── Data management ───────────────────────────────────────────────────────────
+
+export async function purgeOldMatterQueries(olderThanDays: number): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query<{ count: string }>(
+    `WITH deleted AS (
+       DELETE FROM matter_queries WHERE created_at < NOW() - ($1 || ' days')::INTERVAL RETURNING id
+     ) SELECT COUNT(*)::text AS count FROM deleted`,
+    [olderThanDays],
+  );
+  return parseInt(result.rows[0]?.count ?? '0', 10);
+}
+
+export async function purgeOldJudgmentCache(olderThanDays: number): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query<{ count: string }>(
+    `WITH deleted AS (
+       DELETE FROM judgment_cache WHERE fetched_at < NOW() - ($1 || ' days')::INTERVAL RETURNING url
+     ) SELECT COUNT(*)::text AS count FROM deleted`,
+    [olderThanDays],
+  );
+  return parseInt(result.rows[0]?.count ?? '0', 10);
+}
+
+export async function purgeAllJudgmentCache(): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query<{ count: string }>(
+    `WITH deleted AS (DELETE FROM judgment_cache RETURNING url) SELECT COUNT(*)::text AS count FROM deleted`,
+  );
+  return parseInt(result.rows[0]?.count ?? '0', 10);
+}
+
+export async function getRecentErrors(limit: number = 10): Promise<MatterHistoryRow[]> {
+  if (!pool) return [];
+  const result = await pool.query<MatterHistoryRow>(`
+    SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
+           result_count, top_results, api_tokens_used,
+           is_error, error_message, accuracy_score, created_at
+    FROM matter_queries
+    WHERE is_error = TRUE
+    ORDER BY created_at DESC
+    LIMIT $1
+  `, [limit]);
   return result.rows;
 }

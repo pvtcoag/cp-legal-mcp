@@ -24,6 +24,8 @@ import {
   createAuthCode,
   consumeAuthCode,
 } from './oauth-store.js';
+import { upsertOAuthAuthorization, logLoginEvent, getUserByUsername } from './db.js';
+import { verifyToken } from './token-utils.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -257,7 +259,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
 });
 
 // POST /oauth/authorize — Validate credentials, issue code, redirect
-oauthRouter.post('/oauth/authorize', (req: Request, res: Response) => {
+oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -279,10 +281,19 @@ oauthRouter.post('/oauth/authorize', (req: Request, res: Response) => {
     return;
   }
 
-  // Validate credentials — username:token from MCP_AUTH_TOKENS
-  const creds = credentials();
-  const expectedToken = creds.get(username.trim().toLowerCase());
-  if (!expectedToken || !safeEqual(password.trim(), expectedToken)) {
+  // Validate credentials — check DB first, then fall back to MCP_AUTH_TOKENS
+  const normalUser = username.trim().toLowerCase();
+  let credValid = false;
+  const dbUserRecord = await getUserByUsername(normalUser).catch(() => null);
+  if (dbUserRecord && dbUserRecord.is_active) {
+    credValid = verifyToken(password.trim(), dbUserRecord.token_salt, dbUserRecord.token_hash);
+  } else {
+    const creds = credentials();
+    const expectedToken = creds.get(normalUser);
+    if (expectedToken) credValid = safeEqual(password.trim(), expectedToken);
+  }
+
+  if (!credValid) {
     logger.warn({ username }, 'OAuth: failed login attempt');
     // Redisplay form with error
     const stateField = state ? `<input type="hidden" name="state" value="${escHtml(state)}">` : '';
@@ -351,7 +362,7 @@ oauthRouter.post('/oauth/authorize', (req: Request, res: Response) => {
 });
 
 // POST /oauth/token — Exchange code + PKCE verifier for access token
-oauthRouter.post('/oauth/token', (req: Request, res: Response) => {
+oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
   const {
     grant_type,
     code,
@@ -390,18 +401,54 @@ oauthRouter.post('/oauth/token', (req: Request, res: Response) => {
     return;
   }
 
-  // Access token = the user's pre-configured bearer token from MCP_AUTH_TOKENS.
-  // This means auth.ts tokenMap lookup works unchanged.
-  const creds = credentials();
-  const accessToken = creds.get(entry.userId);
-  if (!accessToken) {
-    // User was valid at auth time but token no longer in config (race condition on redeploy)
-    logger.error({ user: entry.userId }, 'OAuth: user no longer in MCP_AUTH_TOKENS at token exchange');
-    res.status(500).json({ error: 'server_error' });
-    return;
+  // Access token = the user's pre-configured bearer token from MCP_AUTH_TOKENS
+  // OR the token stored in the DB users table.
+  let accessToken: string | undefined;
+
+  // Try DB first
+  const dbUser = await getUserByUsername(entry.userId).catch(() => null);
+  if (dbUser && dbUser.is_active) {
+    // We can't un-hash the token — instead, look it up from env var as legacy behaviour,
+    // or use a temporary token lookup. Since DB tokens are hashed, we fall back to env for
+    // the actual token value to return (the issued token must match what auth.ts will verify).
+    // For DB-migrated users, the original token was stored in MCP_AUTH_TOKENS during migration.
+    // After rotation, there's no way to recover the plaintext — they must re-authenticate via
+    // the web UI. For OAuth flow, we use the env var token if available; otherwise error.
+    const creds = credentials();
+    accessToken = creds.get(entry.userId);
+    if (!accessToken) {
+      logger.error({ user: entry.userId }, 'OAuth: user in DB but no env token for OAuth flow');
+      res.status(500).json({ error: 'server_error', error_description: 'Token rotation required before OAuth can be used' });
+      return;
+    }
+  } else {
+    const creds = credentials();
+    accessToken = creds.get(entry.userId);
+    if (!accessToken) {
+      logger.error({ user: entry.userId }, 'OAuth: user no longer in MCP_AUTH_TOKENS at token exchange');
+      res.status(500).json({ error: 'server_error' });
+      return;
+    }
   }
 
   logger.info({ user: entry.userId }, 'OAuth: access token issued');
+
+  const client = getClient(client_id);
+
+  // Log OAuth authorization to DB (fire-and-forget)
+  upsertOAuthAuthorization({
+    username: entry.userId,
+    clientId: client_id,
+    clientName: client?.clientName,
+    redirectUri: redirect_uri,
+  }).catch(() => {/* ignore */});
+
+  logLoginEvent({
+    username: entry.userId,
+    eventType: 'oauth_authorized',
+    clientName: client?.clientName,
+    meta: { client_id },
+  }).catch(() => {/* ignore */});
 
   res.json({
     access_token: accessToken,

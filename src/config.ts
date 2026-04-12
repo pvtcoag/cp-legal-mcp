@@ -25,6 +25,13 @@ const ConfigSchema = z.object({
   // Matter tracking — optional default applied when no matter_ref is passed in a tool call.
   // Useful for firms that want all queries automatically tagged (e.g. set to "general-research").
   DEFAULT_MATTER_REF: z.string().max(100).optional(),
+
+  // Optional 32+ character key for future encrypted config storage.
+  ENCRYPTION_KEY: z.string().min(32).optional(),
+
+  // Session secret for HMAC-signed cookies (falls back to MCP_AUTH_TOKENS if not set).
+  // Explicit SESSION_SECRET is recommended for production.
+  SESSION_SECRET: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
