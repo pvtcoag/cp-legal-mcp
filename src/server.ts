@@ -8,24 +8,18 @@ import { registerGetJudgment } from './tools/get-judgment.js';
 import { registerFindCitingCases } from './tools/find-citing-cases.js';
 import { registerSearchByCitation } from './tools/search-by-citation.js';
 import { registerFormatCitation } from './tools/format-citation.js';
-import { registerGeneratePinpoint } from './tools/generate-pinpoint.js';
 import { registerAskJudgment } from './tools/ask-judgment.js';
 import { registerEnrichJudgment } from './tools/enrich-judgment.js';
 import { registerSummariseJudgment } from './tools/summarise-judgment.js';
 import { registerClassifyLegalIssue } from './tools/classify-legal-issue.js';
 import { registerFindRelatedCases } from './tools/find-related-cases.js';
 import { registerCompareCases } from './tools/compare-cases.js';
-import { registerAskLegislation } from './tools/ask-legislation.js';
 import { registerGetLegislation } from './tools/get-legislation.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 import { registerLookupEntity } from './tools/lookup-entity.js';
-import { registerSearchAsic } from './tools/search-asic.js';
-import { registerGetDirectorHistory } from './tools/get-director-history.js';
-import { registerSearchAsicDecisions } from './tools/search-asic-decisions.js';
-import { registerSearchAcccDecisions } from './tools/search-accc-decisions.js';
+import { registerSearchRegulatoryDecisions } from './tools/search-regulatory-decisions.js';
 import { registerSearchAsxAnnouncements } from './tools/search-asx-announcements.js';
-import { registerSummariseMatter } from './tools/summarise-matter.js';
 import { registerBuildChronology } from './tools/build-chronology.js';
 
 const ADMIN_ERROR_NOTE = '\n\nIf this error persists, contact your administrator.';
@@ -86,34 +80,28 @@ function buildServer(): McpServer {
   registerSummariseJudgment(server);
   registerCompareCases(server);
 
-  // Legislation analysis
+  // Legislation retrieval & QA
   registerGetLegislation(server);
-  registerAskLegislation(server);
 
   // Issue classification
   registerClassifyLegalIssue(server);
 
   // Citation utilities
   registerFormatCitation(server);
-  registerGeneratePinpoint(server);
 
   // Matter tracking
   registerGetMatterHistory(server);
 
   // Entity intelligence
   registerLookupEntity(server);
-  registerSearchAsic(server);
-  registerGetDirectorHistory(server);
 
-  // Regulatory decisions
-  registerSearchAsicDecisions(server);
-  registerSearchAcccDecisions(server);
+  // Regulatory decisions (ASIC + ACCC)
+  registerSearchRegulatoryDecisions(server);
 
   // Market data
   registerSearchAsxAnnouncements(server);
 
   // Matter intelligence
-  registerSummariseMatter(server);
   registerBuildChronology(server);
 
   // Admin (restricted to ADMIN_USERS)

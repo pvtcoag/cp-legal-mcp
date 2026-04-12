@@ -78,7 +78,7 @@ function buildPanel(
 export function registerCompareCases(server: McpServer): void {
   server.tool(
     'compare_cases',
-    'Compare how two Australian judgments address the same legal question. Fetches both cases (from the judgment cache where available), runs extractive QA in parallel, and returns a side-by-side comparison. Ideal for analysing how different courts or different periods have treated the same principle, test, or issue.',
+    '[Judgment Analysis] Compare how two Australian judgments address the same legal question. Fetches both cases (from the judgment cache where available), runs extractive QA in parallel, and returns a side-by-side comparison. Ideal for analysing how different courts or different periods have treated the same principle, test, or issue.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'compare_cases' });

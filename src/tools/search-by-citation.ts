@@ -29,7 +29,7 @@ const inputSchema = z.object({
 export function registerSearchByCitation(server: McpServer): void {
   server.tool(
     'search_by_citation',
-    'Look up an Australian case by its neutral citation or case name. Returns matching cases with URLs and metadata. Use this when you have a specific citation or case name to resolve.',
+    '[Case Research] Look up an Australian case by its neutral citation or case name. Returns matching cases with URLs and metadata. Use this when you have a specific citation or case name to resolve.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'search_by_citation' });

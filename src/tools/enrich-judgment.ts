@@ -40,7 +40,7 @@ const inputSchema = inputSchemaBase.refine(
 export function registerEnrichJudgment(server: McpServer): void {
   server.tool(
     'enrich_judgment',
-    'Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher. Accepts a single citation/URL or an array of up to 5 for batch enrichment.',
+    '[Judgment Analysis] Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher. Accepts a single citation/URL or an array of up to 5 for batch enrichment.',
     inputSchemaBase.shape,
     async (input) => {
       const log = logger.child({ tool: 'enrich_judgment' });

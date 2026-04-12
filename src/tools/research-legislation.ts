@@ -55,7 +55,7 @@ const inputSchema = z.object({
 export function registerResearchLegislation(server: McpServer): void {
   server.tool(
     'research_legislation',
-    'Search Australian federal and state legislation. Returns semantically reranked acts and regulations from AustLII.',
+    '[Legislation] Search Australian federal and state legislation. Returns semantically reranked acts and regulations from AustLII.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'research_legislation' });

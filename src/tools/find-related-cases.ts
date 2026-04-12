@@ -51,7 +51,7 @@ const inputSchema = z.object({
 export function registerFindRelatedCases(server: McpServer): void {
   server.tool(
     'find_related_cases',
-    'Find Australian judgments semantically related to a given case using Kanon 2 Embedder vector similarity. Searches the judgment corpus (built up as cases are researched) plus an AustLII keyword search based on the case title. Results improve as the corpus grows. Use this to discover cases that address similar legal issues without relying solely on the citation network.',
+    '[Case Research] Find Australian judgments semantically related to a given case using Kanon 2 Embedder vector similarity. Searches the judgment corpus (built up as cases are researched) plus an AustLII keyword search based on the case title. Results improve as the corpus grows. Use this to discover cases that address similar legal issues without relying solely on the citation network.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'find_related_cases', input: input.citation_or_url });

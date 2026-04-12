@@ -47,7 +47,7 @@ const inputSchema = z.object({
 export function registerGetJudgment(server: McpServer): void {
   server.tool(
     'get_judgment',
-    'Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata. Check total_chars in the response before requesting full text of lengthy judgments — use max_chars to limit context usage when you only need part of the text.',
+    '[Judgment Analysis] Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata. Check total_chars in the response before requesting full text of lengthy judgments — use max_chars to limit context usage when you only need part of the text.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'get_judgment', input: input.citation_or_url });

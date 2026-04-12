@@ -55,7 +55,7 @@ const inputSchema = z.object({
 export function registerInspectDatabase(server: McpServer): void {
   server.tool(
     'inspect_database',
-    'Admin tool: inspect matter research history across all users and matters. ' +
+    '[Admin] Inspect matter research history across all users and matters. ' +
     'Restricted to admin users only. Not for end-user research — use get_matter_history for that.',
     inputSchema.shape,
     async (input) => {

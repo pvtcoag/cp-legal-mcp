@@ -62,7 +62,7 @@ function sortChronology(entries: ChronologyEntry[]): ChronologyEntry[] {
 export function registerBuildChronology(server: McpServer): void {
   server.tool(
     'build_chronology',
-    'Extract and sort dates and events from a legal document or text to build a chronological timeline. Uses Isaacus Kanon 2 Enricher for structured date extraction. Useful for building matter chronologies, summarising procedural histories, and organising evidence timelines.',
+    '[Matter] Extract and sort dates and events from a legal document or text to build a chronological timeline. Uses Isaacus Kanon 2 Enricher for structured date extraction. Useful for building matter chronologies, summarising procedural histories, and organising evidence timelines.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'build_chronology' });

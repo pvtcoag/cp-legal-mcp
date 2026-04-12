@@ -27,7 +27,7 @@ const inputSchema = z.object({
 export function registerFindCitingCases(server: McpServer): void {
   server.tool(
     'find_citing_cases',
-    'Find Australian cases that have cited a given judgment. Uses LawCite (AustLII\'s citator service) to trace how a case has been applied, distinguished, or overruled.',
+    '[Case Research] Find Australian cases that have cited a given judgment. Uses LawCite (AustLII\'s citator service) to trace how a case has been applied, distinguished, or overruled.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'find_citing_cases', citation: input.citation });

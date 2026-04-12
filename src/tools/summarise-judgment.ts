@@ -52,7 +52,7 @@ function qaField(
 export function registerSummariseJudgment(server: McpServer): void {
   server.tool(
     'summarise_judgment',
-    'Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome. By default also includes enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Set include_metadata: false for a faster, cheaper summary covering only the five narrative dimensions — useful when you just need the substance and not the citation network. Ideal as a first step before deeper research.',
+    '[Judgment Analysis] Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome. By default also includes enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Set include_metadata: false for a faster, cheaper summary covering only the five narrative dimensions — useful when you just need the substance and not the citation network. Ideal as a first step before deeper research.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'summarise_judgment', input: input.citation_or_url });

@@ -93,7 +93,7 @@ const inputSchema = z.object({
 export function registerResearchCases(server: McpServer): void {
   server.tool(
     'research_cases',
-    'Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
+    '[Case Research] Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'research_cases' });

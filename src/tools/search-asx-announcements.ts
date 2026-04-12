@@ -47,7 +47,7 @@ interface AsxAnnouncement {
 export function registerSearchAsxAnnouncements(server: McpServer): void {
   server.tool(
     'search_asx_announcements',
-    'Search ASX company announcements for a given ASX ticker code. Returns recent announcements with headlines, dates, and PDF URLs. Use for listed entity research, material information tracking, and corporate disclosure analysis. No API key required.',
+    '[Market Intelligence] Search ASX company announcements for a given ASX ticker code. Returns recent announcements with headlines, dates, and PDF URLs. Use for listed entity research, material information tracking, and corporate disclosure analysis. No API key required.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'search_asx_announcements' });

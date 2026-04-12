@@ -39,7 +39,7 @@ const inputSchema = z.object({
 export function registerAskJudgment(server: McpServer): void {
   server.tool(
     'ask_judgment',
-    'Extract a direct answer to a specific question from an Australian court judgment. Uses Isaacus Kanon Answer Extractor — faster and more precise than reading the full text. Ideal for targeted questions like reasoning on a specific issue, damages awarded, or how a legal principle was applied. Returns exact text spans with confidence scores.',
+    '[Judgment Analysis] Extract a direct answer to a specific question from an Australian court judgment. Uses Isaacus Kanon Answer Extractor — faster and more precise than reading the full text. Ideal for targeted questions like reasoning on a specific issue, damages awarded, or how a legal principle was applied. Returns exact text spans with confidence scores.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'ask_judgment', input: input.citation_or_url });
