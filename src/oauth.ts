@@ -73,8 +73,11 @@ function verifyPkce(
     const hash = createHash('sha256').update(codeVerifier).digest('base64url');
     return safeEqual(hash, codeChallenge);
   }
-  // plain — not recommended but technically allowed
-  if (method === 'plain') return safeEqual(codeVerifier, codeChallenge);
+  // plain — not supported; S256 is mandatory per MCP spec and current RFC guidance
+  if (method === 'plain') {
+    logger.warn('PKCE plain method rejected — S256 required');
+    return false;
+  }
   return false;
 }
 

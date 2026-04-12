@@ -22,8 +22,17 @@ export interface OAuthClient {
 }
 
 const clients = new Map<string, OAuthClient>();
+const MAX_DYNAMIC_CLIENTS = 500; // prevent unbounded growth on idle servers
 
 export function registerClient(params: Omit<OAuthClient, 'clientId'>): { clientId: string; clientSecret: string } {
+  // Evict oldest dynamic client entry if we're at the cap.
+  // Pre-registered static clients are never evicted (they have no expiry and are
+  // registered at startup by name, not UUID), so we only need a soft cap here.
+  if (clients.size >= MAX_DYNAMIC_CLIENTS) {
+    const firstKey = clients.keys().next().value;
+    if (firstKey !== undefined) clients.delete(firstKey);
+    logger.warn({ limit: MAX_DYNAMIC_CLIENTS }, 'OAuth client map at capacity — evicted oldest entry');
+  }
   const clientId = randomUUID();
   // Always issue a server-generated secret so confidential clients (e.g. ChatGPT
   // connectors) can authenticate at the token endpoint. PKCE clients (mcp-remote,
@@ -114,6 +123,10 @@ function purgeExpiredCodes(): void {
     if (now > entry.expiresAt) authCodes.delete(code);
   }
 }
+
+// Periodic background cleanup so codes don't accumulate on idle servers.
+// unref() prevents this timer from keeping the process alive during graceful shutdown.
+setInterval(purgeExpiredCodes, 60_000).unref();
 
 export function createAuthCode(params: Omit<AuthCode, 'expiresAt'>): string {
   purgeExpiredCodes();

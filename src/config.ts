@@ -41,8 +41,8 @@ const ConfigSchema = z.object({
   SESSION_SECRET: z.string().optional(),
 
   // Recovery token — allows admin access via login page when other credentials are unavailable.
-  // Remove this env var after recovering access.
-  RECOVERY_TOKEN: z.string().optional(),
+  // Must be at least 32 characters. Remove this env var after recovering access.
+  RECOVERY_TOKEN: z.string().min(32).optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

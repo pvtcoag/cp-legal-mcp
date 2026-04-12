@@ -168,6 +168,17 @@ export async function pingDb(): Promise<boolean> {
   }
 }
 
+/** Drain the connection pool — called on graceful shutdown (SIGTERM). */
+export async function closeDb(): Promise<void> {
+  if (!pool) return;
+  try {
+    await pool.end();
+    logger.info('DB pool closed');
+  } catch (err) {
+    logger.warn({ err }, 'DB pool close error (non-fatal)');
+  }
+}
+
 export interface QueryLogEntry {
   matter_ref: string;
   user_id: string | undefined;

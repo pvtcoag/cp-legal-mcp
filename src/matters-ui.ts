@@ -14,6 +14,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import {
   isDbEnabled,
   listMatters,
@@ -313,7 +314,10 @@ export function parseCookies(req: Request): Record<string, string> {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const eq = part.indexOf('=');
     if (eq < 1) continue;
-    out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim());
+    const rawVal = part.slice(eq + 1).trim();
+    let val = rawVal;
+    try { val = decodeURIComponent(rawVal); } catch { /* malformed % sequence — use raw value */ }
+    out[part.slice(0, eq).trim()] = val;
   }
   return out;
 }
@@ -940,8 +944,19 @@ mattersRouter.get('/matters/login', (req: Request, res: Response) => {
   `));
 });
 
+// Rate limiter: 10 login attempts per IP per 15 minutes.
+// Applied only to the POST handler (GET login page is unrestricted).
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please wait 15 minutes before trying again.' },
+  skipSuccessfulRequests: true, // only count failed/processing attempts toward the limit
+});
+
 // POST /matters/login
-mattersRouter.post('/matters/login', async (req: Request, res: Response) => {
+mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res: Response) => {
   const { username, password, next } = req.body as Record<string, string | undefined>;
   const user = (username ?? '').trim().toLowerCase();
   const token = (password ?? '').trim();
@@ -950,7 +965,16 @@ mattersRouter.post('/matters/login', async (req: Request, res: Response) => {
   let validResult = await validateCredentials(user, token);
 
   // Recovery token override — allows admin access when other credentials are unavailable.
-  if (!validResult && config.RECOVERY_TOKEN && token === config.RECOVERY_TOKEN) {
+  // Uses timingSafeEqual to prevent timing-based token oracle attacks.
+  const recoveryMatch = (() => {
+    if (!config.RECOVERY_TOKEN || !token) return false;
+    try {
+      const a = Buffer.from(token);
+      const b = Buffer.from(config.RECOVERY_TOKEN);
+      return a.length === b.length && timingSafeEqual(a, b);
+    } catch { return false; }
+  })();
+  if (!validResult && recoveryMatch) {
     const recoveryUser = user || 'recovery';
     setSessionCookie(res, recoveryUser, true); // grant admin
     logger.warn({ user: recoveryUser }, 'matters-ui: recovery token used');
@@ -1568,9 +1592,11 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   }
 
   // Paginated rows for table display
-  const offset = (page_num - 1) * PAGE_SIZE;
-  const displayRows = await getMatterHistory(ref, PAGE_SIZE, toolFilter, offset);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  // Clamp page_num to valid range — prevents empty table on out-of-range ?page= values
+  const safePage = Math.min(page_num, totalPages);
+  const offset = (safePage - 1) * PAGE_SIZE;
+  const displayRows = await getMatterHistory(ref, PAGE_SIZE, toolFilter, offset);
 
   const isClosed = matter?.status === 'closed';
   const displayName = matter?.display_name ?? null;
@@ -1612,9 +1638,9 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   }).join('');
 
   const paginationHtml = totalPages > 1 ? `<div class="pagination no-print" style="display:flex;gap:.5rem;align-items:center;margin-top:1rem">
-    ${page_num > 1 ? `<a href="?page=${page_num - 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">← Prev</a>` : ''}
-    <span style="font-size:.8125rem;color:#888">Page ${page_num} of ${totalPages}</span>
-    ${page_num < totalPages ? `<a href="?page=${page_num + 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">Next →</a>` : ''}
+    ${safePage > 1 ? `<a href="?page=${safePage - 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">← Prev</a>` : ''}
+    <span style="font-size:.8125rem;color:#888">Page ${safePage} of ${totalPages}</span>
+    ${safePage < totalPages ? `<a href="?page=${safePage + 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">Next →</a>` : ''}
   </div>` : '';
 
   const closedBanner = isClosed

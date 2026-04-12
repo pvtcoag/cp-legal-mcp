@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { authMiddleware, buildAuthCache } from './auth.js';
-import { initDb, migrateUsersFromEnv, listUsers, pingDb, isDbEnabled } from './db.js';
+import { initDb, migrateUsersFromEnv, listUsers, pingDb, isDbEnabled, closeDb } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
@@ -155,5 +155,8 @@ const server = app.listen(config.PORT, async () => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => process.exit(0));
+  server.close(async () => {
+    await closeDb();
+    process.exit(0);
+  });
 });
