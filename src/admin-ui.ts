@@ -297,10 +297,21 @@ function fmtTokens(n: number): string {
 }
 
 const TOOL_COST_RATES: Record<string, number> = {
+  // Kanon Answer Extractor — $1.50/1M
   ask_judgment: 1.50, ask_legislation: 1.50, compare_cases: 1.50,
-  enrich_judgment: 3.50, summarise_judgment: 1.833,
+  get_legislation: 1.50, draft_research_memo: 1.50,
+  // Kanon 2 Enricher — $3.50/1M
+  enrich_judgment: 3.50, build_chronology: 3.50,
+  // blended
+  summarise_judgment: 1.833,
+  // Kanon Universal Classifier — $1.00/1M
   research_cases: 1.00, research_legislation: 1.00, search_by_citation: 1.00,
   find_citing_cases: 1.00, find_related_cases: 1.00, classify_legal_issue: 1.00,
+  // No Isaacus calls — 0 tokens logged, cost = 0
+  get_judgment: 0, format_citation: 0, generate_pinpoint: 0,
+  lookup_entity: 0, lookup_entities_bulk: 0, search_regulatory_decisions: 0,
+  search_asx_announcements: 0, check_limitation_period: 0,
+  get_matter_history: 0, inspect_database: 0,
 };
 const AUD_PER_USD = 1.57;
 

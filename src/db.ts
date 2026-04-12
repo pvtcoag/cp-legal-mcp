@@ -1284,3 +1284,96 @@ export async function incrementSessionVersion(username: string): Promise<void> {
   if (!pool) return;
   await pool.query('UPDATE users SET session_version = session_version + 1 WHERE username = $1', [username]);
 }
+
+// ── Conflicts check ───────────────────────────────────────────────────────────
+
+export interface ConflictMatch {
+  matter_ref: string;
+  matching_queries: Array<{
+    id: number;
+    tool_name: string;
+    query_text: string;
+    created_at: string;
+    user_id: string | null;
+  }>;
+}
+
+/**
+ * Search all matters for queries or top_results matching any of the provided terms.
+ * Uses the GIN trigram index for fast substring matching.
+ * Optionally exclude a known matter_ref (the current matter being checked against).
+ */
+export async function findConflicts(
+  terms: string[],
+  excludeMatterRef?: string,
+  limit = 50,
+): Promise<ConflictMatch[]> {
+  if (!pool || terms.length === 0) return [];
+
+  // Build WHERE clause: match any term in query_text OR in the top_results JSONB text
+  // We cast top_results to text for substring search — acceptable given the small row volumes
+  const termConditions = terms
+    .map((_, i) => `(unaccent(query_text) ILIKE unaccent($${i + 1}) OR top_results::text ILIKE $${i + 1})`)
+    .join(' OR ');
+
+  const params: unknown[] = terms.map((t) => `%${t.replace(/[%_]/g, '\\$&')}%`);
+
+  let excludeClause = '';
+  if (excludeMatterRef) {
+    params.push(excludeMatterRef);
+    excludeClause = `AND matter_ref != $${params.length}`;
+  }
+
+  params.push(limit);
+  const limitClause = `$${params.length}`;
+
+  const result = await pool.query<{
+    matter_ref: string;
+    id: number;
+    tool_name: string;
+    query_text: string;
+    created_at: string;
+    user_id: string | null;
+  }>(
+    `SELECT matter_ref, id, tool_name, query_text, created_at, user_id
+     FROM matter_queries
+     WHERE (${termConditions}) ${excludeClause}
+     ORDER BY matter_ref, created_at DESC
+     LIMIT ${limitClause}`,
+    params,
+  );
+
+  // Group by matter_ref
+  const byMatter = new Map<string, ConflictMatch>();
+  for (const row of result.rows) {
+    if (!byMatter.has(row.matter_ref)) {
+      byMatter.set(row.matter_ref, { matter_ref: row.matter_ref, matching_queries: [] });
+    }
+    byMatter.get(row.matter_ref)!.matching_queries.push({
+      id: row.id,
+      tool_name: row.tool_name,
+      query_text: row.query_text,
+      created_at: row.created_at,
+      user_id: row.user_id,
+    });
+  }
+
+  return Array.from(byMatter.values());
+}
+
+/**
+ * Pull cached judgment texts for a list of URLs, used by draft_research_memo
+ * to include case extracts without triggering fresh fetches.
+ */
+export async function getCachedJudgmentsByUrls(
+  urls: string[],
+): Promise<Array<{ url: string; title: string | null; citation: string | null; body_text: string }>> {
+  if (!pool || urls.length === 0) return [];
+  const result = await pool.query<{ url: string; title: string | null; citation: string | null; body_text: string }>(
+    `SELECT url, title, citation, body_text
+     FROM judgment_cache
+     WHERE url = ANY($1) AND fetched_at > NOW() - INTERVAL '30 days'`,
+    [urls],
+  );
+  return result.rows;
+}

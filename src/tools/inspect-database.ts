@@ -6,6 +6,7 @@ import {
   getUserActivity,
   getRecentActivity,
   getMatterHistory,
+  findConflicts,
 } from '../db.js';
 import { getUser } from '../request-context.js';
 import { config } from '../config.js';
@@ -23,18 +24,25 @@ function isAdmin(): boolean {
 
 const inputSchema = z.object({
   command: z
-    .enum(['list_matters', 'user_activity', 'recent_activity', 'matter_detail'])
+    .enum(['list_matters', 'user_activity', 'recent_activity', 'matter_detail', 'check_conflicts'])
     .describe(
       'list_matters — all matters with summary stats | ' +
       'user_activity — queries grouped by user and date | ' +
       'recent_activity — most recent queries across all matters | ' +
-      'matter_detail — full query history for one matter',
+      'matter_detail — full query history for one matter | ' +
+      'check_conflicts — search all matters for queries matching given entity or case names',
     ),
   matter_ref: z
     .string()
     .max(100)
     .optional()
-    .describe('Required for matter_detail command'),
+    .describe('Required for matter_detail command. For check_conflicts, the current matter to exclude from results.'),
+  search_terms: z
+    .array(z.string().min(1).max(200))
+    .min(1)
+    .max(10)
+    .optional()
+    .describe('Required for check_conflicts — list of entity names, case names, or ABNs to search for across all matters'),
   date_from: z
     .string()
     .optional()
@@ -154,6 +162,38 @@ export function registerInspectDatabase(server: McpServer): void {
                   matter_ref: input.matter_ref,
                   record_count: rows.length,
                   records: rows,
+                }),
+              }],
+            };
+          }
+
+          case 'check_conflicts': {
+            if (!input.search_terms || input.search_terms.length === 0) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: JSON.stringify({ error: 'missing_param', message: 'search_terms is required for check_conflicts' }),
+                }],
+                isError: true,
+              };
+            }
+            const conflicts = await findConflicts(input.search_terms, input.matter_ref, input.limit ?? 50);
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({
+                  command: 'check_conflicts',
+                  search_terms: input.search_terms,
+                  excluded_matter: input.matter_ref ?? null,
+                  conflict_count: conflicts.length,
+                  conflicts: conflicts.map((c) => ({
+                    matter_ref: c.matter_ref,
+                    matching_query_count: c.matching_queries.length,
+                    matching_queries: c.matching_queries.slice(0, 5),
+                  })),
+                  note: conflicts.length === 0
+                    ? 'No prior matter queries match the provided search terms.'
+                    : `Found ${conflicts.length} matter(s) with queries matching the provided terms. Review before accepting a retainer.`,
                 }),
               }],
             };

@@ -62,23 +62,38 @@ export const COOKIE = 'cvn_matters';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 const TOOL_LABELS: Record<string, string> = {
-  research_cases:      'Case Research',
-  research_legislation:'Legislation Research',
-  get_judgment:        'Judgment',
-  ask_judgment:        'Ask Judgment',
-  enrich_judgment:     'Enrich Judgment',
-  summarise_judgment:  'Summarise',
-  classify_legal_issue:'Classify Issue',
-  find_related_cases:  'Related Cases',
-  compare_cases:       'Compare Cases',
-  find_citing_cases:   'Citing Cases',
-  get_legislation:     'Legislation',
-  ask_legislation:     'Ask Legislation',
-  search_by_citation:  'Citation Search',
-  format_citation:     'Format Citation',
-  generate_pinpoint:   'Pinpoint',
-  get_matter_history:  'Matter History',
-  inspect_database:    'Inspect DB',
+  // Case research
+  research_cases:             'Case Research',
+  search_by_citation:         'Citation Search',
+  find_citing_cases:          'Citing Cases',
+  find_related_cases:         'Related Cases',
+  // Judgment analysis
+  get_judgment:               'Judgment',
+  ask_judgment:               'Ask Judgment',
+  enrich_judgment:            'Enrich Judgment',
+  summarise_judgment:         'Summarise',
+  compare_cases:              'Compare Cases',
+  // Legislation
+  research_legislation:       'Legislation Research',
+  get_legislation:            'Legislation',
+  ask_legislation:            'Ask Legislation',    // legacy — merged into get_legislation
+  // Classification & citation
+  classify_legal_issue:       'Classify Issue',
+  format_citation:            'Format Citation',
+  generate_pinpoint:          'Pinpoint',           // legacy — merged into format_citation
+  // Entity intelligence
+  lookup_entity:              'Entity Lookup',
+  lookup_entities_bulk:       'Bulk Entity Lookup',
+  // Regulatory & market intelligence
+  search_regulatory_decisions:'Regulatory Decisions',
+  search_asx_announcements:   'ASX Announcements',
+  // Matter
+  get_matter_history:         'Matter History',
+  build_chronology:           'Chronology',
+  draft_research_memo:        'Research Memo',
+  check_limitation_period:    'Limitation Period',
+  // Admin
+  inspect_database:           'Inspect DB',
 };
 
 // ── Cost helpers ──────────────────────────────────────────────────────────────
@@ -94,23 +109,41 @@ const TOOL_LABELS: Record<string, string> = {
  * → $11.00 / 6 = $1.833/M stored tokens
  */
 const TOOL_COST_RATES: Record<string, number> = {
-  ask_judgment:        1.50,  // Kanon Answer Extractor
-  ask_legislation:     1.50,  // Kanon Answer Extractor
-  compare_cases:       1.50,  // Kanon Answer Extractor
-  enrich_judgment:     3.50,  // Kanon 2 Enricher
-  summarise_judgment:  1.833, // blended: 1× Enricher + 5× QA (see above)
-  research_cases:      1.00,  // Kanon Universal Classifier
-  research_legislation:1.00,  // Kanon Universal Classifier
-  search_by_citation:  1.00,  // Kanon Universal Classifier
-  find_citing_cases:   1.00,  // Kanon Universal Classifier
-  find_related_cases:  1.00,  // Kanon Universal Classifier + Embedder (Embedder rate TBC)
-  classify_legal_issue:1.00,  // Kanon Universal Classifier
-  get_judgment:        0,
-  get_legislation:     0,
-  format_citation:     0,
-  generate_pinpoint:   0,
-  get_matter_history:  0,
-  inspect_database:    0,
+  // Kanon Answer Extractor — $1.50/1M
+  ask_judgment:               1.50,
+  ask_legislation:            1.50,  // legacy
+  compare_cases:              1.50,
+  get_legislation:            1.50,  // QA mode uses extractAnswer; pure-retrieval calls log 0 tokens so cost = 0
+  draft_research_memo:        1.50,  // when with_case_analysis: true; default mode logs 0 tokens
+
+  // Kanon 2 Enricher — $3.50/1M
+  enrich_judgment:            3.50,
+  build_chronology:           3.50,
+
+  // blended: 1× Enricher ($3.50) + 5× QA ($1.50) across 6 API calls = $1.833/M stored tokens
+  summarise_judgment:         1.833,
+
+  // Kanon Universal Classifier — $1.00/1M
+  // classify_legal_issue now runs 3× classifier calls; total tokens logged = sum of all 3,
+  // rate remains $1.00/1M since all calls use the same model.
+  research_cases:             1.00,
+  research_legislation:       1.00,
+  search_by_citation:         1.00,
+  find_citing_cases:          1.00,
+  find_related_cases:         1.00,
+  classify_legal_issue:       1.00,
+
+  // No Isaacus calls — cost is 0 (api_tokens_used will always be 0)
+  get_judgment:               0,
+  format_citation:            0,
+  generate_pinpoint:          0,   // legacy
+  get_matter_history:         0,
+  lookup_entity:              0,
+  lookup_entities_bulk:       0,
+  search_regulatory_decisions:0,
+  search_asx_announcements:   0,
+  check_limitation_period:    0,
+  inspect_database:           0,
 };
 
 function toolCostRate(toolName: string): number {

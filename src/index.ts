@@ -135,6 +135,17 @@ const server = app.listen(config.PORT, async () => {
     logger.info({ clientId: config.OAUTH_CLIENT_ID }, 'OAuth static client pre-registered');
   }
 
+  // Warn on missing optional env vars that degrade functionality
+  if (!config.ABR_GUID) {
+    logger.warn(
+      'ABR_GUID not configured — entity lookups will use ASIC Connect only. ' +
+      'Register for a free GUID at https://abr.business.gov.au/Tools/WebServices',
+    );
+  }
+  if (!config.OAUTH_CLIENT_ID) {
+    logger.warn('OAUTH_CLIENT_ID not set — Claude Web / ChatGPT static client will not be pre-registered');
+  }
+
   // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
 

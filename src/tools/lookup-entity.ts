@@ -122,6 +122,24 @@ interface Officeholder {
   ceased?:  string | null;
 }
 
+/**
+ * Lightweight structural check: returns false if the HTML doesn't look like
+ * a valid ASIC Connect search result page, which indicates the scraper may
+ * need updating. Logs a warning with a content fingerprint so breakage is
+ * detectable in Railway logs without exposing the full HTML.
+ */
+function checkAsicHtmlStructure(html: string): boolean {
+  // All valid ASIC Connect result pages contain at least one of these markers
+  const KNOWN_MARKERS = ['tbl_data_cell', 'panelSearchResult', 'RegistrySearch', 'connectonline.asic.gov.au'];
+  const hasMarker = KNOWN_MARKERS.some((m) => html.includes(m));
+  if (!hasMarker) {
+    // Generate a short content fingerprint (first 64 chars of the body, stripped)
+    const fingerprint = html.replace(/\s+/g, ' ').trim().slice(0, 64);
+    logger.warn({ fingerprint }, 'ASIC Connect HTML structure unrecognised — scraper may need updating');
+  }
+  return hasMarker;
+}
+
 function parseAsicResults(html: string, limit: number): AsicResult[] {
   const results: AsicResult[] = [];
   const rowPattern  = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -320,6 +338,7 @@ export function registerLookupEntity(server: McpServer): void {
             });
             if (res.ok) {
               const html = await res.text();
+              checkAsicHtmlStructure(html);
               const results = parseAsicResults(html, 1);
 
               let officers: { current: Officeholder[]; former: Officeholder[] } | null = null;
@@ -408,6 +427,7 @@ export function registerLookupEntity(server: McpServer): void {
           });
           if (!res.ok) return [];
           const html = await res.text();
+          checkAsicHtmlStructure(html);
           return parseAsicResults(html, input.limit);
         } catch {
           return [];
