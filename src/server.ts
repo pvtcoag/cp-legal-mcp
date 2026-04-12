@@ -20,11 +20,47 @@ import { registerGetLegislation } from './tools/get-legislation.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 
+const ADMIN_ERROR_NOTE = '\n\nIf this error persists, contact your administrator.';
+
+/**
+ * Monkey-patches server.tool() so every registered handler's error responses
+ * automatically include an admin contact note — without touching each tool file.
+ */
+function instrumentServerErrors(server: McpServer): void {
+  const original = server.tool.bind(server) as (...args: unknown[]) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (server as any).tool = (...args: unknown[]) => {
+    const last = args[args.length - 1];
+    if (typeof last === 'function') {
+      args[args.length - 1] = async (input: unknown) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await (last as (i: unknown) => Promise<any>)(input);
+        if (!result?.isError) return result;
+        return {
+          ...result,
+          content: (result.content ?? []).map((c: { type: string; text?: string }) => {
+            if (c.type !== 'text' || !c.text) return c;
+            try {
+              const parsed = JSON.parse(c.text) as Record<string, unknown>;
+              if (typeof parsed['message'] === 'string') {
+                return { ...c, text: JSON.stringify({ ...parsed, message: parsed['message'] + ADMIN_ERROR_NOTE }) };
+              }
+            } catch { /* not JSON — fall through */ }
+            return { ...c, text: c.text + ADMIN_ERROR_NOTE };
+          }),
+        };
+      };
+    }
+    return original(...args);
+  };
+}
+
 function buildServer(): McpServer {
   const server = new McpServer({
     name: 'cp-legal-mcp',
     version: '0.1.0',
   });
+  instrumentServerErrors(server);
 
   // Discovery & retrieval — cases
   registerResearchCases(server);
