@@ -329,16 +329,18 @@ export interface RecentActivityRow extends MatterHistoryRow {
   // same shape, no additional fields
 }
 
-export async function getRecentActivity(limit: number = 50): Promise<RecentActivityRow[]> {
+export async function getRecentActivity(limit: number = 50, userId?: string): Promise<RecentActivityRow[]> {
   if (!pool) return [];
+  const where = userId ? 'WHERE user_id = $2 OR user_id IS NULL' : '';
+  const params: (number | string)[] = userId ? [limit, userId] : [limit];
   const result = await pool.query<RecentActivityRow>(`
     SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
            result_count, top_results, api_tokens_used,
            is_error, error_message, accuracy_score, created_at
-    FROM matter_queries
+    FROM matter_queries ${where}
     ORDER BY created_at DESC
     LIMIT $1
-  `, [limit]);
+  `, params);
   return result.rows;
 }
 
@@ -450,8 +452,10 @@ export interface ErrorStatRow {
   error_rate_pct: number;
 }
 
-export async function getErrorStats(): Promise<ErrorStatRow[]> {
+export async function getErrorStats(userId?: string): Promise<ErrorStatRow[]> {
   if (!pool) return [];
+  const where = userId ? 'WHERE user_id = $1 OR user_id IS NULL' : '';
+  const params = userId ? [userId] : [];
   const result = await pool.query<ErrorStatRow>(`
     SELECT
       tool_name,
@@ -461,10 +465,46 @@ export async function getErrorStats(): Promise<ErrorStatRow[]> {
         COUNT(*) FILTER (WHERE is_error = TRUE)::numeric
         / GREATEST(COUNT(*)::numeric, 1) * 100, 1
       )::float                                             AS error_rate_pct
-    FROM matter_queries
+    FROM matter_queries ${where}
     GROUP BY tool_name
     HAVING COUNT(*) FILTER (WHERE is_error = TRUE) > 0
     ORDER BY error_count DESC
-  `);
+  `, params);
+  return result.rows;
+}
+
+// ── Aggregate accuracy ────────────────────────────────────────────────────────
+
+/** Average extractive QA confidence across all logged queries with a score. */
+export async function getAggregateAccuracy(userId?: string): Promise<number | null> {
+  if (!pool) return null;
+  const where = userId
+    ? 'WHERE (user_id = $1 OR user_id IS NULL) AND accuracy_score IS NOT NULL'
+    : 'WHERE accuracy_score IS NOT NULL';
+  const params = userId ? [userId] : [];
+  const result = await pool.query<{ avg_accuracy: number | null }>(`
+    SELECT ROUND(AVG(accuracy_score)::numeric, 3)::float AS avg_accuracy
+    FROM matter_queries ${where}
+  `, params);
+  return result.rows[0]?.avg_accuracy ?? null;
+}
+
+// ── Per-tool token totals (for accurate cost calculation) ─────────────────────
+
+export interface ToolTokenStat {
+  tool_name: string;
+  total_tokens: number;
+}
+
+/** Returns total tokens grouped by tool — used to compute accurate per-tool cost in the UI. */
+export async function getDashboardCostByTool(userId?: string): Promise<ToolTokenStat[]> {
+  if (!pool) return [];
+  const where = userId ? 'WHERE user_id = $1 OR user_id IS NULL' : '';
+  const params = userId ? [userId] : [];
+  const result = await pool.query<ToolTokenStat>(`
+    SELECT tool_name, COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens
+    FROM matter_queries ${where}
+    GROUP BY tool_name
+  `, params);
   return result.rows;
 }

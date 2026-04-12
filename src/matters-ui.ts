@@ -25,6 +25,8 @@ import {
   getRecentActivity,
   getPopularCases,
   getErrorStats,
+  getAggregateAccuracy,
+  getDashboardCostByTool,
   type MatterSummaryRow,
   type MatterHistoryRow,
   type DashboardStats,
@@ -32,6 +34,7 @@ import {
   type UserStatRow,
   type PopularCaseRow,
   type ErrorStatRow,
+  type ToolTokenStat,
 } from './db.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -67,21 +70,26 @@ const TOOL_LABELS: Record<string, string> = {
 
 /**
  * Per-tool Isaacus cost rates (USD per 1M input tokens).
- * Kanon Answer Extractor = $1.50/1M; Kanon Universal Classifier (reranking) = $1.00/1M.
- * Tools that make no Isaacus calls = $0.
+ * Kanon 2 Enricher       = $3.50/1M  ($0.0000035/token)
+ * Kanon Answer Extractor = $1.50/1M  ($0.0000015/token)
+ * Kanon Universal Classifier (reranking/classification) = $1.00/1M ($0.000001/token)
+ *
+ * summarise_judgment blended: 1× Enricher ($3.50) + 5× QA ($1.50×5=$7.50) = $11.00
+ * across 6 calls each processing the same doc → total_tokens = 6× doc_tokens
+ * → $11.00 / 6 = $1.833/M stored tokens
  */
 const TOOL_COST_RATES: Record<string, number> = {
-  ask_judgment:        1.50,
-  ask_legislation:     1.50,
-  compare_cases:       1.50,
-  enrich_judgment:     1.50,
-  summarise_judgment:  1.38, // blended: enrichment + 5× QA
-  research_cases:      1.00,
-  research_legislation:1.00,
-  search_by_citation:  1.00,
-  find_citing_cases:   1.00,
-  find_related_cases:  1.00,
-  classify_legal_issue:1.00,
+  ask_judgment:        1.50,  // Kanon Answer Extractor
+  ask_legislation:     1.50,  // Kanon Answer Extractor
+  compare_cases:       1.50,  // Kanon Answer Extractor
+  enrich_judgment:     3.50,  // Kanon 2 Enricher
+  summarise_judgment:  1.833, // blended: 1× Enricher + 5× QA (see above)
+  research_cases:      1.00,  // Kanon Universal Classifier
+  research_legislation:1.00,  // Kanon Universal Classifier
+  search_by_citation:  1.00,  // Kanon Universal Classifier
+  find_citing_cases:   1.00,  // Kanon Universal Classifier
+  find_related_cases:  1.00,  // Kanon Universal Classifier + Embedder (Embedder rate TBC)
+  classify_legal_issue:1.00,  // Kanon Universal Classifier
   get_judgment:        0,
   get_legislation:     0,
   format_citation:     0,
@@ -94,13 +102,23 @@ function toolCostRate(toolName: string): number {
   return TOOL_COST_RATES[toolName] ?? 1.25; // conservative default for unknown tools
 }
 
+/** Format a dollar amount with enough precision to be meaningful. */
+function fmtCostValue(cost: number): string {
+  if (cost === 0) return '—';
+  if (cost >= 10)   return `$${cost.toFixed(2)}`;
+  if (cost >= 1)    return `$${cost.toFixed(4)}`;
+  if (cost >= 0.01) return `$${cost.toFixed(4)}`;
+  if (cost >= 0.0001) return `$${cost.toFixed(6)}`;
+  return `$${cost.toExponential(2)}`;
+}
+
 /** Estimated Isaacus API cost for a given token count, using per-tool rate if provided. */
 function estCost(tokens: number, toolName?: string): string {
   if (!tokens) return '—';
   const ratePerM = toolName !== undefined ? toolCostRate(toolName) : 1.25;
   if (ratePerM === 0) return '—';
   const cost = (tokens / 1_000_000) * ratePerM;
-  return cost >= 0.01 ? `$${cost.toFixed(2)}` : '<$0.01';
+  return fmtCostValue(cost);
 }
 
 /** Compute accurate total cost for a set of history rows using per-tool rates. */
@@ -110,20 +128,32 @@ function computeMatterCost(rows: MatterHistoryRow[]): string {
     const rate = toolCostRate(r.tool_name);
     return sum + (tokens / 1_000_000) * rate;
   }, 0);
-  if (total === 0) return '—';
-  return total >= 0.01 ? `$${total.toFixed(2)}` : '<$0.01';
+  return fmtCostValue(total);
+}
+
+/** Compute accurate total cost from per-tool token aggregates (for dashboard). */
+function computeDashboardCost(byTool: ToolTokenStat[]): string {
+  const total = byTool.reduce((sum, { tool_name, total_tokens }) => {
+    const rate = toolCostRate(tool_name);
+    return sum + (total_tokens / 1_000_000) * rate;
+  }, 0);
+  return fmtCostValue(total);
 }
 
 function fmtTokens(n: number): string {
   return n > 0 ? n.toLocaleString('en-AU') : '—';
 }
 
-/** Accuracy score badge: green >70%, amber 40–70%, red <40%. */
+/**
+ * Accuracy score badge for Isaacus extractive QA confidence.
+ * Legal text scores are typically 5–40%. Thresholds are calibrated for legal extraction:
+ * green ≥45% (clear answer), amber ≥20% (probable), red <20% (uncertain/not extractable).
+ */
 function accuracyBadge(score: number | null | undefined): string {
   if (score == null) return '<span style="color:#aaa">—</span>';
   const pct = Math.round(score * 100);
-  const cls = score >= 0.7 ? 'acc-high' : score >= 0.4 ? 'acc-mid' : 'acc-low';
-  return `<span class="acc-badge ${cls}">${pct}%</span>`;
+  const cls = score >= 0.45 ? 'acc-high' : score >= 0.20 ? 'acc-mid' : 'acc-low';
+  return `<span class="acc-badge ${cls}" title="Extractive confidence: ${pct}% (legal text typically 5–45%)">${pct}%</span>`;
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────
@@ -270,8 +300,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
 .btn-secondary:hover { background: var(--light); }
 .btn-back { color: #555; text-decoration: none; font-size: .875rem; display: inline-flex; align-items: center; gap: .375rem; margin-bottom: 1.5rem; }
 .btn-back:hover { color: var(--primary); }
-.table-wrap { overflow-x: auto; border-radius: 8px; }
-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; min-width: 600px; }
+.table-wrap { overflow-x: auto; border-radius: 8px; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; }
 .table-wrap table { border-radius: 0; border: none; }
 thead th { background: #F0EDE8; padding: .625rem 1rem; text-align: left; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid var(--border); }
 tbody tr + tr td { border-top: 1px solid #F0EDE8; }
@@ -285,8 +315,8 @@ td { padding: .625rem 1rem; vertical-align: top; }
 .count { font-weight: 600; }
 .mono { font-family: ui-monospace, "Cascadia Code", monospace; font-size: .8125rem; }
 .users-cell { color: #555; font-size: .8125rem; }
-.query-full { white-space: pre-wrap; word-break: break-word; color: #333; min-width: 200px; max-width: 320px; line-height: 1.4; }
-.top-results-stack { min-width: 180px; }
+.query-full { white-space: pre-wrap; word-break: break-word; color: #333; line-height: 1.4; }
+.top-results-stack { }
 .top-results-stack a { color: #1a6b8a; text-decoration: none; display: block; word-break: break-word; margin-bottom: .3rem; font-size: .75rem; line-height: 1.4; }
 .top-results-stack a:hover { text-decoration: underline; }
 .summary-grid { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
@@ -361,29 +391,39 @@ input:focus { border-color: var(--primary); }
 
 /* Print */
 @media print {
-  body { background: #fff; font-size: 9pt; font-family: Georgia, serif; }
+  body { background: #fff; font-size: 8.5pt; font-family: Georgia, serif; }
   nav, .actions, .btn-back, .no-print, .filter-bar, .seg-tabs, .section-block { display: none !important; }
   main { max-width: none; padding: 0; }
   h1 { font-size: 13pt; font-family: Georgia, serif; margin-bottom: .2rem; color: #000; }
   .subtitle { margin-bottom: .5rem; }
   .summary-grid { display: none; }
   .print-header { display: block !important; margin-bottom: 1rem; }
-  .print-header-firm { font-family: Georgia, serif; font-size: 12pt; font-weight: bold; color: #0B1F33; }
-  .print-header-sub { font-size: 8pt; color: #555; margin-top: .125rem; }
-  table { font-size: 7.5pt; border: 1px solid #aaa; min-width: 0; }
-  thead th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: .2rem .4rem !important; }
-  td { padding: .2rem .4rem !important; }
-  .query-full { max-width: none; white-space: pre-wrap; word-break: break-word; }
+  .print-header-firm { font-family: Georgia, serif; font-size: 11pt; font-weight: bold; color: #0B1F33; }
+  .print-header-sub { font-size: 7.5pt; color: #555; margin-top: .125rem; }
+  /* Hide heavy columns in print — links don't work on paper */
+  .no-print-col { display: none !important; }
+  table { font-size: 7pt; border: 1px solid #aaa; table-layout: fixed; }
+  thead th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: .15rem .3rem !important; font-size: 6.5pt; }
+  td { padding: .15rem .3rem !important; vertical-align: top; word-break: break-word; }
+  .query-full { white-space: pre-wrap; word-break: break-word; }
   .top-results-stack a { color: #333; text-decoration: none; }
+  .acc-badge { border: 1px solid #999; background: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   tr { page-break-inside: avoid; }
-  @page { margin: 1.5cm; }
+  @page { size: A4 landscape; margin: 1cm 1.5cm; }
 }
 .print-header { display: none; }
 `;
 
 const LOGO_SRC = '';
 
-function page(title: string, body: string, user?: string, activePath?: string): string {
+/** No-cache middleware — prevents Cloudflare and browsers from serving stale matter pages. */
+function noCache(_req: Request, res: Response, next: NextFunction): void {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+}
+
+function page(title: string, body: string, user?: string, activePath?: string, autoRefreshSecs?: number): string {
   const nav = user
     ? `<nav>
         <a href="/matters" class="nav-brand">
@@ -408,6 +448,7 @@ function page(title: string, body: string, user?: string, activePath?: string): 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${autoRefreshSecs ? `<meta http-equiv="refresh" content="${autoRefreshSecs}">` : ''}
   <style>${CSS}</style>
 </head>
 <body>
@@ -448,6 +489,46 @@ function renderResearcherCards(users: UserStatRow[]): string {
   return `<div class="section-block no-print"><h2>Researchers</h2><div class="researcher-grid">${cards}</div></div>`;
 }
 
+function renderRailwayCosts(): string {
+  const uptimeDays = process.uptime() / 86400;
+  const memMB = process.memoryUsage().rss / (1024 * 1024);
+  const memGB = memMB / 1024;
+  // Estimate since deploy: memory cost (current RSS × uptime as lower bound)
+  const estMemCost = memGB * (uptimeDays * 24 * 60) * 0.000231;
+  const estCpuCost = 0.5 * (uptimeDays * 24 * 60) * 0.000463; // ~0.5 vCPU est
+  const estInfraCost = estMemCost + estCpuCost;
+  return `<div class="section-block no-print"><h2>Railway Infrastructure Costs</h2>
+    <p style="font-size:.8125rem;color:#555;margin-bottom:.875rem">
+      Infrastructure costs run independently of per-query API usage.
+      Egress and volume costs are not tracked per-query.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem;margin-bottom:.875rem">
+      <div class="card" style="min-width:0">
+        <div class="card-label">Memory</div>
+        <div class="card-value sm">$0.000231<span style="font-size:.6875rem;font-weight:400;color:#888">/GB/min</span></div>
+        <div class="card-sub">~${memMB.toFixed(0)} MB current RSS</div>
+      </div>
+      <div class="card" style="min-width:0">
+        <div class="card-label">CPU</div>
+        <div class="card-value sm">$0.000463<span style="font-size:.6875rem;font-weight:400;color:#888">/vCPU/min</span></div>
+      </div>
+      <div class="card" style="min-width:0">
+        <div class="card-label">Egress</div>
+        <div class="card-value sm">$0.05<span style="font-size:.6875rem;font-weight:400;color:#888">/GB</span></div>
+      </div>
+      <div class="card" style="min-width:0">
+        <div class="card-label">Volume Storage</div>
+        <div class="card-value sm">$0.00000347<span style="font-size:.6875rem;font-weight:400;color:#888">/GB/min</span></div>
+      </div>
+      <div class="card" style="min-width:0">
+        <div class="card-label">Est. Since Deploy <span class="est-badge">est</span></div>
+        <div class="card-value sm">${fmtCostValue(estInfraCost)}</div>
+        <div class="card-sub">${(uptimeDays).toFixed(1)} day uptime · excl. egress &amp; volume</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderPopularCases(cases: PopularCaseRow[]): string {
   if (cases.length === 0) return '';
   const rows = cases.map((c, i) => `
@@ -483,7 +564,20 @@ function renderErrorStats(stats: ErrorStatRow[]): string {
   </div>`;
 }
 
-function renderDashboardCards(stats: DashboardStats): string {
+function renderDashboardCards(
+  stats: DashboardStats,
+  costByTool: ToolTokenStat[],
+  avgAccuracy: number | null,
+): string {
+  const accuracyHtml = avgAccuracy != null
+    ? `<div class="card">
+        <div class="card-label">Avg Extraction Accuracy
+          <span title="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not answer correctness." style="cursor:help;color:#aaa;margin-left:.25rem">ⓘ</span>
+        </div>
+        <div class="card-value sm">${accuracyBadge(avgAccuracy)}</div>
+        <div class="card-sub">across QA-capable tools</div>
+      </div>`
+    : '';
   return `<div class="summary-grid">
     <div class="card">
       <div class="card-label">Total Matters</div>
@@ -499,10 +593,11 @@ function renderDashboardCards(stats: DashboardStats): string {
       <div class="card-value">${stats.total_tokens > 0 ? Math.round(stats.total_tokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
     </div>
     <div class="card">
-      <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
-      <div class="card-value sm">${estCost(Number(stats.total_tokens))}</div>
-      <div class="card-sub">Per-tool Isaacus rates</div>
+      <div class="card-label">Est. Isaacus Cost <span class="est-badge">est</span></div>
+      <div class="card-value sm">${computeDashboardCost(costByTool)}</div>
+      <div class="card-sub">Per-tool rates</div>
     </div>
+    ${accuracyHtml}
   </div>`;
 }
 
@@ -542,6 +637,9 @@ function renderFilterBar(params: {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// Apply no-cache to all /matters routes to prevent Cloudflare and browser caching
+mattersRouter.use(noCache);
 
 // GET /matters/login
 mattersRouter.get('/matters/login', (req: Request, res: Response) => {
@@ -614,13 +712,15 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   const scopedUserId = isAdmin(user) ? undefined : user;
   const adminBadge = isAdmin(user) ? '<span class="admin-badge">All researchers</span>' : '';
 
-  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats] = await Promise.all([
+  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy] = await Promise.all([
     getDashboardStats(scopedUserId),
     getToolUsageStats(scopedUserId),
     isAdmin(user) ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
-    isAdmin(user) ? getRecentActivity(20) : Promise.resolve<MatterHistoryRow[]>([]),
+    getRecentActivity(20, scopedUserId),
     isAdmin(user) ? getPopularCases(10) : Promise.resolve<PopularCaseRow[]>([]),
-    isAdmin(user) ? getErrorStats() : Promise.resolve<ErrorStatRow[]>([]),
+    getErrorStats(scopedUserId),
+    getDashboardCostByTool(scopedUserId),
+    getAggregateAccuracy(scopedUserId),
   ]);
 
   const recentHtml = recentActivity.length > 0 ? `
@@ -637,28 +737,35 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
         </tr></thead>
         <tbody>
           ${recentActivity.map((r) => `
-            <tr>
+            <tr${r.is_error ? ' class="row-error"' : ''}>
               <td class="date-small">${fmtDateTime(r.created_at)}</td>
               <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
-              <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555">${esc(r.query_text)}</td>
+              <td style="white-space:pre-wrap;word-break:break-word;color:#555;max-width:380px">${esc(r.query_text)}</td>
               <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
             </tr>`).join('')}
         </tbody>
       </table></div>
     </div>` : '';
 
+  const lastUpdated = new Date().toLocaleString('en-AU', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+  });
+
   res.send(page('Dashboard', `
     <h1>Dashboard ${adminBadge}</h1>
-    <p class="subtitle">Aggregated research analytics${isAdmin(user) ? ' across all matters and researchers' : ' for your matters'}</p>
-    ${renderDashboardCards(stats)}
+    <p class="subtitle">Aggregated research analytics${isAdmin(user) ? ' across all matters and researchers' : ' for your matters'}
+      <span style="float:right;font-size:.75rem;color:#aaa">Updated ${esc(lastUpdated)} · auto-refreshes every 5 min</span>
+    </p>
+    ${renderDashboardCards(stats, costByTool, avgAccuracy)}
     ${renderToolChart(toolStats)}
     ${isAdmin(user) ? renderResearcherCards(userStats) : ''}
     ${isAdmin(user) ? renderPopularCases(popularCases) : ''}
-    ${isAdmin(user) ? renderErrorStats(errorStats) : ''}
+    ${isAdmin(user) ? renderRailwayCosts() : ''}
+    ${renderErrorStats(errorStats)}
     ${recentHtml}
-  `, user, '/matters/dashboard'));
+  `, user, '/matters/dashboard', 300));
 });
 
 // GET /matters — matter list
@@ -720,7 +827,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     ${segTabs}
     ${renderFilterBar({ search, allUsers, isAdmin: isAdmin(user), viewUser, action: '/matters' })}
     ${tableHtml}
-  `, user, '/matters'));
+  `, user, '/matters', 300));
 });
 
 // GET /matters/:ref — matter detail
@@ -788,10 +895,10 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <td><div class="query-full">${esc(r.query_text)}</div></td>
       <td class="date-small">${esc(r.jurisdiction ?? '—')}</td>
       <td class="count" style="text-align:right">${r.result_count ?? 0}</td>
-      <td class="mono" style="text-align:right">${fmtTokens(r.api_tokens_used ?? 0)}</td>
+      <td class="mono no-print-col" style="text-align:right">${fmtTokens(r.api_tokens_used ?? 0)}</td>
       <td style="text-align:right">${costCell}</td>
       <td style="text-align:center">${accuracyBadge(r.accuracy_score)}</td>
-      <td><div class="top-results-stack">${topLinks || '—'}</div></td>
+      <td class="no-print-col"><div class="top-results-stack">${topLinks || '—'}</div></td>
     </tr>`;
   }).join('');
 
@@ -848,8 +955,12 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <thead><tr>
         <th>Date &amp; Time</th><th>Tool</th><th>Researcher</th><th>Query</th>
         <th>Jurisdiction</th><th style="text-align:right">Results</th>
-        <th style="text-align:right">Tokens</th><th style="text-align:right">Cost</th>
-        <th style="text-align:center">Accuracy</th><th>Top Results</th>
+        <th class="no-print-col" style="text-align:right">Tokens</th>
+        <th style="text-align:right">Cost</th>
+        <th style="text-align:center">Accuracy
+          <span class="no-print-col" title="Isaacus extractive confidence. Legal text typically scores 5–45%." style="cursor:help;color:#aaa;margin-left:.2rem;font-weight:400">ⓘ</span>
+        </th>
+        <th class="no-print-col">Top Results</th>
       </tr></thead>
       <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>
