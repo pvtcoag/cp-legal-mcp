@@ -929,3 +929,74 @@ export async function getRecentErrors(limit: number = 10): Promise<MatterHistory
   `, [limit]);
   return result.rows;
 }
+
+// ── Admin matters list ─────────────────────────────────────────────────────────
+
+export interface AdminMatterRow {
+  matter_ref: string;
+  first_seen: string;
+  last_seen: string;
+  query_count: number;
+  total_tokens: number;
+}
+
+export async function listAdminMatters(): Promise<AdminMatterRow[]> {
+  if (!pool) return [];
+  const r = await pool.query<AdminMatterRow>(`
+    SELECT matter_ref,
+           MIN(created_at) AS first_seen,
+           MAX(created_at) AS last_seen,
+           COUNT(*)::int AS query_count,
+           COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens
+    FROM matter_queries
+    WHERE matter_ref IS NOT NULL
+    GROUP BY matter_ref
+    ORDER BY last_seen DESC
+  `);
+  return r.rows;
+}
+
+// ── User cost by period ────────────────────────────────────────────────────────
+
+export interface UserCostStats {
+  query_count: number;
+  matter_count: number;
+  total_tokens: number;
+  first_query: string | null;
+  last_query: string | null;
+}
+
+export async function getUserCostByPeriod(username: string, period: 'lifetime' | 'month' | 'week'): Promise<UserCostStats> {
+  if (!pool) return { query_count: 0, matter_count: 0, total_tokens: 0, first_query: null, last_query: null };
+  const dateClause = period === 'week'
+    ? `AND created_at >= NOW() - INTERVAL '7 days'`
+    : period === 'month'
+    ? `AND created_at >= NOW() - INTERVAL '30 days'`
+    : '';
+  const result = await pool.query<UserCostStats>(`
+    SELECT
+      COUNT(*)::int                               AS query_count,
+      COUNT(DISTINCT matter_ref)::int             AS matter_count,
+      COALESCE(SUM(api_tokens_used), 0)::int      AS total_tokens,
+      MIN(created_at)                             AS first_query,
+      MAX(created_at)                             AS last_query
+    FROM matter_queries
+    WHERE user_id = $1 ${dateClause}
+  `, [username]);
+  return result.rows[0] ?? { query_count: 0, matter_count: 0, total_tokens: 0, first_query: null, last_query: null };
+}
+
+// ── Admin dashboard unique matters count ──────────────────────────────────────
+
+export interface AdminDashboardStatsV2 extends AdminDashboardStats {
+  unique_matters_count: number;
+}
+
+export async function getAdminDashboardStatsV2(): Promise<AdminDashboardStatsV2> {
+  const base = await getAdminDashboardStats();
+  if (!pool) return { ...base, unique_matters_count: 0 };
+  const r = await pool.query<{ unique_matters_count: number }>(
+    `SELECT COUNT(DISTINCT matter_ref)::int AS unique_matters_count FROM matter_queries WHERE matter_ref IS NOT NULL`,
+  );
+  return { ...base, unique_matters_count: r.rows[0]?.unique_matters_count ?? 0 };
+}

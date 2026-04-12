@@ -44,16 +44,19 @@ import {
   getAppConfig,
   setAppConfig,
   getAdminDashboardStats,
-  getUserDetailStats,
+  getAdminDashboardStatsV2,
+  getUserCostByPeriod,
   purgeOldMatterQueries,
   purgeOldJudgmentCache,
   purgeAllJudgmentCache,
   getRecentErrors,
   getRecentActivity,
+  listAdminMatters,
   type UserRow,
   type LoginEventRow,
   type OAuthAuthRow,
   type AppConfigRow,
+  type AdminMatterRow,
 } from './db.js';
 import {
   COOKIE,
@@ -62,7 +65,7 @@ import {
   parseCookies,
   verifySession,
 } from './matters-ui.js';
-import { encryptToken, generateToken, hashToken } from './token-utils.js';
+import { decryptToken, encryptToken, generateToken, hashToken } from './token-utils.js';
 import { refreshAuthCache } from './auth.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -164,6 +167,7 @@ ${CSS}
 .btn-sm { padding: .3rem .625rem; font-size: .8125rem; }
 .token-display { background: #f0fdf4; border: 2px solid #16a34a; border-radius: 8px; padding: 1rem 1.25rem; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 1rem; word-break: break-all; margin: 1rem 0; }
 .token-warning { background: #fef9c3; border: 1px solid #ca8a04; border-radius: 6px; padding: .75rem 1rem; font-size: .875rem; color: #713f12; margin-bottom: .5rem; }
+.token-explain { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: .75rem 1rem; font-size: .875rem; color: #075985; margin-bottom: .5rem; }
 .badge-admin { display: inline-block; background: #dbeafe; color: #1e40af; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
 .badge-inactive { display: inline-block; background: #fee2e2; color: #991b1b; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
 .badge-active { display: inline-block; background: #d1fae5; color: #065f46; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
@@ -179,7 +183,46 @@ ${CSS}
 .section-title { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #888; margin: 2rem 0 .75rem; }
 .confirm-box { border: 1px solid #fca5a5; background: #fff5f5; border-radius: 8px; padding: 1.25rem; margin-top: 1.5rem; }
 .confirm-box h3 { color: #991b1b; font-size: .9375rem; margin-bottom: .75rem; }
+/* Admin layout: sidebar + content */
+.admin-layout { display: flex; min-height: calc(100vh - 52px); }
+.admin-sidebar { width: 220px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border); padding: 1.5rem 0; }
+.admin-sidebar-section { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #aaa; padding: 0 1rem; margin: 1rem 0 .375rem; }
+.admin-sidebar-link { display: block; padding: .5rem 1rem; font-size: .875rem; color: #444; text-decoration: none; border-left: 3px solid transparent; }
+.admin-sidebar-link:hover { background: var(--light); color: var(--primary); }
+.admin-sidebar-link.active { background: #EEF2FF; color: var(--primary); border-left-color: var(--accent); font-weight: 600; }
+.admin-content { flex: 1; padding: 2rem 1.5rem; min-width: 0; overflow: hidden; }
+/* Period toggle tabs */
+.period-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; margin-bottom: 1.25rem; }
+.period-tab { padding: .3rem .75rem; font-size: .8125rem; color: #555; text-decoration: none; border-right: 1px solid var(--border); background: #fff; }
+.period-tab:last-child { border-right: none; }
+.period-tab.active { background: var(--primary); color: #fff; }
+.copy-btn { padding: .3rem .75rem; font-size: .8125rem; background: #fff; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; margin-left: .5rem; }
+.copy-btn:hover { background: var(--light); }
+@media (max-width: 768px) {
+  .admin-layout { flex-direction: column; }
+  .admin-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: .75rem 0; display: flex; flex-wrap: wrap; gap: 0; }
+  .admin-sidebar-section { display: none; }
+  .admin-sidebar-link { border-left: none; border-bottom: 3px solid transparent; padding: .5rem .75rem; font-size: .8125rem; }
+  .admin-sidebar-link.active { border-bottom-color: var(--accent); border-left: none; }
+  main { padding: 0; }
+  .admin-content { padding: 1.25rem 1rem; }
+}
 `;
+
+function sidebar(activePath?: string): string {
+  const link = (href: string, label: string) =>
+    `<a href="${href}" class="admin-sidebar-link${activePath === href ? ' active' : ''}">${label}</a>`;
+  return `<div class="admin-sidebar">
+    <div class="admin-sidebar-section">Overview</div>
+    ${link('/admin', 'Dashboard')}
+    <div class="admin-sidebar-section">Management</div>
+    ${link('/admin/users', 'Users')}
+    ${link('/admin/matters', 'Matters')}
+    <div class="admin-sidebar-section">System</div>
+    ${link('/admin/config', 'Config')}
+    ${link('/admin/data', 'Data')}
+  </div>`;
+}
 
 function page(title: string, body: string, user?: string, activePath?: string): string {
   const nav = user
@@ -198,6 +241,7 @@ function page(title: string, body: string, user?: string, activePath?: string): 
         <a href="/matters/logout" class="nav-logout no-print">Sign out</a>
       </nav>`
     : '';
+  const useSidebar = !!user && activePath?.startsWith('/admin');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -211,7 +255,10 @@ function page(title: string, body: string, user?: string, activePath?: string): 
 </head>
 <body>
 ${nav}
-<main>${body}</main>
+${useSidebar
+  ? `<div class="admin-layout">${sidebar(activePath)}<div class="admin-content">${body}</div></div>`
+  : `<main>${body}</main>`
+}
 <script>
 (function(){
   var tz='Australia/Sydney';
@@ -262,19 +309,36 @@ function fmtCost(usd: number): { usd: string; aud: string } {
 
 // ── Reusable table renderers ──────────────────────────────────────────────────
 
-function renderLoginEventsTable(events: LoginEventRow[], caption?: string): string {
+function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showUsername = false): string {
   if (events.length === 0) return `<p style="color:#888;font-size:.875rem;padding:.5rem 0">${caption ?? 'No events recorded.'}</p>`;
-  const rows = events.map((e) => `<tr>
+  const rows = events.map((e) => {
+    const meta = (e.meta ?? {}) as Record<string, string>;
+    const location = [meta['city'], meta['country']].filter(Boolean).join(', ') || '—';
+    return `<tr>
     <td class="date-small">${tsDateTime(e.created_at)}</td>
+    ${showUsername ? `<td>${esc(e.username)}</td>` : ''}
     <td><span class="tag">${esc(e.event_type)}</span></td>
     <td>${esc(e.client_name ?? '—')}</td>
     <td class="mono" style="font-size:.75rem">${esc(e.ip ?? '—')}</td>
+    <td style="font-size:.75rem;color:#555">${esc(location)}</td>
     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.user_agent ?? '')}">${esc((e.user_agent ?? '').slice(0, 60))}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Date &amp; Time</th><th>Event</th><th>Client</th><th>IP</th><th>User Agent</th></tr></thead>
+    <thead><tr><th>Date &amp; Time</th>${showUsername ? '<th>Username</th>' : ''}<th>Event</th><th>Client</th><th>IP</th><th>Location</th><th>User Agent</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+}
+
+function renderTokenDisplay(token: string): string {
+  return `<div style="max-width:560px">
+    <div class="token-explain">This is the user's API token. They use it to authenticate with Claude — enter it as the password when connecting Claude to the CP Legal MCP server at <strong>api.example.com</strong>. It will not be shown again.</div>
+    <div class="token-warning">Save this token — it cannot be recovered. Share it with the user via a secure channel.</div>
+    <div style="display:flex;align-items:flex-start;gap:.5rem">
+      <div class="token-display" id="token-val" style="flex:1">${esc(token)}</div>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('token-val').textContent.trim()).then(function(){this.textContent='Copied!';var b=this;setTimeout(function(){b.textContent='Copy';},1500);}.bind(this))">Copy</button>
+    </div>
+  </div>`;
 }
 
 function renderUserRow(u: UserRow): string {
@@ -309,10 +373,28 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
   }
 
   const [stats, recentErrors, recentLogins] = await Promise.all([
-    getAdminDashboardStats(),
+    getAdminDashboardStatsV2(),
     getRecentErrors(10),
     getRecentLoginEvents(10),
   ]);
+
+  // Railway service health checks (fire concurrently, cap at 3s)
+  const auslawHealthStart = Date.now();
+  let auslawStatus = '—';
+  let auslawMs = 0;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(`${config.AUSLAW_BASE_URL}/health`, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+    auslawMs = Date.now() - auslawHealthStart;
+    auslawStatus = r.ok ? 'healthy' : `HTTP ${r.status}`;
+  } catch {
+    auslawMs = Date.now() - auslawHealthStart;
+    auslawStatus = 'unreachable';
+  }
+  const auslawOk = auslawStatus === 'healthy';
+  const uptimeSecs = Math.round(process.uptime());
+  const uptimeStr = uptimeSecs < 60 ? `${uptimeSecs}s` : uptimeSecs < 3600 ? `${Math.floor(uptimeSecs/60)}m ${uptimeSecs%60}s` : `${Math.floor(uptimeSecs/3600)}h ${Math.floor((uptimeSecs%3600)/60)}m`;
 
   const errCountColor = stats.error_count_24h > 0 ? 'color:#dc2626' : '';
 
@@ -360,12 +442,34 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
           <div class="card-sub">${stats.judgment_cache_mb} MB</div>
         </div>
       </a>
-      <a href="/admin/data" class="card-link">
+      <a href="/admin/matters" class="card-link">
         <div class="card">
-          <div class="card-label">Matter Queries</div>
-          <div class="card-value">${stats.matter_queries_count.toLocaleString('en-AU')}</div>
+          <div class="card-label">Unique Matters</div>
+          <div class="card-value">${(stats as { unique_matters_count: number }).unique_matters_count ?? 0}</div>
         </div>
       </a>
+    </div>
+
+    <div class="section-title">Service Health</div>
+    <div class="summary-grid" style="margin-bottom:1.5rem">
+      <div class="card">
+        <div class="card-label">cp-legal-mcp</div>
+        <div class="card-value sm"><span class="status-ok">✓ Healthy</span></div>
+        <div class="card-sub">Uptime ${uptimeStr}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">auslaw-mcp</div>
+        <div class="card-value sm"><span class="${auslawOk ? 'status-ok' : 'status-err'}">${auslawOk ? '✓' : '✗'} ${esc(auslawStatus)}</span></div>
+        <div class="card-sub">${auslawMs}ms</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Database</div>
+        <div class="card-value sm"><span class="status-ok">✓ Connected</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Isaacus API Key</div>
+        <div class="card-value sm">${config.ISAACUS_API_KEY ? '<span class="status-ok">✓ Configured</span>' : '<span class="status-err">✗ Missing</span>'}</div>
+      </div>
     </div>
 
     <div class="section-title">Recent Errors</div>
@@ -375,23 +479,7 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
 
     <div class="section-title">Recent Logins</div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-      ${renderLoginEventsTable(recentLogins)}
-    </div>
-
-    <div class="section-title">Service Health</div>
-    <div class="summary-grid" style="margin-bottom:1.5rem">
-      <div class="card">
-        <div class="card-label">Database</div>
-        <div class="card-value sm"><span class="status-ok">✓ Connected</span></div>
-      </div>
-      <div class="card">
-        <div class="card-label">Isaacus API Key</div>
-        <div class="card-value sm">${config.ISAACUS_API_KEY ? '<span class="status-ok">✓ Configured</span>' : '<span class="status-err">✗ Missing</span>'}</div>
-      </div>
-      <div class="card">
-        <div class="card-label">AusLaw Base URL</div>
-        <div class="card-value sm"><span style="font-family:monospace;font-size:.75rem">${esc(config.AUSLAW_BASE_URL.slice(0, 40))}</span></div>
-      </div>
+      ${renderLoginEventsTable(recentLogins, undefined, true)}
     </div>
   `, session.user, '/admin'));
 });
@@ -489,12 +577,10 @@ adminRouter.post('/admin/users/new', requireCsrf, async (req: Request, res: Resp
     <a href="/admin/users" class="btn-back">← Users</a>
     <h1>User Created</h1>
     <p class="subtitle">Account <strong>${esc(cleanUsername)}</strong> has been created.</p>
-    <div style="max-width:560px">
-      <div class="token-warning">Save this token — it cannot be recovered. Share it with the user via a secure channel.</div>
-      <div class="token-display">${esc(token)}</div>
-      <p style="font-size:.875rem;color:#555;margin-bottom:1.5rem">This token will not be shown again. Copy it now.</p>
+    ${renderTokenDisplay(token)}
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem">
       <a href="/admin/users/${encodeURIComponent(cleanUsername)}" class="btn btn-primary">View User →</a>
-      <a href="/admin/users/new" class="btn btn-secondary" style="margin-left:.75rem">Create Another</a>
+      <a href="/admin/users/new" class="btn btn-secondary">Create Another</a>
     </div>
   `, session.user, '/admin/users'));
 });
@@ -512,8 +598,12 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
     return;
   }
 
+  const period = (['lifetime', 'month', 'week'] as const).includes(req.query['period'] as 'lifetime'|'month'|'week')
+    ? (req.query['period'] as 'lifetime'|'month'|'week')
+    : 'lifetime';
+
   const [stats, oauthAuths, loginHistory, recentQueries] = await Promise.all([
-    getUserDetailStats(username),
+    getUserCostByPeriod(username, period),
     getOAuthAuthorizations(username),
     getLoginEvents(username, 20),
     getRecentActivity(20, username),
@@ -539,6 +629,12 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
     ${r.is_error ? `<td style="color:#dc2626">${esc(r.error_message ?? 'Error')}</td>` : '<td>—</td>'}
   </tr>`).join('');
 
+  const periodTabHtml = `<div class="period-tabs">
+    <a href="?period=lifetime" class="period-tab${period==='lifetime'?' active':''}">Lifetime</a>
+    <a href="?period=month" class="period-tab${period==='month'?' active':''}">This Month</a>
+    <a href="?period=week" class="period-tab${period==='week'?' active':''}">This Week</a>
+  </div>`;
+
   res.send(page(`User: ${username}`, `
     <a href="/admin/users" class="btn-back">← Users</a>
 
@@ -556,6 +652,7 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
       </div>
     </div>
 
+    ${periodTabHtml}
     <div class="summary-grid">
       <div class="card">
         <div class="card-label">Total Queries</div>
@@ -596,6 +693,14 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
         <thead><tr><th>Date</th><th>Matter</th><th>Tool</th><th>Query</th><th>Status</th></tr></thead>
         <tbody>${queryRows || '<tr><td colspan="5" style="text-align:center;color:#888;padding:1.5rem">No queries yet.</td></tr>'}</tbody>
       </table></div>
+    </div>
+
+    <div class="section-title">Token</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">Reveal the current encrypted token for this user. Requires <code>ENCRYPTION_KEY</code> to be set.</p>
+      <form method="POST" action="/admin/users/${encodeURIComponent(username)}/reveal-token">
+        <button type="submit" class="btn btn-secondary">Reveal Token</button>
+      </form>
     </div>
 
     <div class="section-title">Actions</div>
@@ -653,12 +758,57 @@ adminRouter.post('/admin/users/:username/rotate-token', requireCsrf, async (req:
     <a href="/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
     <h1>Token Rotated</h1>
     <p class="subtitle">New token for <strong>${esc(username)}</strong>. Share via a secure channel.</p>
-    <div style="max-width:560px">
-      <div class="token-warning">Save this token — it cannot be recovered. Share it with the user via a secure channel.</div>
-      <div class="token-display">${esc(token)}</div>
-      <p style="font-size:.875rem;color:#555;margin-bottom:1.5rem">This token will not be shown again. The previous token is now invalid.</p>
-      <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-primary">Back to User →</a>
-    </div>
+    ${renderTokenDisplay(token)}
+    <p style="font-size:.875rem;color:#555;margin:.5rem 0 1.25rem">The previous token is now invalid.</p>
+    <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-primary">Back to User →</a>
+  `, session.user, '/admin/users'));
+});
+
+// ── POST /admin/users/:username/reveal-token ──────────────────────────────────
+
+adminRouter.post('/admin/users/:username/reveal-token', requireCsrf, async (req: Request, res: Response) => {
+  const session = getAdminSession(req)!;
+  const username = decodeURIComponent(req.params['username'] as string ?? '');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+  const user = isDbEnabled() ? await getUserByUsername(username) : null;
+  if (!user) {
+    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/admin/users'));
+    return;
+  }
+
+  const encKey = process.env.ENCRYPTION_KEY?.trim();
+  if (!encKey || !user.token_encrypted) {
+    res.send(page('Reveal Token', `
+      <a href="/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+      <h1>Token Not Available</h1>
+      <div style="max-width:520px">
+        <div class="token-warning">${!encKey ? 'ENCRYPTION_KEY is not set on this deployment.' : 'No encrypted token stored — rotate the token to generate one.'} Rotate the token to generate a new encrypted copy.</div>
+        <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-secondary" style="margin-top:1rem">Back to User</a>
+      </div>
+    `, session.user, '/admin/users'));
+    return;
+  }
+
+  let revealed: string;
+  try {
+    revealed = decryptToken(user.token_encrypted, encKey);
+  } catch {
+    res.send(page('Reveal Token', `
+      <a href="/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+      <h1>Decryption Failed</h1>
+      <div class="token-warning" style="max-width:520px">Could not decrypt token — the ENCRYPTION_KEY may have changed. Rotate the token to generate a fresh encrypted copy.</div>
+    `, session.user, '/admin/users'));
+    return;
+  }
+
+  logger.info({ revealedBy: session.user, username }, 'admin: token revealed');
+
+  res.send(page('Token Revealed', `
+    <a href="/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+    <h1>Current Token — ${esc(username)}</h1>
+    ${renderTokenDisplay(revealed)}
+    <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-secondary" style="margin-top:1rem">Back to User</a>
   `, session.user, '/admin/users'));
 });
 
@@ -915,4 +1065,58 @@ adminRouter.post('/admin/data/purge-cache-all', requireCsrf, async (req: Request
   const deleted = await purgeAllJudgmentCache();
   logger.info({ deletedBy: session.user, deleted }, 'admin: cleared all judgment cache');
   res.redirect(`/admin/data?msg=Cleared+all+judgment+cache+(${deleted}+entries)`);
+});
+
+// ── GET /admin/matters — Matter list ──────────────────────────────────────────
+
+function estMatterCostUsd(tokens: number): number {
+  // For matters list we don't have per-tool breakdown, use default 1.25/M blended
+  return (tokens / 1_000_000) * 1.25;
+}
+
+adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
+  const session = getAdminSession(req)!;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+  if (!isDbEnabled()) {
+    res.send(page('Matters', '<div class="empty">Database not enabled.</div>', session.user, '/admin/matters'));
+    return;
+  }
+
+  const matters = await listAdminMatters();
+
+  const rows = matters.map((m: AdminMatterRow) => {
+    const costUsd = estMatterCostUsd(m.total_tokens);
+    const { usd } = fmtCost(costUsd);
+    return `<tr>
+      <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
+        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${esc(m.matter_ref)}</a>
+      </td>
+      <td class="date-small">${tsDateTime(m.first_seen)}</td>
+      <td class="date-small">${tsDateTime(m.last_seen)}</td>
+      <td style="text-align:right;font-weight:600">${m.query_count.toLocaleString('en-AU')}</td>
+      <td style="text-align:right">${m.total_tokens > 0 ? Math.round(m.total_tokens/1000).toLocaleString('en-AU')+'K' : '—'}</td>
+      <td style="text-align:right">${usd}</td>
+    </tr>`;
+  }).join('');
+
+  const tableHtml = matters.length === 0
+    ? '<div class="empty">No matters on record yet.</div>'
+    : `<div class="table-wrap"><table>
+        <thead><tr>
+          <th>Matter Ref</th>
+          <th>First Seen</th>
+          <th>Last Seen</th>
+          <th style="text-align:right">Queries</th>
+          <th style="text-align:right">Tokens</th>
+          <th style="text-align:right">Est. Cost (USD)</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+
+  res.send(page('Matters', `
+    <h1>Matters</h1>
+    <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''} on record, sorted by last activity</p>
+    ${tableHtml}
+  `, session.user, '/admin/matters'));
 });

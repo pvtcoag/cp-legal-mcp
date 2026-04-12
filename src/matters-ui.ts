@@ -41,6 +41,7 @@ import {
 import { verifyToken } from './token-utils.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { getGeoForIp } from './geo.js';
 
 export const mattersRouter = Router();
 
@@ -155,7 +156,10 @@ function computeDashboardCost(byTool: ToolTokenStat[]): { usd: string; aud: stri
 }
 
 function fmtTokens(n: number): string {
-  return n > 0 ? n.toLocaleString('en-AU') : '—';
+  if (!n || n <= 0) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  return String(n);
 }
 
 /**
@@ -367,6 +371,7 @@ export const CSS = `
   --surface:   #FAFAF8;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+img { max-width: 100%; height: auto; }
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
 h1 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.5rem; font-weight: 400; margin-bottom: .375rem; color: var(--primary); }
 h2 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.0625rem; font-weight: 400; margin-bottom: .875rem; color: var(--primary); }
@@ -379,7 +384,7 @@ nav { background: var(--primary); color: #fff; padding: .75rem 2rem; display: fl
 .nav-user { font-size: .8125rem; color: rgba(255,255,255,.6); }
 .nav-logout { font-size: .8125rem; color: rgba(255,255,255,.7); text-decoration: none; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; padding: .25rem .625rem; }
 .nav-logout:hover { background: var(--secondary); color: #fff; }
-main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+main { width: 100%; max-width: 100%; margin: 0 auto; padding: 2rem 1.5rem; }
 .subtitle { color: #666; font-size: .875rem; margin-bottom: 1.75rem; }
 .actions { display: flex; gap: .75rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
 .btn { padding: .5rem 1rem; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; border: 1px solid; transition: background .15s; }
@@ -389,15 +394,15 @@ main { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
 .btn-secondary:hover { background: var(--light); }
 .btn-back { color: #555; text-decoration: none; font-size: .875rem; display: inline-flex; align-items: center; gap: .375rem; margin-bottom: 1.5rem; }
 .btn-back:hover { color: var(--primary); }
-.table-wrap { overflow-x: auto; border-radius: 8px; -webkit-overflow-scrolling: touch; }
-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; }
+.table-wrap { overflow-x: auto; border-radius: 8px; -webkit-overflow-scrolling: touch; min-width: 0; width: 100%; }
+table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; table-layout: fixed; }
 .table-wrap table { border-radius: 0; border: none; }
 thead th { background: #F0EDE8; padding: .625rem 1rem; text-align: left; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid var(--border); }
 tbody tr + tr td { border-top: 1px solid #F0EDE8; }
 tbody tr:hover td { background: #FAFAF8; }
 tbody tr.row-error td { background: #FFF8F8 !important; }
 tbody tr.row-error:hover td { background: #FFF1F1 !important; }
-td { padding: .625rem 1rem; vertical-align: top; }
+td { padding: .625rem 1rem; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 .matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: var(--primary); text-decoration: none; }
 .matter-ref:hover { text-decoration: underline; }
 .date-small { color: #555; font-size: .75rem; white-space: nowrap; }
@@ -408,8 +413,8 @@ td { padding: .625rem 1rem; vertical-align: top; }
 .top-results-stack { }
 .top-results-stack a { color: #1a6b8a; text-decoration: none; display: block; word-break: break-word; margin-bottom: .3rem; font-size: .75rem; line-height: 1.4; }
 .top-results-stack a:hover { text-decoration: underline; }
-.summary-grid { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
-.card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.25rem; min-width: 140px; }
+.summary-grid { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; width: 100%; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.25rem; flex: 1 1 auto; min-width: 160px; max-width: 220px; }
 .card-label { font-size: .6875rem; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem; }
 .card-value { font-size: 1.375rem; font-weight: 700; line-height: 1.2; color: var(--primary); }
 .card-value.sm { font-size: .9375rem; margin-top: .125rem; }
@@ -487,13 +492,13 @@ select.filter-input { cursor: pointer; min-width: 120px; }
 .seg-tab:hover:not(.active) { color: var(--primary); }
 
 /* Tool usage bar chart */
-.section-block { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+.section-block { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; width: 100%; overflow: hidden; }
 .section-block h2 { font-family: inherit; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #555; margin-bottom: 1rem; }
 .tool-bar-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; }
 .tool-bar-label { width: 150px; font-size: .8125rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 .tool-bar-track { flex: 1; height: 8px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
 .tool-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
-.tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; width: 120px; text-align: right; }
+.tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; min-width: 80px; max-width: 150px; text-align: right; flex-shrink: 0; }
 
 /* Researcher cards */
 .researcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
@@ -708,7 +713,7 @@ function renderDashboardCards(
     </div>
     <div class="card">
       <div class="card-label">API Tokens Used</div>
-      <div class="card-value">${stats.total_tokens > 0 ? Math.round(stats.total_tokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
+      <div class="card-value">${fmtTokens(stats.total_tokens)}</div>
     </div>
     <div class="card">
       <div class="card-label">Est. Isaacus Cost <span class="est-badge tip tip-below" data-tip="Per-tool rates: Enricher $3.50/1M, Answer Extractor $1.50/1M, Classifier $1.00/1M (USD). Excludes Railway infrastructure." tabindex="0">est</span></div>
@@ -798,24 +803,30 @@ mattersRouter.post('/matters/login', async (req: Request, res: Response) => {
   const validResult = await validateCredentials(user, token);
   if (!validResult) {
     logger.warn({ user }, 'matters-ui: failed login attempt');
-    logLoginEvent({
-      username: user,
-      eventType: 'login_failed',
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-      clientName: parseClientName(req.headers['user-agent']),
+    getGeoForIp(req.ip).then((geo) => {
+      logLoginEvent({
+        username: user,
+        eventType: 'login_failed',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        clientName: parseClientName(req.headers['user-agent']),
+        meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
+      }).catch(() => {/* ignore */});
     }).catch(() => {/* ignore */});
     res.redirect('/matters/login?error=1');
     return;
   }
   setSessionCookie(res, user, validResult.isAdmin);
   logger.info({ user, isAdmin: validResult.isAdmin }, 'matters-ui: login');
-  logLoginEvent({
-    username: user,
-    eventType: 'login',
-    ip: req.ip,
-    userAgent: req.headers['user-agent'],
-    clientName: parseClientName(req.headers['user-agent']),
+  getGeoForIp(req.ip).then((geo) => {
+    logLoginEvent({
+      username: user,
+      eventType: 'login',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      clientName: parseClientName(req.headers['user-agent']),
+      meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
+    }).catch(() => {/* ignore */});
   }).catch(() => {/* ignore */});
   res.redirect(redirectTo);
 });
@@ -889,7 +900,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   res.send(page('Dashboard', `
     <h1>Dashboard ${adminBadge}</h1>
     <p class="subtitle">Aggregated research analytics${userIsAdmin ? ' across all matters and researchers' : ' for your matters'}
-      <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time> · auto-refreshes every 5 min</span>
+      <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time></span>
     </p>
     ${renderDashboardCards(stats, costByTool, avgAccuracy)}
     ${renderToolChart(toolStats)}
@@ -1061,7 +1072,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       <div class="card">
         <div class="card-label">API Tokens</div>
-        <div class="card-value">${totalTokens > 0 ? Math.round(totalTokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
+        <div class="card-value">${fmtTokens(totalTokens)}</div>
       </div>
       <div class="card">
         <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
