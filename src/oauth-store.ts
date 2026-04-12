@@ -38,8 +38,14 @@ export function registerClient(params: Omit<OAuthClient, 'clientId'>): { clientI
  * Pre-register a client with a known static ID (used for Claude Web).
  * Called at startup — idempotent, safe to call multiple times.
  */
-export function preRegisterClient(clientId: string, redirectUris: string[], clientName?: string, clientSecret?: string): void {
-  clients.set(clientId, { clientId, redirectUris, clientName, clientSecret });
+export function preRegisterClient(
+  clientId: string,
+  redirectUris: string[],
+  allowedRedirectPrefixes?: string[],
+  clientName?: string,
+  clientSecret?: string,
+): void {
+  clients.set(clientId, { clientId, redirectUris, allowedRedirectPrefixes, clientName, clientSecret });
   logger.info({ clientId, clientName }, 'OAuth static client pre-registered');
 }
 
@@ -47,27 +53,6 @@ export function getClient(clientId: string): OAuthClient | undefined {
   // Check dynamically registered clients (mcp-remote) and pre-registered static clients
   const client = clients.get(clientId);
   if (client) return client;
-
-  // Fallback: accept the OAUTH_CLIENT_ID env var directly — no startup dependency.
-  // Handles Claude Web and ChatGPT which use a static client_id you configure in their UI.
-  // allowedRedirectPrefixes accepts their dynamic per-connector redirect URIs without
-  // needing to know them in advance. PKCE S256 maintains security regardless.
-  const staticId = process.env.OAUTH_CLIENT_ID?.trim();
-  if (staticId && clientId === staticId) {
-    return {
-      clientId,
-      redirectUris: [
-        'https://claude.ai/api/mcp/auth_callback',
-      ],
-      allowedRedirectPrefixes: [
-        'https://claude.ai/',
-        'https://chatgpt.com/',
-        'https://chat.openai.com/',
-      ],
-      clientName: 'CP Legal MCP',
-      clientSecret: process.env.OAUTH_CLIENT_SECRET?.trim() || undefined,
-    };
-  }
 
   return undefined;
 }

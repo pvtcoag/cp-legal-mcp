@@ -123,11 +123,9 @@ const server = app.listen(config.PORT, async () => {
   if (config.OAUTH_CLIENT_ID) {
     preRegisterClient(
       config.OAUTH_CLIENT_ID,
-      [
-        'https://claude.ai/api/mcp/auth_callback',
-        'https://chatgpt.com/aip/g-ext-PLACEHOLDER/oauth/callback', // ChatGPT discovers and uses its own redirect; static entry kept for known patterns
-      ],
-      'Claude Web / ChatGPT',
+      ['https://claude.ai/api/mcp/auth_callback'],
+      ['https://claude.ai/', 'https://chatgpt.com/', 'https://chat.openai.com/'],
+      'CP Legal MCP',
       config.OAUTH_CLIENT_SECRET,
     );
     logger.info({ clientId: config.OAUTH_CLIENT_ID }, 'OAuth static client pre-registered');
