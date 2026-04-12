@@ -78,9 +78,23 @@ function verifyPkce(
 }
 
 /** Check redirect_uri against exact list and allowed origin prefixes. */
-function isRedirectUriAllowed(client: { redirectUris: string[]; allowedRedirectPrefixes?: string[] }, uri: string): boolean {
+function isRedirectUriAllowed(
+  client: { clientId?: string; redirectUris: string[]; allowedRedirectPrefixes?: string[] },
+  uri: string,
+): boolean {
   if (client.redirectUris.includes(uri)) return true;
-  return (client.allowedRedirectPrefixes ?? []).some((prefix) => uri.startsWith(prefix));
+  if ((client.allowedRedirectPrefixes ?? []).some((prefix) => uri.startsWith(prefix))) return true;
+  // Log mismatch details so Railway logs reveal exactly what's being compared.
+  logger.warn(
+    {
+      clientId: client.clientId,
+      requestedUri: uri,
+      registeredUris: client.redirectUris,
+      allowedPrefixes: client.allowedRedirectPrefixes ?? [],
+    },
+    'OAuth: redirect_uri not allowed',
+  );
+  return false;
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -179,6 +193,8 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
     response_type,
   } = req.query as Record<string, string | undefined>;
 
+  logger.info({ client_id, redirect_uri, response_type }, 'OAuth: authorize request received');
+
   if (response_type !== 'code') {
     res.status(400).json({ error: 'unsupported_response_type' });
     return;
@@ -190,6 +206,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
 
   const client = getClient(client_id);
   if (!client) {
+    logger.warn({ client_id }, 'OAuth: unknown client_id');
     res.status(400).json({ error: 'invalid_client', error_description: 'Unknown client_id' });
     return;
   }
@@ -423,11 +440,13 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     return;
   }
 
-  // Validate client secret for pre-registered static clients that have one configured.
-  // Dynamic clients are PKCE-only and have no secret.
+  // Validate client secret when the client sends one. We accept it if it matches
+  // and ignore the check if neither side has a secret (PKCE-only clients).
+  // We do NOT require a secret even if one was issued — some DCR clients (mcp-remote,
+  // Cursor) use PKCE exclusively and don't send client_secret back.
   const client = getClient(client_id);
-  if (client?.clientSecret) {
-    if (!client_secret || !safeEqual(client_secret, client.clientSecret)) {
+  if (client_secret && client?.clientSecret) {
+    if (!safeEqual(client_secret, client.clientSecret)) {
       logger.warn({ client_id }, 'OAuth: invalid client_secret');
       res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client_secret' });
       return;

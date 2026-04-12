@@ -29,8 +29,27 @@ export function registerClient(params: Omit<OAuthClient, 'clientId'>): { clientI
   // connectors) can authenticate at the token endpoint. PKCE clients (mcp-remote,
   // Cursor) receive it but ignore it — they authenticate via code_verifier instead.
   const clientSecret = randomUUID().replace(/-/g, '');
-  clients.set(clientId, { clientId, ...params, clientSecret });
-  logger.debug({ clientId, clientName: params.clientName }, 'OAuth client registered');
+
+  // Derive allowed redirect prefixes from the origins of registered URIs.
+  // ChatGPT and other clients may use a slightly different path in the authorize
+  // step than what they registered (different connector ID, trailing slash, etc.).
+  // Accepting any URI on the same origin as a registered URI keeps us RFC 7591
+  // compliant while handling these real-world variations.
+  const derivedPrefixes = [
+    ...new Set(
+      params.redirectUris
+        .map((uri) => { try { return new URL(uri).origin + '/'; } catch { return null; } })
+        .filter((p): p is string => p !== null),
+    ),
+  ];
+
+  clients.set(clientId, {
+    clientId,
+    ...params,
+    allowedRedirectPrefixes: [...(params.allowedRedirectPrefixes ?? []), ...derivedPrefixes],
+    clientSecret,
+  });
+  logger.debug({ clientId, clientName: params.clientName, derivedPrefixes }, 'OAuth client registered');
   return { clientId, clientSecret };
 }
 
