@@ -113,12 +113,15 @@ oauthRouter.use((req: Request, res: Response, next) => {
 });
 
 // RFC 9728 — Protected Resource Metadata
-// Tells mcp-remote where to find the authorization server.
+// Tells clients where to find the authorization server.
+// The `resource` field MUST match the URL ChatGPT (and other clients) use as
+// the MCP server URL — i.e. the /mcp endpoint, not just the base domain.
+// ChatGPT validates resource metadata.resource === its configured connector URL.
 oauthRouter.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
   const base = issuer();
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    resource: base,
+    resource: `${base}/mcp`,
     authorization_servers: [base],
   });
 });
