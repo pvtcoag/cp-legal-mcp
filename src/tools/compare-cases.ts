@@ -124,7 +124,8 @@ export function registerCompareCases(server: McpServer): void {
         const failedCase = resultA.status === 'rejected'
           ? input.citation_or_url_a
           : input.citation_or_url_b;
-        const failErr = resultA.status === 'rejected' ? resultA.reason : resultB.reason;
+        const failedResult = (resultA.status === 'rejected' ? resultA : resultB) as PromiseRejectedResult;
+        const failErr = failedResult.reason;
         const msg = failErr instanceof AuslawError
           ? failErr.message
           : (failErr instanceof Error ? failErr.message : String(failErr));
