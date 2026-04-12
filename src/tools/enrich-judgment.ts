@@ -113,7 +113,6 @@ export function registerEnrichJudgment(server: McpServer): void {
           key_dates: enriched.key_dates,
           citations_made: enriched.citations_made,
           defined_terms: enriched.defined_terms,
-          _suggested_next: 'Review citations_made sentiment (positive/negative/distinguished/neutral) to assess how cited cases were received. Use find_citing_cases to see who has cited this judgment in turn. Use ask_judgment for substantive questions about the reasoning.',
         }) }],
       };
     },

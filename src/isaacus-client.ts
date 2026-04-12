@@ -9,7 +9,12 @@ import { logger } from './logger.js';
 // only via the 30-day PostgreSQL judgment cache feeding consistent document text.
 
 const QA_CACHE_MAX = 200;
-const _qaCache = new Map<string, { answers: ExtractedAnswer[]; inextractable: boolean; inextractability_score: number; tokensUsed: 0 }>();
+const _qaCache = new Map<string, {
+  answers: ExtractedAnswer[];
+  inextractable: boolean;
+  inextractability_score: number;
+  tokensUsed: number;
+}>();
 
 function qaKey(question: string, documentText: string, topK: number): string {
   const docHash = createHash('sha1').update(documentText).digest('hex').slice(0, 16);

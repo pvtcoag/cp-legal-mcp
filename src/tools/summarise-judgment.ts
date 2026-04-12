@@ -104,38 +104,36 @@ export function registerSummariseJudgment(server: McpServer): void {
       type QAResult = Awaited<ReturnType<typeof extractAnswer>>;
       type EnrichResult = Awaited<ReturnType<typeof enrichDocument>>;
 
-      let enrichResult: EnrichResult | null = null;
-      let holdingR!: QAResult;
-      let ordersR!: QAResult;
-      let factsR!: QAResult;
-      let principlesR!: QAResult;
-      let outcomeR!: QAResult;
+      // Run QA and enrichment in parallel — enrichment failure is non-fatal
+      const qaPromise = Promise.all([
+        extractAnswer(QA_QUESTIONS.holding,          qaText, 1),
+        extractAnswer(QA_QUESTIONS.orders,           qaText, 1),
+        extractAnswer(QA_QUESTIONS.key_facts,        qaText, 1),
+        extractAnswer(QA_QUESTIONS.legal_principles, qaText, 1),
+        extractAnswer(QA_QUESTIONS.outcome,          qaText, 1),
+      ]);
+      const enrichPromise: Promise<EnrichResult | null> = input.include_metadata
+        ? enrichDocument(enrichText).catch((enrichErr) => {
+            log.warn({ enrichErr }, 'enrichment failed — returning QA-only summary');
+            return null;
+          })
+        : Promise.resolve(null);
+
+      let holdingR: QAResult, ordersR: QAResult, factsR: QAResult, principlesR: QAResult, outcomeR: QAResult;
       try {
-        const [h, o, f, p, oc, e] = await Promise.all([
-          extractAnswer(QA_QUESTIONS.holding,          qaText, 1),
-          extractAnswer(QA_QUESTIONS.orders,           qaText, 1),
-          extractAnswer(QA_QUESTIONS.key_facts,        qaText, 1),
-          extractAnswer(QA_QUESTIONS.legal_principles, qaText, 1),
-          extractAnswer(QA_QUESTIONS.outcome,          qaText, 1),
-          input.include_metadata
-            ? enrichDocument(enrichText)
-            : Promise.resolve(null as EnrichResult | null),
-        ]);
-        holdingR = h; ordersR = o; factsR = f; principlesR = p; outcomeR = oc;
-        enrichResult = e;
+        [holdingR, ordersR, factsR, principlesR, outcomeR] = await qaPromise;
       } catch (err) {
-        log.warn({ err }, 'Isaacus summarisation failed');
+        log.warn({ err }, 'Isaacus QA failed');
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'summarisation_failed',
-            message:
-              'Could not summarise the judgment. Use get_judgment to read the full text ' +
-              'or enrich_judgment for structured entities alone.',
+            message: 'Could not summarise the judgment. Use get_judgment to read the full text or enrich_judgment for structured entities alone.',
             detail: err instanceof Error ? err.message : String(err),
           }) }],
           isError: true,
         };
       }
+      const enrichResult = await enrichPromise;
 
       const enriched = enrichResult?.data ?? null;
       const totalTokens =
@@ -185,9 +183,6 @@ export function registerSummariseJudgment(server: McpServer): void {
             cases_cited: enriched.citations_made,
             defined_terms: enriched.defined_terms,
           } : {}),
-          _suggested_next: enriched
-            ? 'Use ask_judgment for questions not covered by the five summary dimensions above. Use find_citing_cases to trace subsequent treatment. Use find_related_cases to discover cases addressing similar issues. Do NOT call enrich_judgment — enrichment data is already included above.'
-            : 'Metadata (parties, citations made) was skipped (include_metadata: false). Call enrich_judgment if you need the citation network. Use ask_judgment for targeted follow-up questions.',
         }) }],
       };
     },

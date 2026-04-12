@@ -122,9 +122,10 @@ export function registerFindRelatedCases(server: McpServer): void {
       }
 
       const corpusResults: SimilarCase[] = [];
+      let corpus: Awaited<ReturnType<typeof getAllJudgmentEmbeddings>> = [];
 
       if (seedEmbedding) {
-        const corpus = await getAllJudgmentEmbeddings().catch(() => []);
+        corpus = await getAllJudgmentEmbeddings().catch(() => []);
         const others = corpus.filter((e) => e.url !== resolved.url);
 
         if (others.length > 0) {
@@ -229,7 +230,7 @@ export function registerFindRelatedCases(server: McpServer): void {
         api_tokens_used: totalTokens,
       });
 
-      const corpusSize = (await getAllJudgmentEmbeddings().catch(() => [])).length;
+      const corpusSize = corpus.length;
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           seed_case: { title: seedTitle, citation: seedCitation, url: resolved.url },

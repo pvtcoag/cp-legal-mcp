@@ -8,6 +8,10 @@ const inputSchema = z.object({
   url: z
     .string()
     .url()
+    .refine(
+      (v) => v.startsWith('https://www.austlii.edu.au') || v.startsWith('https://classic.austlii.edu.au'),
+      { message: 'Only AustLII URLs are supported (https://www.austlii.edu.au/...)' }
+    )
     .describe(
       'AustLII URL of the legislation to retrieve, e.g. "https://www.austlii.edu.au/au/legis/cth/consol_act/cca2010265/". ' +
       'Obtain this from research_legislation first.',
@@ -63,7 +67,6 @@ export function registerGetLegislation(server: McpServer): void {
           url: input.url,
           char_count: doc.text.length,
           text: doc.text,
-          _suggested_next: 'Use ask_legislation for targeted questions about specific provisions — it is faster than reading the full text. Use research_cases to find judgments that have interpreted key sections.',
         }) }],
       };
     },

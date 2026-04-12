@@ -51,12 +51,6 @@ interface CasePanel {
   answer_found: boolean;
 }
 
-async function resolveAndFetch(input: string) {
-  const resolved = await resolveJudgmentUrl(input);
-  const doc = await fetchDocumentText(resolved.url);
-  return { resolved, doc };
-}
-
 function buildPanel(
   resolved: Awaited<ReturnType<typeof resolveJudgmentUrl>>,
   doc: Awaited<ReturnType<typeof fetchDocumentText>>,
@@ -121,26 +115,32 @@ export function registerCompareCases(server: McpServer): void {
       }
 
       // ── 2. Fetch both judgment texts ────────────────────────────────────────
-      let docA, docB;
-      try {
-        [docA, docB] = await Promise.all([
-          fetchDocumentText(resolvedA.url),
-          fetchDocumentText(resolvedB.url),
-        ]);
-      } catch (err) {
-        if (err instanceof AuslawError) {
-          log.warn({ err }, 'fetch_document_text failed');
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
-              detail: err.message,
-            }) }],
-            isError: true,
-          };
-        }
-        throw err;
+      const [resultA, resultB] = await Promise.allSettled([
+        fetchDocumentText(resolvedA.url),
+        fetchDocumentText(resolvedB.url),
+      ]);
+
+      if (resultA.status === 'rejected' || resultB.status === 'rejected') {
+        const failedCase = resultA.status === 'rejected'
+          ? input.citation_or_url_a
+          : input.citation_or_url_b;
+        const failErr = resultA.status === 'rejected' ? resultA.reason : resultB.reason;
+        const msg = failErr instanceof AuslawError
+          ? failErr.message
+          : (failErr instanceof Error ? failErr.message : String(failErr));
+        log.warn({ failedCase, msg }, 'fetch_document_text failed for one case');
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'upstream_unavailable',
+            message: `Could not retrieve "${failedCase}". The legal database may be temporarily unavailable.`,
+            detail: msg,
+          }) }],
+          isError: true,
+        };
       }
+
+      const docA = resultA.value;
+      const docB = resultB.value;
 
       // ── 3. Extract answers from both judgments in parallel ──────────────────
       let extractionA, extractionB;
@@ -196,7 +196,6 @@ export function registerCompareCases(server: McpServer): void {
           case_a: panelA,
           case_b: panelB,
           agreement_note,
-          _suggested_next: 'Use ask_judgment on either case for follow-up questions on specific aspects of the reasoning. Use enrich_judgment to check whether one case cited the other and with what reception sentiment.',
         }) }],
       };
     },

@@ -100,9 +100,6 @@ export function registerFindCitingCases(server: McpServer): void {
             cited_case: input.citation,
             citing_case_count: cases.length,
             cases,
-            _suggested_next: cases.length > 0
-              ? 'Call enrich_judgment on the most relevant citing cases to see their reception sentiment (positive/negative/distinguished). Use summarise_judgment for a deeper read of any individual case.'
-              : 'No citing cases found — this may indicate the case is recent or rarely cited in the AustLII corpus.',
           }),
         }],
       };

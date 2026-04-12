@@ -35,8 +35,9 @@ export interface AuslawDocumentText {
 
 export interface AuslawCitationValidation {
   valid: boolean;
-  url?: string;
-  canonical?: string;
+  austliiUrl?: string;
+  canonicalCitation?: string;
+  message?: string;
 }
 
 // --- Error type ---
@@ -48,6 +49,14 @@ export class AuslawError extends Error {
   ) {
     super(message);
     this.name = 'AuslawError';
+  }
+}
+
+/** Thrown when the auslaw-mcp HTTP transport fails (connection refused, timeout, etc.). Retry-safe. */
+export class AuslawNetworkError extends AuslawError {
+  constructor(message: string, toolName: string) {
+    super(message, toolName);
+    this.name = 'AuslawNetworkError';
   }
 }
 
@@ -101,7 +110,7 @@ async function callAuslawToolRaw(
     const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
     if (cause instanceof Error && cause.message) message += ` (cause: ${cause.message})`;
     else if (cause) message += ` (cause: ${String(cause)})`;
-    throw new AuslawError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
+    throw new AuslawNetworkError(`AusLaw tool "${toolName}" failed: ${message}`, toolName);
   } finally {
     await client.close().catch(() => { /* ignore close errors */ });
   }
@@ -114,6 +123,18 @@ async function callAuslawTool<T>(
   return JSON.parse(await callAuslawToolRaw(toolName, toolArgs)) as T;
 }
 
+/** Retries the operation once on network errors (AuslawNetworkError). Does not retry logical errors (AuslawError). */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!(err instanceof AuslawNetworkError)) throw err;
+    logger.debug({ err }, 'auslaw network error — retrying once after 700ms');
+    await new Promise<void>((r) => setTimeout(r, 700));
+    return fn();
+  }
+}
+
 // --- Public API ---
 
 export async function searchCases(params: {
@@ -124,13 +145,13 @@ export async function searchCases(params: {
   toYear?: number;
 }): Promise<AuslawCase[]> {
   logger.debug({ params }, 'auslaw: search_cases');
-  return callAuslawTool<AuslawCase[]>('search_cases', {
+  return withRetry(() => callAuslawTool<AuslawCase[]>('search_cases', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
     ...(params.fromYear !== undefined && { fromYear: params.fromYear }),
     ...(params.toYear !== undefined && { toYear: params.toYear }),
-  });
+  }));
 }
 
 export async function searchLegislation(params: {
@@ -139,11 +160,11 @@ export async function searchLegislation(params: {
   limit?: number;
 }): Promise<AuslawLegislation[]> {
   logger.debug({ params }, 'auslaw: search_legislation');
-  return callAuslawTool<AuslawLegislation[]>('search_legislation', {
+  return withRetry(() => callAuslawTool<AuslawLegislation[]>('search_legislation', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
-  });
+  }));
 }
 
 export async function fetchDocumentText(url: string): Promise<AuslawDocumentText> {
@@ -179,7 +200,7 @@ export async function validateCitation(
   citation: string,
 ): Promise<AuslawCitationValidation> {
   logger.debug({ citation }, 'auslaw: validate_citation');
-  return callAuslawTool<AuslawCitationValidation>('validate_citation', { citation });
+  return withRetry(() => callAuslawTool<AuslawCitationValidation>('validate_citation', { citation }));
 }
 
 export interface AuslawCitingCase {
@@ -211,10 +232,10 @@ export async function searchCitingCases(params: {
   limit?: number;
 }): Promise<AuslawCitingCase[]> {
   logger.debug({ params }, 'auslaw: search_citing_cases');
-  return callAuslawTool<AuslawCitingCase[]>('search_citing_cases', {
+  return withRetry(() => callAuslawTool<AuslawCitingCase[]>('search_citing_cases', {
     citation: params.citation,
     ...(params.limit && { limit: params.limit }),
-  });
+  }));
 }
 
 export async function searchByCitation(params: {
@@ -222,10 +243,10 @@ export async function searchByCitation(params: {
   limit?: number;
 }): Promise<AuslawCase[]> {
   logger.debug({ params }, 'auslaw: search_by_citation');
-  return callAuslawTool<AuslawCase[]>('search_by_citation', {
+  return withRetry(() => callAuslawTool<AuslawCase[]>('search_by_citation', {
     citation: params.citation_or_name,
     ...(params.limit && { limit: params.limit }),
-  });
+  }));
 }
 
 export async function formatCitation(params: {
@@ -237,14 +258,16 @@ export async function formatCitation(params: {
 }): Promise<AuslawFormattedCitation> {
   logger.debug({ params }, 'auslaw: format_citation');
   // auslaw-mcp format_citation returns plain text, not JSON
-  const text = await callAuslawToolRaw('format_citation', {
-    title: params.title,
-    ...(params.neutralCitation && { neutralCitation: params.neutralCitation }),
-    ...(params.reportedCitation && { reportedCitation: params.reportedCitation }),
-    ...(params.pinpoint && { pinpoint: params.pinpoint }),
-    ...(params.style && { style: params.style }),
+  return withRetry(async () => {
+    const text = await callAuslawToolRaw('format_citation', {
+      title: params.title,
+      ...(params.neutralCitation && { neutralCitation: params.neutralCitation }),
+      ...(params.reportedCitation && { reportedCitation: params.reportedCitation }),
+      ...(params.pinpoint && { pinpoint: params.pinpoint }),
+      ...(params.style && { style: params.style }),
+    });
+    return { formatted: text, style: params.style };
   });
-  return { formatted: text, style: params.style };
 }
 
 // ── Judgment URL resolution ───────────────────────────────────────────────────
@@ -282,10 +305,10 @@ export async function resolveJudgmentUrl(input: string): Promise<ResolvedJudgmen
         'validate_citation',
       );
     }
-    if (!validation.valid || !validation.url) {
+    if (!validation.valid || !validation.austliiUrl) {
       throw new AuslawError(`Citation "${value}" could not be found on AustLII.`, 'validate_citation');
     }
-    return { url: validation.url, canonicalUrl: validation.canonical ?? undefined, citation: value };
+    return { url: validation.austliiUrl, canonicalUrl: validation.canonicalCitation ?? undefined, citation: value };
   }
   throw new AuslawError(
     'Invalid input: provide a neutral citation like "[2024] HCA 12" or a full AustLII URL.',
@@ -300,10 +323,28 @@ export async function generatePinpoint(params: {
   caseCitation?: string;
 }): Promise<AuslawPinpoint> {
   logger.debug({ params }, 'auslaw: generate_pinpoint');
-  return callAuslawTool<AuslawPinpoint>('generate_pinpoint', {
+  return withRetry(() => callAuslawTool<AuslawPinpoint>('generate_pinpoint', {
     url: params.url,
     ...(params.paragraphNumber !== undefined && { paragraphNumber: params.paragraphNumber }),
     ...(params.phrase && { phrase: params.phrase }),
     ...(params.caseCitation && { caseCitation: params.caseCitation }),
+  }));
+}
+
+export interface AuslawLegislationSection {
+  act_url: string;
+  section_url: string;
+  section_ref: string;
+  text: string;
+}
+
+export async function fetchLegislationSection(params: {
+  url: string;
+  section: string;
+}): Promise<AuslawLegislationSection> {
+  logger.debug({ params }, 'auslaw: fetch_legislation_section');
+  return callAuslawTool<AuslawLegislationSection>('fetch_legislation_section', {
+    url: params.url,
+    section: params.section,
   });
 }

@@ -13,24 +13,40 @@ const inputSchema = z.object({
     .describe('Natural language query describing the legal issue or case to research'),
   jurisdiction: z
     .enum([
-      'hca',   // High Court of Australia
-      'fcafc', // Federal Court Full Court
-      'fca',   // Federal Court
-      'nswca', // NSW Court of Appeal
-      'nswsc', // NSW Supreme Court
-      'vsca',  // Victorian Court of Appeal
-      'vsc',   // Victorian Supreme Court
-      'qca',   // Queensland Court of Appeal
-      'qsc',   // Queensland Supreme Court
-      'wasc',  // WA Supreme Court
-      'sasc',  // SA Supreme Court
-      'tassc', // Tasmania Supreme Court
-      'ntsc',  // NT Supreme Court
-      'actsc', // ACT Supreme Court
+      'hca',        // High Court of Australia
+      'fcafc',      // Federal Court Full Court
+      'fca',        // Federal Court
+      'fedcfamc1f', // Federal Circuit and Family Court (Division 1)
+      'fedcfamc2f', // Federal Circuit and Family Court (Division 2)
+      'nswca',      // NSW Court of Appeal
+      'nswsc',      // NSW Supreme Court
+      'nswdc',      // NSW District Court
+      'nswcca',     // NSW Court of Criminal Appeal
+      'ncat',       // NSW Civil and Administrative Tribunal
+      'vsca',       // Victorian Court of Appeal
+      'vsc',        // Victorian Supreme Court
+      'vcat',       // Victorian Civil and Administrative Tribunal
+      'qca',        // Queensland Court of Appeal
+      'qsc',        // Queensland Supreme Court
+      'qdc',        // Queensland District Court
+      'qcat',       // Queensland Civil and Administrative Tribunal
+      'wasca',      // WA Court of Appeal
+      'wasc',       // WA Supreme Court
+      'sat',        // State Administrative Tribunal (WA)
+      'sascfc',     // SA Supreme Court Full Court
+      'sasc',       // SA Supreme Court
+      'sacat',      // SA Civil and Administrative Tribunal
+      'tasfc',      // Tasmania Full Court
+      'tassc',      // Tasmania Supreme Court
+      'ntca',       // NT Court of Appeal
+      'ntsc',       // NT Supreme Court
+      'actca',      // ACT Court of Appeal
+      'actsc',      // ACT Supreme Court
+      'acat',       // ACT Civil and Administrative Tribunal
       'all',
     ])
     .default('all')
-    .describe('Australian court jurisdiction to search within'),
+    .describe('Australian court or tribunal jurisdiction to search within. Tribunal codes supported: ncat (NSW), vcat (VIC), qcat (QLD), sat (WA), sacat (SA), acat (ACT).'),
   limit: z
     .number()
     .int()
@@ -148,9 +164,6 @@ export function registerResearchCases(server: McpServer): void {
             jurisdiction: input.jurisdiction,
             result_count: results.length,
             results,
-            _suggested_next: results.length > 0
-              ? 'Call summarise_judgment on the 1–2 most relevant results for a structured overview (holding, orders, facts, principles, outcome) before going deeper. Use ask_judgment only for questions outside those five dimensions.'
-              : 'No results found — try broadening the query, removing jurisdiction filters, or using classify_legal_issue to identify better jurisdiction codes.',
           }),
         }],
       };

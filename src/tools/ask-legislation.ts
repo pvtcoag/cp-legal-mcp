@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { fetchDocumentText, AuslawError } from '../auslaw-client.js';
+import { fetchDocumentText, fetchLegislationSection, AuslawError } from '../auslaw-client.js';
 import { extractAnswer } from '../isaacus-client.js';
 import { extractRelevantPassages } from '../text-utils.js';
 import { logger } from '../logger.js';
@@ -10,6 +10,10 @@ const inputSchema = z.object({
   url: z
     .string()
     .url()
+    .refine(
+      (v) => v.startsWith('https://www.austlii.edu.au') || v.startsWith('https://classic.austlii.edu.au'),
+      { message: 'Only AustLII URLs are supported (https://www.austlii.edu.au/...)' }
+    )
     .describe(
       'AustLII URL of the legislation to query, e.g. "https://www.austlii.edu.au/au/legis/cth/consol_act/cca2010265/". ' +
       'Obtain this from research_legislation first.',
@@ -29,6 +33,13 @@ const inputSchema = z.object({
     .max(10)
     .default(3)
     .describe('Maximum number of answer candidates to return'),
+  section: z
+    .string()
+    .optional()
+    .describe(
+      'Optional: fetch only this section of the Act before answering, e.g. "18", "s 18A", "schedule 1". ' +
+      'Much cheaper and more accurate than sending the full Act text. Recommended when you know the relevant provision.'
+    ),
   matter_ref: z
     .string()
     .max(100)
@@ -46,22 +57,39 @@ export function registerAskLegislation(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'ask_legislation', url: input.url });
 
+      // If a section is specified, fetch just that section instead of the full Act
       let doc;
-      try {
-        doc = await fetchDocumentText(input.url);
-      } catch (err) {
-        if (err instanceof AuslawError) {
-          log.warn({ err }, 'fetch_document_text failed');
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: 'Could not retrieve the legislation. The legal database may be temporarily unavailable.',
-              detail: err.message,
-            }) }],
-            isError: true,
-          };
+      if (input.section) {
+        try {
+          const sectionDoc = await fetchLegislationSection({ url: input.url, section: input.section });
+          doc = { text: sectionDoc.text, title: `${sectionDoc.act_url} ${input.section}`, url: sectionDoc.section_url };
+        } catch (err) {
+          if (err instanceof AuslawError) {
+            log.warn({ err }, 'fetch_legislation_section failed, falling back to full Act');
+            // Fall through to full-Act fetch below
+          } else {
+            throw err;
+          }
         }
-        throw err;
+      }
+      if (!doc) {
+        // Original full-Act fetch
+        try {
+          doc = await fetchDocumentText(input.url);
+        } catch (err) {
+          if (err instanceof AuslawError) {
+            log.warn({ err }, 'fetch_document_text failed');
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({
+                error: 'upstream_unavailable',
+                message: 'Could not retrieve the legislation. The legal database may be temporarily unavailable.',
+                detail: err.message,
+              }) }],
+              isError: true,
+            };
+          }
+          throw err;
+        }
       }
 
       const filteredText = extractRelevantPassages(doc.text, input.question, 24_000);
@@ -118,7 +146,6 @@ export function registerAskLegislation(server: McpServer): void {
             confidence: Math.round(a.score * 1000) / 1000,
             char_range: [a.start, a.end],
           })),
-          _suggested_next: 'Use research_cases to find judgments that have interpreted or applied this provision. Use ask_legislation with a follow-up question to extract related provisions (e.g. definitions, penalty provisions, exceptions).',
         }) }],
       };
     },

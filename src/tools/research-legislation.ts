@@ -108,9 +108,6 @@ export function registerResearchLegislation(server: McpServer): void {
             jurisdiction: input.jurisdiction,
             result_count: results.length,
             results,
-            _suggested_next: results.length > 0
-              ? 'Use ask_legislation with the URL to extract answers to specific questions (definitions, offence elements, penalty amounts, scope). Use get_legislation only if you need the full consolidated text verbatim.'
-              : 'No results found — try different search terms or broaden the jurisdiction.',
           }),
         }],
       };

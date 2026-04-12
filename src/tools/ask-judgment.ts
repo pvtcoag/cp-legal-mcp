@@ -139,7 +139,6 @@ export function registerAskJudgment(server: McpServer): void {
             confidence: Math.round(a.score * 1000) / 1000,
             char_range: [a.start, a.end],
           })),
-          _suggested_next: 'Use compare_cases to contrast this answer with how another case addressed the same question. Use generate_pinpoint with the char_range offsets to produce a citable pinpoint reference.',
         }) }],
       };
     },

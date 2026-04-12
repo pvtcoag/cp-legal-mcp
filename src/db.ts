@@ -18,7 +18,7 @@ export async function initDb(): Promise<void> {
 
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }, // Required for Railway PostgreSQL
+    ssl: { rejectUnauthorized: false }, // Railway uses self-signed certs on internal networking
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
