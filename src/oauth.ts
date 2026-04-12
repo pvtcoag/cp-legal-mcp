@@ -77,9 +77,25 @@ function verifyPkce(
   return false;
 }
 
+/** Check redirect_uri against exact list and allowed origin prefixes. */
+function isRedirectUriAllowed(client: { redirectUris: string[]; allowedRedirectPrefixes?: string[] }, uri: string): boolean {
+  if (client.redirectUris.includes(uri)) return true;
+  return (client.allowedRedirectPrefixes ?? []).some((prefix) => uri.startsWith(prefix));
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const oauthRouter = Router();
+
+// CORS for all OAuth endpoints — browser-based clients (ChatGPT, etc.) make
+// cross-origin requests to /.well-known/*, /oauth/register, and /oauth/token.
+oauthRouter.use((req: Request, res: Response, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  next();
+});
 
 // RFC 9728 — Protected Resource Metadata
 // Tells mcp-remote where to find the authorization server.
@@ -164,7 +180,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
     res.status(400).json({ error: 'invalid_client', error_description: 'Unknown client_id' });
     return;
   }
-  if (!client.redirectUris.includes(redirect_uri)) {
+  if (!isRedirectUriAllowed(client, redirect_uri)) {
     res.status(400).json({ error: 'invalid_request', error_description: 'redirect_uri not registered' });
     return;
   }
@@ -278,8 +294,8 @@ oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
   }
 
   const client = getClient(client_id);
-  if (!client || !client.redirectUris.includes(redirect_uri)) {
-    res.status(400).json({ error: 'invalid_request' });
+  if (!client || !isRedirectUriAllowed(client, redirect_uri)) {
+    res.status(400).json({ error: 'invalid_request', error_description: 'redirect_uri not registered' });
     return;
   }
 

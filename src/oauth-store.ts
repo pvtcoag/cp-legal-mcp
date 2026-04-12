@@ -7,7 +7,15 @@ import { logger } from './logger.js';
 
 export interface OAuthClient {
   clientId: string;
+  /** Exact redirect URIs — used for dynamically registered clients. */
   redirectUris: string[];
+  /**
+   * Trusted origin prefixes — any redirect_uri starting with one of these is
+   * accepted. Used for the static client where platforms (ChatGPT, Claude web)
+   * use dynamic per-connector URIs that cannot be pre-registered exactly.
+   * Security is maintained by PKCE S256 regardless of the redirect_uri.
+   */
+  allowedRedirectPrefixes?: string[];
   clientName?: string;
   /** Present only on pre-registered static clients; dynamic clients are PKCE-only. */
   clientSecret?: string;
@@ -37,13 +45,22 @@ export function getClient(clientId: string): OAuthClient | undefined {
   if (client) return client;
 
   // Fallback: accept the OAUTH_CLIENT_ID env var directly — no startup dependency.
-  // This handles Claude Web, which uses a static client ID configured in claude.ai settings.
+  // Handles Claude Web and ChatGPT which use a static client_id you configure in their UI.
+  // allowedRedirectPrefixes accepts their dynamic per-connector redirect URIs without
+  // needing to know them in advance. PKCE S256 maintains security regardless.
   const staticId = process.env.OAUTH_CLIENT_ID?.trim();
   if (staticId && clientId === staticId) {
     return {
       clientId,
-      redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
-      clientName: 'Claude Web',
+      redirectUris: [
+        'https://claude.ai/api/mcp/auth_callback',
+      ],
+      allowedRedirectPrefixes: [
+        'https://claude.ai/',
+        'https://chatgpt.com/',
+        'https://chat.openai.com/',
+      ],
+      clientName: 'CP Legal MCP',
       clientSecret: process.env.OAUTH_CLIENT_SECRET?.trim() || undefined,
     };
   }
