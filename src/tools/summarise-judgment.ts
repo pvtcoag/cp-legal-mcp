@@ -108,22 +108,28 @@ export function registerSummariseJudgment(server: McpServer): void {
       const enrichText = input.include_metadata ? truncateText(doc.text, 50_000) : '';
 
       // Run QA + (optionally) enrichment in parallel
-      let enrichResult: Awaited<ReturnType<typeof enrichDocument>> | null = null;
-      let holdingR, ordersR, factsR, principlesR, outcomeR;
+      type QAResult = Awaited<ReturnType<typeof extractAnswer>>;
+      type EnrichResult = Awaited<ReturnType<typeof enrichDocument>>;
+
+      let enrichResult: EnrichResult | null = null;
+      let holdingR!: QAResult;
+      let ordersR!: QAResult;
+      let factsR!: QAResult;
+      let principlesR!: QAResult;
+      let outcomeR!: QAResult;
       try {
-        const promises: Promise<unknown>[] = [
+        const [h, o, f, p, oc, e] = await Promise.all([
           extractAnswer(QA_QUESTIONS.holding,          qaText, 1),
           extractAnswer(QA_QUESTIONS.orders,           qaText, 1),
           extractAnswer(QA_QUESTIONS.key_facts,        qaText, 1),
           extractAnswer(QA_QUESTIONS.legal_principles, qaText, 1),
           extractAnswer(QA_QUESTIONS.outcome,          qaText, 1),
-          ...(input.include_metadata ? [enrichDocument(enrichText)] : []),
-        ];
-        const results = await Promise.all(promises);
-        [holdingR, ordersR, factsR, principlesR, outcomeR] = results as [
-          typeof holdingR, typeof ordersR, typeof factsR, typeof principlesR, typeof outcomeR
-        ];
-        enrichResult = input.include_metadata ? (results[5] as typeof enrichResult) : null;
+          input.include_metadata
+            ? enrichDocument(enrichText)
+            : Promise.resolve(null as EnrichResult | null),
+        ]);
+        holdingR = h; ordersR = o; factsR = f; principlesR = p; outcomeR = oc;
+        enrichResult = e;
       } catch (err) {
         log.warn({ err }, 'Isaacus summarisation failed');
         return {
@@ -141,13 +147,13 @@ export function registerSummariseJudgment(server: McpServer): void {
       const enriched = enrichResult?.data ?? null;
       const totalTokens =
         (enrichResult?.tokensUsed ?? 0) +
-        holdingR!.tokensUsed + ordersR!.tokensUsed + factsR!.tokensUsed +
-        principlesR!.tokensUsed + outcomeR!.tokensUsed;
+        holdingR.tokensUsed + ordersR.tokensUsed + factsR.tokensUsed +
+        principlesR.tokensUsed + outcomeR.tokensUsed;
 
       const citation = doc.citation ?? resolved.citation;
       const title = doc.title ?? citation ?? input.citation_or_url;
 
-      const qaScores = [holdingR!, ordersR!, factsR!, principlesR!, outcomeR!]
+      const qaScores = [holdingR, ordersR, factsR, principlesR, outcomeR]
         .flatMap((r) => r.answers.map((a) => a.score));
       const accuracy_score = qaScores.length > 0 ? Math.min(...qaScores) : undefined;
 
@@ -176,11 +182,11 @@ export function registerSummariseJudgment(server: McpServer): void {
             key_dates: enriched.key_dates,
           } : {}),
           summary: {
-            holding: qaField(holdingR!),
-            orders: qaField(ordersR!),
-            key_facts: qaField(factsR!),
-            legal_principles: qaField(principlesR!),
-            outcome: qaField(outcomeR!),
+            holding: qaField(holdingR),
+            orders: qaField(ordersR),
+            key_facts: qaField(factsR),
+            legal_principles: qaField(principlesR),
+            outcome: qaField(outcomeR),
           },
           ...(enriched ? {
             cases_cited: enriched.citations_made,
