@@ -232,10 +232,16 @@ export async function searchCitingCases(params: {
   limit?: number;
 }): Promise<AuslawCitingCase[]> {
   logger.debug({ params }, 'auslaw: search_citing_cases');
-  return withRetry(() => callAuslawTool<AuslawCitingCase[]>('search_citing_cases', {
-    citation: params.citation,
-    ...(params.limit && { limit: params.limit }),
-  }));
+  // auslaw-mcp returns { totalCount: number, results: AuslawCitingCase[] }, not a bare array.
+  // The generic cast in callAuslawTool doesn't validate at runtime, so unwrap here.
+  const response = await withRetry(() =>
+    callAuslawTool<{ results: AuslawCitingCase[] } | AuslawCitingCase[]>('search_citing_cases', {
+      citation: params.citation,
+      ...(params.limit && { limit: params.limit }),
+    })
+  );
+  if (Array.isArray(response)) return response;
+  return (response as { results: AuslawCitingCase[] }).results ?? [];
 }
 
 export async function searchByCitation(params: {

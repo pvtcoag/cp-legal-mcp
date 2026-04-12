@@ -121,23 +121,34 @@ function estCost(tokens: number, toolName?: string): string {
   return fmtCostValue(cost);
 }
 
+// Approximate USD → AUD conversion rate (update periodically).
+const AUD_PER_USD = 1.57;
+
+/** Format a USD cost with AUD equivalent for use in total displays. */
+function fmtCostUsdAud(usd: number): { usd: string; aud: string } {
+  return {
+    usd: fmtCostValue(usd),
+    aud: usd > 0 ? fmtCostValue(usd * AUD_PER_USD) : '—',
+  };
+}
+
 /** Compute accurate total cost for a set of history rows using per-tool rates. */
-function computeMatterCost(rows: MatterHistoryRow[]): string {
+function computeMatterCost(rows: MatterHistoryRow[]): { usd: string; aud: string } {
   const total = rows.reduce((sum, r) => {
     const tokens = r.api_tokens_used ?? 0;
     const rate = toolCostRate(r.tool_name);
     return sum + (tokens / 1_000_000) * rate;
   }, 0);
-  return fmtCostValue(total);
+  return fmtCostUsdAud(total);
 }
 
 /** Compute accurate total cost from per-tool token aggregates (for dashboard). */
-function computeDashboardCost(byTool: ToolTokenStat[]): string {
+function computeDashboardCost(byTool: ToolTokenStat[]): { usd: string; aud: string } {
   const total = byTool.reduce((sum, { tool_name, total_tokens }) => {
     const rate = toolCostRate(tool_name);
     return sum + (total_tokens / 1_000_000) * rate;
   }, 0);
-  return fmtCostValue(total);
+  return fmtCostUsdAud(total);
 }
 
 function fmtTokens(n: number): string {
@@ -386,6 +397,9 @@ td { padding: .625rem 1rem; vertical-align: top; }
 .tip:hover::before, .tip:focus::before { opacity: 1; }
 .tip-right::after { left: auto; right: 0; transform: none; }
 .tip-right::before { left: auto; right: 12px; transform: none; }
+/* Render tooltip below the element (use when the element is near the top of the viewport) */
+.tip-below::after { bottom: auto; top: calc(100% + 6px); }
+.tip-below::before { bottom: auto; top: calc(100% + 1px); border-top-color: transparent; border-bottom-color: #1A1A1A; }
 
 /* Search / filter bar */
 .filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
@@ -540,7 +554,7 @@ function renderToolChart(stats: ToolUsageStat[]): string {
     return `<div class="tool-bar-row">
       <div class="tool-bar-label">${esc(toolLabel(s.tool_name))}</div>
       <div class="tool-bar-track"><div class="tool-bar-fill" style="width:${pct}%"></div></div>
-      <div class="tool-bar-meta">${s.query_count} queries · ${costStr !== '—' ? costStr : fmtTokens(s.total_tokens) + ' tok'}</div>
+      <div class="tool-bar-meta">${s.query_count} queries · ${costStr !== '—' ? costStr + ' USD' : '—'}</div>
     </div>`;
   }).join('');
   return `<div class="section-block no-print"><h2>Tool Usage</h2>${bars}</div>`;
@@ -607,7 +621,7 @@ function renderDashboardCards(
   const accuracyHtml = avgAccuracy != null
     ? `<div class="card">
         <div class="card-label">Avg Extraction Accuracy
-          <span class="tip" data-tip="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not whether the answer is correct." tabindex="0" style="color:#aaa;margin-left:.25rem">ⓘ</span>
+          <span class="tip tip-below" data-tip="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not whether the answer is correct." tabindex="0" style="color:#aaa;margin-left:.25rem">ⓘ</span>
         </div>
         <div class="card-value sm">${accuracyBadge(avgAccuracy)}</div>
         <div class="card-sub">across QA-capable tools</div>
@@ -628,9 +642,8 @@ function renderDashboardCards(
       <div class="card-value">${stats.total_tokens > 0 ? Math.round(stats.total_tokens / 1000).toLocaleString('en-AU') + 'K' : '—'}</div>
     </div>
     <div class="card">
-      <div class="card-label">Est. Isaacus Cost <span class="est-badge tip" data-tip="Per-tool rates: Enricher $3.50/1M, Answer Extractor $1.50/1M, Classifier $1.00/1M. Excludes Railway infrastructure." tabindex="0">est</span></div>
-      <div class="card-value sm">${computeDashboardCost(costByTool)}</div>
-      <div class="card-sub">Per-tool rates</div>
+      <div class="card-label">Est. Isaacus Cost <span class="est-badge tip tip-below" data-tip="Per-tool rates: Enricher $3.50/1M, Answer Extractor $1.50/1M, Classifier $1.00/1M (USD). Excludes Railway infrastructure." tabindex="0">est</span></div>
+      ${(() => { const c = computeDashboardCost(costByTool); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
     </div>
     ${accuracyHtml}
   </div>`;
@@ -966,8 +979,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       <div class="card">
         <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
-        <div class="card-value sm">${computeMatterCost(displayRows)}</div>
-        <div class="card-sub">Per-tool Isaacus rates</div>
+        ${(() => { const c = computeMatterCost(displayRows); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
       </div>
       <div class="card">
         <div class="card-label">Researchers</div>
@@ -991,9 +1003,9 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
         <th>Date &amp; Time</th><th>Tool</th><th>Researcher</th><th>Query</th>
         <th>Jurisdiction</th><th style="text-align:right">Results</th>
         <th class="no-print-col" style="text-align:right">Tokens</th>
-        <th style="text-align:right">Cost</th>
+        <th style="text-align:right">Cost (USD)</th>
         <th style="text-align:center">Accuracy
-          <span class="tip tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:#aaa;margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
+          <span class="tip tip-below tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:#aaa;margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
         </th>
         <th class="no-print-col">Top Results</th>
       </tr></thead>
