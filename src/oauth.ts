@@ -102,10 +102,9 @@ oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: 
     registration_endpoint: `${base}/oauth/register`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code'],
-    code_challenge_methods_supported: ['S256', 'plain'],
-    // 'none' = PKCE-only (mcp-remote, Cursor, etc.)
-    // 'client_secret_post' = client_id + client_secret in POST body (ChatGPT, Claude Web)
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    code_challenge_methods_supported: ['S256'],
+    // Public clients — PKCE S256 is the security mechanism; no client secret needed or required.
+    token_endpoint_auth_methods_supported: ['none'],
     scopes_supported: ['mcp'],
   });
 });
