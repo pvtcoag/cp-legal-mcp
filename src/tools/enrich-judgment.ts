@@ -10,11 +10,21 @@ import { truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
-const inputSchema = z.object({
+const inputSchemaBase = z.object({
   citation_or_url: z
     .string()
     .min(5)
+    .optional()
     .describe('Neutral citation (e.g. "[2024] HCA 12") or full AustLII URL of the judgment'),
+  citations_or_urls: z
+    .array(z.string().min(5))
+    .min(1)
+    .max(5)
+    .optional()
+    .describe(
+      'Array of up to 5 neutral citations or AustLII URLs for batch enrichment. ' +
+      'Use instead of citation_or_url when enriching multiple judgments at once.',
+    ),
   matter_ref: z
     .string()
     .max(100)
@@ -22,88 +32,80 @@ const inputSchema = z.object({
     .describe('Matter reference to tag this enrichment in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
 });
 
+const inputSchema = inputSchemaBase.refine(
+  (d) => d.citation_or_url || (d.citations_or_urls && d.citations_or_urls.length > 0),
+  { message: 'Either citation_or_url or citations_or_urls must be provided' },
+);
+
 export function registerEnrichJudgment(server: McpServer): void {
   server.tool(
     'enrich_judgment',
-    'Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher.',
-    inputSchema.shape,
+    'Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher. Accepts a single citation/URL or an array of up to 5 for batch enrichment.',
+    inputSchemaBase.shape,
     async (input) => {
-      const log = logger.child({ tool: 'enrich_judgment', input: input.citation_or_url });
+      const log = logger.child({ tool: 'enrich_judgment' });
 
-      // Resolve citation or URL → concrete fetch URL
-      let resolved;
-      try {
-        resolved = await resolveJudgmentUrl(input.citation_or_url);
-      } catch (err) {
-        if (err instanceof AuslawError) {
-          log.warn({ err }, 'resolveJudgmentUrl failed');
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'invalid_input',
-              message: err.message,
-              received: input.citation_or_url,
-            }) }],
-            isError: true,
-          };
-        }
-        throw err;
+      const inputs = input.citations_or_urls ?? (input.citation_or_url ? [input.citation_or_url] : []);
+      const isBatch = !!input.citations_or_urls;
+
+      interface EnrichSuccess {
+        judgment: { title: string; citation: string | null; url: string; canonical_url: string };
+        document_type: unknown;
+        jurisdiction: unknown;
+        parties: unknown;
+        key_dates: unknown;
+        citations_made: unknown;
+        defined_terms: unknown;
+        tokens_used: number;
+        input: string;
+      }
+      interface EnrichFailure {
+        error: string;
+        message: string;
+        input: string;
       }
 
-      // Fetch judgment text
-      let doc;
-      try {
-        doc = await fetchDocumentText(resolved.url);
-      } catch (err) {
-        if (err instanceof AuslawError) {
-          log.warn({ err }, 'fetch_document_text failed');
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
-              detail: err.message,
-            }) }],
-            isError: true,
-          };
+      async function enrichOne(identifier: string): Promise<EnrichSuccess> {
+        let resolved;
+        try {
+          resolved = await resolveJudgmentUrl(identifier);
+        } catch (err) {
+          if (err instanceof AuslawError) {
+            log.warn({ err }, 'resolveJudgmentUrl failed');
+            throw { error: 'invalid_input', message: err.message };
+          }
+          throw err;
         }
-        throw err;
-      }
 
-      // Enrich using Isaacus
-      let enriched;
-      let enrichTokens = 0;
-      try {
-        const enrichResult = await enrichDocument(truncateText(doc.text, 50_000));
-        enriched = enrichResult.data;
-        enrichTokens = enrichResult.tokensUsed;
-      } catch (err) {
-        log.warn({ err }, 'Isaacus enrichDocument failed');
+        let doc;
+        try {
+          doc = await fetchDocumentText(resolved.url);
+        } catch (err) {
+          if (err instanceof AuslawError) {
+            log.warn({ err }, 'fetch_document_text failed');
+            throw { error: 'upstream_unavailable', message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.' };
+          }
+          throw err;
+        }
+
+        let enriched;
+        let enrichTokens = 0;
+        try {
+          const enrichResult = await enrichDocument(truncateText(doc.text, 50_000));
+          enriched = enrichResult.data;
+          enrichTokens = enrichResult.tokensUsed;
+        } catch (err) {
+          log.warn({ err }, 'Isaacus enrichDocument failed');
+          throw { error: 'enrichment_failed', message: 'Could not enrich the judgment. Please use get_judgment to read the full text instead.' };
+        }
+
+        const citation = doc.citation ?? resolved.citation;
+        const title = doc.title ?? citation ?? identifier;
+
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'enrichment_failed',
-            message: 'Could not enrich the judgment. Please use get_judgment to read the full text instead.',
-            detail: err instanceof Error ? err.message : String(err),
-          }) }],
-          isError: true,
-        };
-      }
-
-      const citation = doc.citation ?? resolved.citation;
-      const title = doc.title ?? citation ?? input.citation_or_url;
-
-      recordMatterQuery({
-        matter_ref: input.matter_ref,
-        tool_name: 'enrich_judgment',
-        query_text: input.citation_or_url,
-        result_count: 1,
-        top_results: [{ title, citation, url: resolved.url }],
-        api_tokens_used: enrichTokens,
-      });
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
           judgment: {
             title,
-            citation,
+            citation: citation ?? null,
             url: resolved.url,
             canonical_url: resolved.canonicalUrl ?? resolved.url,
           },
@@ -113,6 +115,92 @@ export function registerEnrichJudgment(server: McpServer): void {
           key_dates: enriched.key_dates,
           citations_made: enriched.citations_made,
           defined_terms: enriched.defined_terms,
+          tokens_used: enrichTokens,
+          input: identifier,
+        };
+      }
+
+      if (!isBatch) {
+        // Single mode — original behaviour
+        const identifier = inputs[0]!;
+        let result: EnrichSuccess;
+        try {
+          result = await enrichOne(identifier);
+        } catch (err) {
+          const e = err as { error?: string; message?: string };
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: e.error ?? 'unknown_error',
+              message: e.message ?? String(err),
+              received: identifier,
+            }) }],
+            isError: true,
+          };
+        }
+
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'enrich_judgment',
+          query_text: identifier,
+          result_count: 1,
+          top_results: [{ title: result.judgment.title, citation: result.judgment.citation ?? undefined, url: result.judgment.url }],
+          api_tokens_used: result.tokens_used,
+        });
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            judgment: result.judgment,
+            document_type: result.document_type,
+            jurisdiction: result.jurisdiction,
+            parties: result.parties,
+            key_dates: result.key_dates,
+            citations_made: result.citations_made,
+            defined_terms: result.defined_terms,
+          }) }],
+        };
+      }
+
+      // Batch mode
+      const settled = await Promise.allSettled(inputs.map((id) => enrichOne(id)));
+
+      const batchResults: Array<EnrichSuccess | EnrichFailure> = settled.map((r, i) => {
+        if (r.status === 'fulfilled') {
+          return r.value;
+        } else {
+          const e = r.reason as { error?: string; message?: string };
+          return {
+            error: e.error ?? 'unknown_error',
+            message: e.message ?? String(r.reason),
+            input: inputs[i]!,
+          };
+        }
+      });
+
+      const successes = batchResults.filter((r): r is EnrichSuccess => !('error' in r));
+      let totalTokens = 0;
+      for (const s of successes) {
+        totalTokens += s.tokens_used;
+      }
+
+      recordMatterQuery({
+        matter_ref: input.matter_ref,
+        tool_name: 'enrich_judgment',
+        query_text: inputs.join(', '),
+        result_count: successes.length,
+        top_results: successes
+          .slice(0, 3)
+          .map((s) => ({ title: s.judgment.title, citation: s.judgment.citation ?? undefined, url: s.judgment.url })),
+        api_tokens_used: totalTokens,
+      });
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          batch_count: inputs.length,
+          results: batchResults.map((r) => {
+            if ('error' in r) return r;
+            const { tokens_used: _t, input: _i, ...rest } = r;
+            return rest;
+          }),
         }) }],
       };
     },

@@ -24,6 +24,14 @@ const inputSchema = z.object({
     .string()
     .min(5)
     .describe('Neutral citation (e.g. "[2024] HCA 12") or full AustLII URL of the seed judgment'),
+  additional_seeds: z
+    .array(z.string().min(5))
+    .max(4)
+    .optional()
+    .describe(
+      'Up to 4 additional neutral citations or AustLII URLs to use as additional seed judgments alongside citation_or_url. ' +
+      'The embeddings of all seeds are averaged to find cases related to all of them simultaneously.',
+    ),
   limit: z
     .number()
     .int()
@@ -108,6 +116,61 @@ export function registerFindRelatedCases(server: McpServer): void {
         } catch (err) {
           log.warn({ err }, 'Isaacus embedding failed — falling back to title search only');
           seedEmbedding = null;
+        }
+      }
+
+      // ── 2b. Additional seeds (if any) ─────────────────────────────────────────
+      const seedsUsed: Array<{ title: string; citation: string | null; url: string }> = [
+        { title: seedTitle, citation: seedCitation ?? null, url: resolved.url },
+      ];
+
+      if (input.additional_seeds && input.additional_seeds.length > 0) {
+        const additionalResults = await Promise.allSettled(
+          input.additional_seeds.map(async (seed) => {
+            const res = await resolveJudgmentUrl(seed);
+            const d = await fetchDocumentText(res.url);
+            const t = d.text.slice(0, TEXT_WINDOW);
+            let emb = await getJudgmentEmbedding(res.url).catch(() => null);
+            if (!emb) {
+              const r = await embedText(t, 'retrieval/document');
+              emb = r.embedding;
+              totalTokens += r.tokensUsed;
+              upsertJudgmentEmbedding(res.url, emb).catch(() => null);
+            }
+            return {
+              embedding: emb,
+              title: d.title ?? res.citation ?? seed,
+              citation: d.citation ?? res.citation ?? null,
+              url: res.url,
+            };
+          }),
+        );
+
+        const additionalEmbeddings: number[][] = [];
+        for (const r of additionalResults) {
+          if (r.status === 'fulfilled') {
+            additionalEmbeddings.push(r.value.embedding);
+            seedsUsed.push({
+              title: r.value.title,
+              citation: r.value.citation,
+              url: r.value.url,
+            });
+          } else {
+            log.warn({ reason: r.reason }, 'Additional seed failed — skipping');
+          }
+        }
+
+        // Average all embeddings (primary + additional) element-wise
+        if (seedEmbedding && additionalEmbeddings.length > 0) {
+          const allEmbs = [seedEmbedding, ...additionalEmbeddings];
+          const dims = seedEmbedding.length;
+          const averaged = new Array<number>(dims).fill(0);
+          for (const emb of allEmbs) {
+            for (let i = 0; i < dims; i++) {
+              averaged[i]! += emb[i]! / allEmbs.length;
+            }
+          }
+          seedEmbedding = averaged;
         }
       }
 
@@ -196,7 +259,9 @@ export function registerFindRelatedCases(server: McpServer): void {
       if (allCandidates.length === 0) {
         finalResults = [];
       } else {
-        const rerankQuery = `Cases related to: ${seedTitle}${seedCitation ? ` (${seedCitation})` : ''}`;
+        const rerankQuery = seedsUsed.length === 1
+          ? `Cases related to: ${seedTitle}${seedCitation ? ` (${seedCitation})` : ''}`
+          : `Cases related to: ${seedsUsed.map((s) => s.title + (s.citation ? ` (${s.citation})` : '')).join('; ')}`;
         try {
           const rerankResult = await rerank(rerankQuery, allCandidates, input.limit);
           totalTokens += rerankResult.tokensUsed;
@@ -233,7 +298,9 @@ export function registerFindRelatedCases(server: McpServer): void {
       const corpusSize = corpus.length;
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
-          seed_case: { title: seedTitle, citation: seedCitation, url: resolved.url },
+          seed_case: seedsUsed[0]!,
+          additional_seeds_used: seedsUsed.slice(1),
+          seeds_count: seedsUsed.length,
           related_cases: finalResults,
           corpus_size: corpusSize,
           note: corpusResults.length === 0

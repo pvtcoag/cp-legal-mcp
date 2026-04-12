@@ -36,6 +36,20 @@ const inputSchema = z.object({
     .max(100)
     .optional()
     .describe('Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  from_year: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Filter results to legislation enacted or amended on or after this year, e.g. 2015'),
+  to_year: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .describe('Filter results to legislation enacted or amended on or before this year, e.g. 2023'),
 });
 
 export function registerResearchLegislation(server: McpServer): void {
@@ -69,15 +83,29 @@ export function registerResearchLegislation(server: McpServer): void {
         throw err;
       }
 
+      // Client-side year filter — AustLII legislation search doesn't natively support year ranges
+      let filteredResults = rawResults;
+      if (input.from_year !== undefined || input.to_year !== undefined) {
+        filteredResults = rawResults.filter((item) => {
+          if (!item.date) return true;
+          const year = new Date(item.date).getFullYear();
+          if (isNaN(year)) return true;
+          if (input.from_year !== undefined && year < input.from_year) return false;
+          if (input.to_year !== undefined && year > input.to_year) return false;
+          return true;
+        });
+        log.debug({ before: rawResults.length, after: filteredResults.length }, 'Year filter applied');
+      }
+
       let ranked;
       let rerankTokens = 0;
       try {
-        const rerankResult = await rerank(input.query, rawResults, input.limit ?? 5, { isIql: input.use_iql });
+        const rerankResult = await rerank(input.query, filteredResults, input.limit ?? 5, { isIql: input.use_iql });
         ranked = rerankResult.results;
         rerankTokens = rerankResult.tokensUsed;
       } catch (err) {
         log.warn({ err }, 'Isaacus reranking failed, using original order');
-        ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
+        ranked = filteredResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
       }
 
       const results = ranked.map(({ item, score }) => ({
@@ -106,6 +134,8 @@ export function registerResearchLegislation(server: McpServer): void {
           text: JSON.stringify({
             query: input.query,
             jurisdiction: input.jurisdiction,
+            ...(input.from_year !== undefined ? { from_year: input.from_year } : {}),
+            ...(input.to_year !== undefined ? { to_year: input.to_year } : {}),
             result_count: results.length,
             results,
           }),

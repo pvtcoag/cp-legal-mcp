@@ -19,6 +19,14 @@ import { registerAskLegislation } from './tools/ask-legislation.js';
 import { registerGetLegislation } from './tools/get-legislation.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
+import { registerLookupEntity } from './tools/lookup-entity.js';
+import { registerSearchAsic } from './tools/search-asic.js';
+import { registerGetDirectorHistory } from './tools/get-director-history.js';
+import { registerSearchAsicDecisions } from './tools/search-asic-decisions.js';
+import { registerSearchAcccDecisions } from './tools/search-accc-decisions.js';
+import { registerSearchAsxAnnouncements } from './tools/search-asx-announcements.js';
+import { registerSummariseMatter } from './tools/summarise-matter.js';
+import { registerBuildChronology } from './tools/build-chronology.js';
 
 const ADMIN_ERROR_NOTE = '\n\nIf this error persists, contact your administrator.';
 
@@ -91,6 +99,22 @@ function buildServer(): McpServer {
 
   // Matter tracking
   registerGetMatterHistory(server);
+
+  // Entity intelligence
+  registerLookupEntity(server);
+  registerSearchAsic(server);
+  registerGetDirectorHistory(server);
+
+  // Regulatory decisions
+  registerSearchAsicDecisions(server);
+  registerSearchAcccDecisions(server);
+
+  // Market data
+  registerSearchAsxAnnouncements(server);
+
+  // Matter intelligence
+  registerSummariseMatter(server);
+  registerBuildChronology(server);
 
   // Admin (restricted to ADMIN_USERS)
   registerInspectDatabase(server);

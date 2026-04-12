@@ -31,6 +31,17 @@ const inputSchema = z.object({
     .max(100)
     .optional()
     .describe('Matter reference to tag this retrieval in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  start_at_section: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe(
+      'Return text starting from this section heading or paragraph number. ' +
+      'Use to access a specific part of a long judgment without reading from the beginning. ' +
+      'Examples: "REASONS FOR JUDGMENT", "ORDERS", "[45]", "Conclusion". ' +
+      'Case-insensitive substring match. Returns from beginning with a note if not found.',
+    ),
 });
 
 export function registerGetJudgment(server: McpServer): void {
@@ -82,13 +93,28 @@ export function registerGetJudgment(server: McpServer): void {
       const citation = doc.citation ?? resolved.citation;
       const totalChars = doc.text.length;
 
+      // Section anchoring — find the start position within the document
+      let startIndex = 0;
+      let sectionFound = false;
+      if (input.start_at_section) {
+        const needle = input.start_at_section.toLowerCase();
+        const haystack = doc.text.toLowerCase();
+        const idx = haystack.indexOf(needle);
+        if (idx !== -1) {
+          startIndex = idx;
+          sectionFound = true;
+        }
+      }
+      const textFromSection = startIndex > 0 ? doc.text.slice(startIndex) : doc.text;
+      const sectionCharsTotal = textFromSection.length;
+
       // Apply optional character cap — preserves full text by default so verbatim
       // quoting is always possible, but lets callers limit context window usage.
       const text =
-        input.max_chars !== undefined && totalChars > input.max_chars
-          ? doc.text.slice(0, input.max_chars)
-          : doc.text;
-      const truncated = text.length < totalChars;
+        input.max_chars !== undefined && sectionCharsTotal > input.max_chars
+          ? textFromSection.slice(0, input.max_chars)
+          : textFromSection;
+      const truncated = text.length < sectionCharsTotal;
 
       recordMatterQuery({
         matter_ref: input.matter_ref,
@@ -105,6 +131,9 @@ export function registerGetJudgment(server: McpServer): void {
           url: resolved.url,
           canonical_url: resolved.canonicalUrl ?? resolved.url,
           total_chars: totalChars,
+          ...(startIndex > 0 ? { start_offset: startIndex } : {}),
+          ...(input.start_at_section ? { section_found: sectionFound } : {}),
+          ...(input.start_at_section && !sectionFound ? { note: `Section "${input.start_at_section}" not found — returning from document start.` } : {}),
           ...(truncated ? { truncated: true, returned_chars: text.length } : {}),
           text,
         }) }],

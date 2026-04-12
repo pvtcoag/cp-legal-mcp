@@ -43,6 +43,10 @@ const ConfigSchema = z.object({
   // Recovery token — allows admin access via login page when other credentials are unavailable.
   // Must be at least 32 characters. Remove this env var after recovering access.
   RECOVERY_TOKEN: z.string().min(32).optional(),
+
+  // Australian Business Register GUID for entity lookups.
+  // Register for free at https://abr.business.gov.au/Tools/WebServices
+  ABR_GUID: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
