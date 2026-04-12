@@ -181,7 +181,7 @@ export async function fetchDocumentText(url: string): Promise<AuslawDocumentText
   }
 
   logger.debug({ url }, 'auslaw: fetch_document_text (cache miss)');
-  const doc = await callAuslawTool<AuslawDocumentText>('fetch_document_text', { url });
+  const doc = await withRetry(() => callAuslawTool<AuslawDocumentText>('fetch_document_text', { url }));
 
   // Cache for future calls — fire-and-forget, never blocks the response
   upsertJudgmentCache({
@@ -349,8 +349,8 @@ export async function fetchLegislationSection(params: {
   section: string;
 }): Promise<AuslawLegislationSection> {
   logger.debug({ params }, 'auslaw: fetch_legislation_section');
-  return callAuslawTool<AuslawLegislationSection>('fetch_legislation_section', {
+  return withRetry(() => callAuslawTool<AuslawLegislationSection>('fetch_legislation_section', {
     url: params.url,
     section: params.section,
-  });
+  }));
 }

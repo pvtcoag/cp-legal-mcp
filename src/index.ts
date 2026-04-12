@@ -15,8 +15,8 @@ const app = express();
 // Trust Railway/Cloudflare proxy — required for express-rate-limit to read
 // the real client IP from X-Forwarded-For without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
 app.set('trust proxy', 1);
-app.use(express.json());
-app.use(express.urlencoded({ extended: false })); // OAuth login form POST
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '16kb' })); // OAuth login form POST
 
 // OAuth 2.0 — mounted before auth middleware (public discovery + token endpoints)
 app.use(oauthRouter);
@@ -166,7 +166,15 @@ const server = app.listen(config.PORT, async () => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  // Force-exit after 10 s — Railway allows 30 s before SIGKILL, so this ensures
+  // we exit cleanly before the hard kill and don't block on idle keep-alive connections.
+  const forceExit = setTimeout(() => {
+    logger.warn('Graceful shutdown timed out after 10 s — forcing exit');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
   server.close(async () => {
+    clearTimeout(forceExit);
     await closeDb();
     process.exit(0);
   });
