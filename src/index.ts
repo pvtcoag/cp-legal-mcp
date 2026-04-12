@@ -115,6 +115,7 @@ const server = app.listen(config.PORT, async () => {
       config.OAUTH_CLIENT_ID,
       ['https://claude.ai/api/mcp/auth_callback'],
       'Claude Web',
+      config.OAUTH_CLIENT_SECRET,
     );
   }
 

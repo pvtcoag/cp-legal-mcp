@@ -368,6 +368,7 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     code,
     redirect_uri,
     client_id,
+    client_secret,
     code_verifier,
   } = req.body as Record<string, string | undefined>;
 
@@ -390,6 +391,18 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'invalid_grant', error_description: 'client_id mismatch' });
     return;
   }
+
+  // Validate client secret for pre-registered static clients that have one configured.
+  // Dynamic clients are PKCE-only and have no secret.
+  const client = getClient(client_id);
+  if (client?.clientSecret) {
+    if (!client_secret || !safeEqual(client_secret, client.clientSecret)) {
+      logger.warn({ client_id }, 'OAuth: invalid client_secret');
+      res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client_secret' });
+      return;
+    }
+  }
+
   if (entry.redirectUri !== redirect_uri) {
     res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
     return;
@@ -432,8 +445,6 @@ oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
   }
 
   logger.info({ user: entry.userId }, 'OAuth: access token issued');
-
-  const client = getClient(client_id);
 
   // Log OAuth authorization to DB (fire-and-forget)
   upsertOAuthAuthorization({

@@ -19,6 +19,10 @@ const ConfigSchema = z.object({
   // Leave unset if only using mcp-remote (which does dynamic registration automatically).
   OAUTH_CLIENT_ID: z.string().optional(),
 
+  // Client secret for the static OAuth client. Claude Web sends this in POST /oauth/token.
+  // Must match the value entered in claude.ai remote MCP settings.
+  OAUTH_CLIENT_SECRET: z.string().optional(),
+
   // Isaacus — legal AI reranking
   ISAACUS_API_KEY: z.string().min(1, 'ISAACUS_API_KEY is required'),
 

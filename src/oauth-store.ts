@@ -9,6 +9,8 @@ export interface OAuthClient {
   clientId: string;
   redirectUris: string[];
   clientName?: string;
+  /** Present only on pre-registered static clients; dynamic clients are PKCE-only. */
+  clientSecret?: string;
 }
 
 const clients = new Map<string, OAuthClient>();
@@ -24,8 +26,8 @@ export function registerClient(params: Omit<OAuthClient, 'clientId'>): string {
  * Pre-register a client with a known static ID (used for Claude Web).
  * Called at startup — idempotent, safe to call multiple times.
  */
-export function preRegisterClient(clientId: string, redirectUris: string[], clientName?: string): void {
-  clients.set(clientId, { clientId, redirectUris, clientName });
+export function preRegisterClient(clientId: string, redirectUris: string[], clientName?: string, clientSecret?: string): void {
+  clients.set(clientId, { clientId, redirectUris, clientName, clientSecret });
   logger.info({ clientId, clientName }, 'OAuth static client pre-registered');
 }
 
@@ -42,6 +44,7 @@ export function getClient(clientId: string): OAuthClient | undefined {
       clientId,
       redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
       clientName: 'Claude Web',
+      clientSecret: process.env.OAUTH_CLIENT_SECRET?.trim() || undefined,
     };
   }
 
