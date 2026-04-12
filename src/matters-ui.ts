@@ -554,9 +554,20 @@ input:focus { border-color: var(--primary); }
   .top-results-stack a { color: #333; text-decoration: none; }
   .acc-badge { border: 1px solid #999; background: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   tr { page-break-inside: avoid; }
-  @page { size: A4 landscape; margin: 1cm 1.5cm; }
+  @page { size: A4 landscape; margin: 1.5cm; }
+  table { width: 100%; }
+  td { word-wrap: break-word; overflow-wrap: break-word; }
 }
 .print-header { display: none; }
+
+/* Matter ref copy button */
+.copy-ref-btn { background: none; border: none; cursor: pointer; color: #aaa; font-size: .875rem; padding: 0 .25rem; vertical-align: middle; }
+.copy-ref-btn:hover { color: var(--accent); }
+
+/* Sort links in table headers */
+.sort-link { color: inherit; text-decoration: none; }
+.sort-link:hover { color: var(--accent); }
+.sort-link.active { color: var(--accent); font-weight: 700; }
 `;
 
 export const LOGO_SRC = '';
@@ -948,13 +959,26 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
   const search = typeof req.query['search'] === 'string' ? req.query['search'].trim() : undefined;
   const viewUser = userIsAdmin && typeof req.query['user'] === 'string' ? req.query['user'].trim() : undefined;
   const statusFilter = typeof req.query['status'] === 'string' ? req.query['status'].trim() : undefined;
+  const validSorts = ['last_activity', 'first_activity', 'queries', 'matter_ref'] as const;
+  type SortKey = typeof validSorts[number];
+  const sort: SortKey = validSorts.includes(req.query['sort'] as SortKey) ? (req.query['sort'] as SortKey) : 'last_activity';
   const adminBadge = userIsAdmin ? '<span class="admin-badge">Admin</span>' : '';
   const allUsers = [...getCredentials().keys()];
 
+  // Build a helper that preserves current filter params when changing sort
+  const buildSortUrl = (s: string) => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (viewUser) params.set('user', viewUser);
+    if (statusFilter) params.set('status', statusFilter);
+    params.set('sort', s);
+    return `/matters?${params.toString()}`;
+  };
+
   // Admin: default to all matters; can filter by user via ?user=
   const matters: MatterSummaryRow[] = userIsAdmin
-    ? (viewUser ? await listMattersForUser(viewUser, search, statusFilter) : await listMatters(search, statusFilter))
-    : await listMattersForUser(user, search, statusFilter);
+    ? (viewUser ? await listMattersForUser(viewUser, search, statusFilter, sort) : await listMatters(search, statusFilter, sort))
+    : await listMattersForUser(user, search, statusFilter, sort);
 
   // Admin user toggle tabs
   const segTabs = userIsAdmin
@@ -983,8 +1007,9 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
       const displayLabel = m.display_name
         ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:#888;font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
         : esc(m.matter_ref);
+      const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
       return `<tr>
-        <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}</td>
+        <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}${copyBtn}</td>
         <td class="date-small td-clip">${tsDate(m.first_activity)}<br>${tsDate(m.last_activity)}</td>
         <td class="count" style="text-align:right">${m.query_count}</td>
         <td class="users-cell td-clip">${esc(researchers)}</td>
@@ -994,7 +1019,9 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     }).join('');
     tableHtml = `<div class="table-wrap"><table>
       <thead><tr>
-        <th>Matter Ref</th><th>Period</th><th style="text-align:right">Queries</th>
+        <th><a href="${esc(buildSortUrl('matter_ref'))}" class="sort-link${sort === 'matter_ref' ? ' active' : ''}">Matter Ref</a></th>
+        <th><a href="${esc(buildSortUrl('last_activity'))}" class="sort-link${sort === 'last_activity' ? ' active' : ''}">Period ▼</a></th>
+        <th style="text-align:right"><a href="${esc(buildSortUrl('queries'))}" class="sort-link${sort === 'queries' ? ' active' : ''}">Queries</a></th>
         <th>Researchers</th><th>Tools Used</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -1120,7 +1147,9 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
     </div>
     ${closedBanner}
-    ${displayName ? `<h1>${esc(displayName)}</h1><p style="font-size:.8125rem;color:#888;font-family:ui-monospace,monospace;margin-bottom:.375rem">${esc(ref)}</p>` : `<h1>${esc(ref)}</h1>`}
+    ${displayName
+      ? `<h1>${esc(displayName)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1><p style="font-size:.8125rem;color:#888;font-family:ui-monospace,monospace;margin-bottom:.375rem">${esc(ref)}</p>`
+      : `<h1>${esc(ref)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1>`}
     ${renameForm}
     ${closeButton}
     <p class="subtitle" style="margin-top:.5rem">${tsDate(firstRow.created_at)} to ${tsDate(lastRow.created_at)}</p>
@@ -1165,6 +1194,18 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </form>
     <div class="table-wrap">
     <table>
+      <colgroup>
+        <col style="width:13%"><!-- Date/Time -->
+        <col style="width:9%"><!-- Tool -->
+        <col style="width:9%"><!-- Researcher -->
+        <col style="width:37%"><!-- Query -->
+        <col style="width:9%"><!-- Jurisdiction -->
+        <col style="width:7%"><!-- Results -->
+        <col class="no-print-col" style="width:7%"><!-- Tokens (hidden in print) -->
+        <col style="width:8%"><!-- Cost -->
+        <col style="width:7%"><!-- Accuracy -->
+        <col class="no-print-col"><!-- Top Results (hidden in print) -->
+      </colgroup>
       <thead><tr>
         <th>Date &amp; Time</th><th>Tool</th><th>Researcher</th><th>Query</th>
         <th>Jurisdiction</th><th style="text-align:right">Results</th>

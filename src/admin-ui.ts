@@ -1123,9 +1123,10 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
       ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:#888;font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
       : esc(m.matter_ref);
     const activeUsers = (m.active_users ?? []).join(', ') || '—';
+    const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
     return `<tr>
       <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
-        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${displayLabel}</a>${statusBadge}
+        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
       </td>
       <td class="date-small">${m.creator ? esc(m.creator) : '—'}</td>
       <td class="date-small">${tsDateTime(m.first_seen)}</td>

@@ -223,7 +223,17 @@ export interface MatterSummaryRow {
   last_activity: string;
 }
 
-export async function listMattersForUser(userId: string, search?: string, status?: string): Promise<MatterSummaryRow[]> {
+/** Map a UI sort key to SQL ORDER BY clause. */
+function matterSortClause(orderBy?: string): string {
+  switch (orderBy) {
+    case 'first_activity': return 'ORDER BY first_activity ASC';
+    case 'queries':        return 'ORDER BY query_count DESC';
+    case 'matter_ref':     return 'ORDER BY mq.matter_ref ASC';
+    default:               return 'ORDER BY last_activity DESC';
+  }
+}
+
+export async function listMattersForUser(userId: string, search?: string, status?: string, orderBy?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [userId];
   const searchClause = search ? ` AND mq.matter_ref ILIKE $2` : '';
@@ -243,12 +253,12 @@ export async function listMattersForUser(userId: string, search?: string, status
     LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
     WHERE (mq.user_id = $1 OR mq.user_id IS NULL)${searchClause}
     GROUP BY mq.matter_ref${statusClause}
-    ORDER BY last_activity DESC
+    ${matterSortClause(orderBy)}
   `, params);
   return result.rows;
 }
 
-export async function listMatters(search?: string, status?: string): Promise<MatterSummaryRow[]> {
+export async function listMatters(search?: string, status?: string, orderBy?: string): Promise<MatterSummaryRow[]> {
   if (!pool) return [];
   const params: unknown[] = [];
   const searchClause = search ? `WHERE mq.matter_ref ILIKE $1` : '';
@@ -268,7 +278,7 @@ export async function listMatters(search?: string, status?: string): Promise<Mat
     LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
     ${searchClause}
     GROUP BY mq.matter_ref${statusClause}
-    ORDER BY last_activity DESC
+    ${matterSortClause(orderBy)}
   `, params);
   return result.rows;
 }
