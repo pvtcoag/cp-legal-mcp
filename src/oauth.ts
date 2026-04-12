@@ -119,8 +119,9 @@ oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: 
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code'],
     code_challenge_methods_supported: ['S256'],
-    // Public clients — PKCE S256 is the security mechanism; no client secret needed or required.
-    token_endpoint_auth_methods_supported: ['none'],
+    // DCR issues a server-generated secret → confidential clients (ChatGPT) use
+    // client_secret_post. PKCE clients (mcp-remote, Cursor) use 'none'.
+    token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
     scopes_supported: ['mcp'],
   });
 });
@@ -145,17 +146,21 @@ oauthRouter.post('/oauth/register', (req: Request, res: Response) => {
   }
 
   const name = typeof client_name === 'string' ? client_name : undefined;
-  const clientId = registerClient({ redirectUris: uris, clientName: name });
+  const { clientId, clientSecret } = registerClient({ redirectUris: uris, clientName: name });
   logger.info({ clientId, clientName: name, redirectUris: uris }, 'OAuth: dynamic client registered');
 
-  // RFC 7591 §3.2.1 — echo back all registered metadata plus server-assigned fields
+  // RFC 7591 §3.2.1 — echo back all registered metadata plus server-assigned fields.
+  // We issue a client_secret so confidential clients (ChatGPT) can authenticate at
+  // the token endpoint. client_secret_expires_at: 0 means it does not expire.
   res.status(201).json({
     client_id: clientId,
+    client_secret: clientSecret,
     client_id_issued_at: Math.floor(Date.now() / 1000),
+    client_secret_expires_at: 0,
     redirect_uris: uris,
     ...(name ? { client_name: name } : {}),
     ...(typeof scope === 'string' ? { scope } : { scope: 'mcp' }),
-    token_endpoint_auth_method: 'none',
+    token_endpoint_auth_method: 'client_secret_post',
     grant_types: ['authorization_code'],
     response_types: ['code'],
     code_challenge_methods_supported: ['S256'],

@@ -23,11 +23,15 @@ export interface OAuthClient {
 
 const clients = new Map<string, OAuthClient>();
 
-export function registerClient(params: Omit<OAuthClient, 'clientId'>): string {
+export function registerClient(params: Omit<OAuthClient, 'clientId'>): { clientId: string; clientSecret: string } {
   const clientId = randomUUID();
-  clients.set(clientId, { clientId, ...params });
+  // Always issue a server-generated secret so confidential clients (e.g. ChatGPT
+  // connectors) can authenticate at the token endpoint. PKCE clients (mcp-remote,
+  // Cursor) receive it but ignore it — they authenticate via code_verifier instead.
+  const clientSecret = randomUUID().replace(/-/g, '');
+  clients.set(clientId, { clientId, ...params, clientSecret });
   logger.debug({ clientId, clientName: params.clientName }, 'OAuth client registered');
-  return clientId;
+  return { clientId, clientSecret };
 }
 
 /**
