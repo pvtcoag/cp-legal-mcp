@@ -4,7 +4,7 @@
   "description": "Remote MCP wrapper for Australian legal research",
   "type": "module",
   "engines": {
-    "node": ">=20.18.1"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "build": "tsc",

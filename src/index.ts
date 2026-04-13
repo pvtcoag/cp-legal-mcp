@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { authMiddleware, buildAuthCache } from './auth.js';
-import { initDb, migrateUsersFromEnv, listUsers, pingDb, isDbEnabled, closeDb } from './db.js';
+import { initDb, migrateUsersFromEnv, listUsers, pingDb, isDbEnabled, closeDb, checkSpendCap } from './db.js';
 import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
@@ -96,6 +96,49 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// Spend cap middleware — blocks requests when the user's or global monthly spend cap is exceeded.
+// Runs after auth so res.locals['user'] is set. Fails open on DB errors (logs warning).
+async function spendCapMiddleware(
+  _req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+): Promise<void> {
+  const user = res.locals['user'] as string | undefined;
+  if (!user || !isDbEnabled()) { next(); return; }
+  try {
+    const cap = await checkSpendCap(user);
+    if (!cap.allowed) {
+      const capStr = cap.cap_usd != null ? `$${cap.cap_usd.toFixed(2)}` : 'set limit';
+      res.status(429).json({
+        error: 'spend_cap_exceeded',
+        message: `Monthly spend cap reached ($${cap.current_usd.toFixed(2)} of ${capStr} USD). Contact your administrator.`,
+      });
+      return;
+    }
+    if (cap.at_alert && cap.pct_used !== null) {
+      logger.warn(
+        { user, current_usd: cap.current_usd.toFixed(4), cap_usd: cap.cap_usd?.toFixed(2), pct: cap.pct_used.toFixed(1) },
+        'spend cap: approaching monthly limit',
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, 'spend cap check failed — allowing request');
+  }
+  next();
+}
+
+// Per-user rate limiter — applied after authMiddleware so res.locals['user'] is set.
+// IP-based pre-auth flood protection is handled by the app.use('/mcp', rateLimit(...)) above.
+const userRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyGenerator: (_req, res) => (res.locals['user'] as string | undefined) ?? 'unauthenticated',
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Rate limit exceeded for your account.' },
+  skip: (_req, res) => !(res.locals['user']), // only rate-limit authenticated users here
+});
+
 // MCP endpoint — auth guard, then propagate user identity into async context
 const mcpHandler = createMcpHandler();
 
@@ -112,9 +155,9 @@ function mcpRoute(req: express.Request, res: express.Response): void {
   });
 }
 
-app.post('/mcp', authMiddleware, mcpRoute);
-app.get('/mcp', authMiddleware, mcpRoute);
-app.delete('/mcp', authMiddleware, mcpRoute);
+app.post('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.get('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.delete('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 
 // Startup
 const server = app.listen(config.PORT, async () => {

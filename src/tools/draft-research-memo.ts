@@ -158,7 +158,7 @@ export function registerDraftResearchMemo(server: McpServer): void {
     'Returns structured data and a memo scaffold; use this as context when writing the final research memorandum.',
     inputSchema.shape,
     async (input) => {
-      const log = logger.child({ tool: 'draft_research_memo', matter: input.matter_ref });
+      const log = logger.child({ tool: 'draft_research_memo' });
 
       if (!isDbEnabled()) {
         return {
