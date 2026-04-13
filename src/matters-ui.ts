@@ -391,12 +391,12 @@ function getSessionIsAdmin(req: Request): boolean {
 function setSessionCookie(res: Response, user: string, isAdminUser: boolean): void {
   const sv = sessionVersionCache.get(user) ?? 0;
   res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser, sv))}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${8 * 3600}`);
+    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser, sv))}; HttpOnly; Secure; SameSite=Strict; Path=/auslaw; Max-Age=${8 * 3600}`);
 }
 
 function clearSessionCookie(res: Response): void {
   res.setHeader('Set-Cookie',
-    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`);
+    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/auslaw; Max-Age=0`);
 }
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -471,7 +471,7 @@ async function validateCredentials(username: string, token: string): Promise<{ i
 
 function requireSession(req: Request, res: Response, next: NextFunction): void {
   if (!getSessionUser(req)) {
-    res.redirect(`/matters/login?next=${encodeURIComponent(req.path)}`);
+    res.redirect(`/auslaw/matters/login?next=${encodeURIComponent(req.path)}`);
     return;
   }
   next();
@@ -850,7 +850,7 @@ export function page(
   const role = isAdminUser ? 'Admin' : 'Researcher';
 
   const navLink = (href: string, label: string, icon: string) =>
-    `<a href="${href}" class="sb-link${activePath === href || (href !== '/matters' && activePath?.startsWith(href)) ? ' active' : ''}">${icon}${label}</a>`;
+    `<a href="${href}" class="sb-link${activePath === href || (href !== '/auslaw/matters' && activePath?.startsWith(href)) ? ' active' : ''}">${icon}${label}</a>`;
 
   const iconMatters = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
   const iconDash = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>`;
@@ -858,7 +858,7 @@ export function page(
   const iconLogout = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`;
 
   const sidebar = `<aside class="sidebar">
-    <a href="/matters" class="sb-logo">
+    <a href="/auslaw/matters" class="sb-logo">
       <img src="${LOGO_SRC}" alt="CP Legal" onerror="this.style.display='none'">
       <div class="sb-logo-mark" style="display:flex">C</div>
       <div class="sb-wordmark">
@@ -868,9 +868,9 @@ export function page(
     </a>
     <nav class="sb-nav">
       <div class="sb-section">Research</div>
-      ${navLink('/matters/dashboard', 'Dashboard', iconDash)}
-      ${navLink('/matters', 'Matters', iconMatters)}
-      ${isAdminUser ? `<div class="sb-section">Administration</div>${navLink('/admin', 'Admin Panel', iconAdmin)}` : ''}
+      ${navLink('/auslaw/matters/dashboard', 'Dashboard', iconDash)}
+      ${navLink('/auslaw/matters', 'Matters', iconMatters)}
+      ${isAdminUser ? `<div class="sb-section">Administration</div>${navLink('/auslaw/admin', 'Admin Panel', iconAdmin)}` : ''}
     </nav>
     <div class="sb-footer">
       <div class="sb-user">
@@ -879,7 +879,7 @@ export function page(
           <div class="sb-username">${esc(user)}</div>
           <div class="sb-role">${role}</div>
         </div>
-        <a href="/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
+        <a href="/auslaw/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
       </div>
     </div>
   </aside>`;
@@ -1089,11 +1089,11 @@ function renderFilterBar(params: {
 // Apply no-cache to all /matters routes to prevent Cloudflare and browser caching
 mattersRouter.use(noCache);
 
-// GET /matters/login
-mattersRouter.get('/matters/login', (req: Request, res: Response) => {
-  if (getSessionUser(req)) { res.redirect('/matters'); return; }
+// GET /auslaw/matters/login
+mattersRouter.get('/auslaw/matters/login', (req: Request, res: Response) => {
+  if (getSessionUser(req)) { res.redirect('/auslaw/matters'); return; }
   const hasError = !!req.query['error'];
-  const next = typeof req.query['next'] === 'string' ? req.query['next'] : '/matters';
+  const next = typeof req.query['next'] === 'string' ? req.query['next'] : '/auslaw/matters';
   const error = hasError ? 'Incorrect username or token. Please try again.' : '';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Sign in', `
@@ -1110,7 +1110,7 @@ mattersRouter.get('/matters/login', (req: Request, res: Response) => {
         <div class="login-title">Welcome back</div>
         <div class="login-sub">Sign in to your research workspace</div>
         ${error ? `<div class="error-box">${esc(error)}</div>` : ''}
-        <form method="post" action="/matters/login">
+        <form method="post" action="/auslaw/matters/login">
           <input type="hidden" name="next" value="${esc(next)}">
           <div class="form-group">
             <label for="u">Username</label>
@@ -1138,12 +1138,12 @@ const loginRateLimiter = rateLimit({
   skipSuccessfulRequests: true, // only count failed/processing attempts toward the limit
 });
 
-// POST /matters/login
-mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res: Response) => {
+// POST /auslaw/matters/login
+mattersRouter.post('/auslaw/matters/login', loginRateLimiter, async (req: Request, res: Response) => {
   const { username, password, next } = req.body as Record<string, string | undefined>;
   const user = (username ?? '').trim().toLowerCase();
   const token = (password ?? '').trim();
-  const redirectTo = typeof next === 'string' && (next.startsWith('/matters') || next.startsWith('/admin')) ? next : '/matters';
+  const redirectTo = typeof next === 'string' && (next.startsWith('/auslaw/matters') || next.startsWith('/auslaw/admin')) ? next : '/auslaw/matters';
 
   let validResult = await validateCredentials(user, token);
 
@@ -1184,7 +1184,7 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
         meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
       }).catch(() => {/* ignore */});
     }).catch(() => {/* ignore */});
-    res.redirect('/matters/login?error=1');
+    res.redirect('/auslaw/matters/login?error=1');
     return;
   }
   setSessionCookie(res, user, validResult.isAdmin);
@@ -1203,24 +1203,24 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
   res.redirect(redirectTo);
 });
 
-// GET /matters/logout
-mattersRouter.get('/matters/logout', (req: Request, res: Response) => {
+// GET /auslaw/matters/logout
+mattersRouter.get('/auslaw/matters/logout', (req: Request, res: Response) => {
   const user = getSessionUser(req);
   if (user) {
     logLoginEvent({ username: user, eventType: 'logout', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']) }).catch(() => {/* ignore */});
   }
   clearSessionCookie(res);
-  res.redirect('/matters/login');
+  res.redirect('/auslaw/matters/login');
 });
 
-// GET /matters/dashboard
-mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/dashboard
+mattersRouter.get('/auslaw/matters/dashboard', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters/dashboard', undefined, userIsAdmin));
+    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/auslaw/matters/dashboard', undefined, userIsAdmin));
     return;
   }
 
@@ -1275,7 +1275,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
           ${recentActivity.map((r) => `
             <tr${r.is_error ? ' class="row-error"' : ''}>
               <td class="date-small">${tsDateTime(r.created_at)}</td>
-              <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
+              <td><a href="/auslaw/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
               <td style="white-space:pre-wrap;word-break:break-word;color:var(--txt-2);max-width:380px">${esc(r.query_text)}</td>
@@ -1291,7 +1291,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   });
 
   const errorAlertBanner = userIsAdmin && errorStats.some((e) => e.error_rate_pct > 10)
-    ? `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r);padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:var(--warn)">⚠️ Some tools have elevated error rates. <a href="/admin" style="color:var(--warn);font-weight:600">View in Admin →</a></div>`
+    ? `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r);padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:var(--warn)">⚠️ Some tools have elevated error rates. <a href="/auslaw/admin" style="color:var(--warn);font-weight:600">View in Admin →</a></div>`
     : '';
 
   res.send(page('Dashboard', `
@@ -1308,17 +1308,17 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     ${userIsAdmin ? renderPopularCases(popularCases) : ''}
     ${renderErrorStats(errorStats)}
     ${recentHtml}
-  `, user, '/matters/dashboard', undefined, userIsAdmin));
+  `, user, '/auslaw/matters/dashboard', undefined, userIsAdmin));
 });
 
-// GET /matters — matter list
-mattersRouter.get('/matters', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters — matter list
+mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/matters', undefined, userIsAdmin));
+    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/auslaw/matters', undefined, userIsAdmin));
     return;
   }
 
@@ -1342,7 +1342,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     if (fromDate) params.set('from', fromDate);
     if (toDate)   params.set('to', toDate);
     params.set('sort', s);
-    return `/matters?${params.toString()}`;
+    return `/auslaw/matters?${params.toString()}`;
   };
 
   // Admin: default to all matters; can filter by user via ?user=
@@ -1353,16 +1353,16 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
   // Admin user toggle tabs
   const segTabs = userIsAdmin
     ? `<div class="seg-tabs no-print">
-        <a href="/matters" class="seg-tab${!viewUser ? ' active' : ''}">All Matters</a>
-        ${allUsers.map((u) => `<a href="/matters?user=${encodeURIComponent(u)}" class="seg-tab${viewUser === u ? ' active' : ''}">${esc(u)}</a>`).join('')}
+        <a href="/auslaw/matters" class="seg-tab${!viewUser ? ' active' : ''}">All Matters</a>
+        ${allUsers.map((u) => `<a href="/auslaw/matters?user=${encodeURIComponent(u)}" class="seg-tab${viewUser === u ? ' active' : ''}">${esc(u)}</a>`).join('')}
       </div>`
     : '';
 
   // Status filter tabs
   const statusTabs = `<div class="seg-tabs no-print" style="margin-bottom:.75rem">
-    <a href="/matters${viewUser ? `?user=${encodeURIComponent(viewUser)}` : ''}" class="seg-tab${!statusFilter || statusFilter === 'all' ? ' active' : ''}">All</a>
-    <a href="/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=open" class="seg-tab${statusFilter === 'open' ? ' active' : ''}">Open</a>
-    <a href="/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=closed" class="seg-tab${statusFilter === 'closed' ? ' active' : ''}">Closed</a>
+    <a href="/auslaw/matters${viewUser ? `?user=${encodeURIComponent(viewUser)}` : ''}" class="seg-tab${!statusFilter || statusFilter === 'all' ? ' active' : ''}">All</a>
+    <a href="/auslaw/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=open" class="seg-tab${statusFilter === 'open' ? ' active' : ''}">Open</a>
+    <a href="/auslaw/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=closed" class="seg-tab${statusFilter === 'closed' ? ' active' : ''}">Closed</a>
   </div>`;
 
   let tableHtml: string;
@@ -1379,12 +1379,12 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
         : esc(m.matter_ref);
       const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
       return `<tr>
-        <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}${copyBtn}</td>
+        <td><a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}${copyBtn}</td>
         <td class="date-small td-clip">${tsDate(m.first_activity)}<br>${tsDate(m.last_activity)}</td>
         <td class="count" style="text-align:right">${m.query_count}</td>
         <td class="users-cell td-clip">${esc(researchers)}</td>
         <td>${tools}</td>
-        <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
+        <td><a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
       </tr>`;
     }).join('');
     const sortIcon = (col: string) => sort === col ? ' ↓' : ' <span style="color:var(--txt-3);font-weight:400">↕</span>';
@@ -1406,30 +1406,30 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
       <details class="export-dd no-print">
         <summary class="btn btn-secondary">Summary Report ▾</summary>
         <div class="dd-menu">
-          <a href="/matters/export-all.csv" download>Download CSV</a>
+          <a href="/auslaw/matters/export-all.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/matters/export-all.pdf" target="_blank">Print as PDF</a>
+          <a href="/auslaw/matters/export-all.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
     </div>
     ${segTabs}
     ${statusTabs}
-    ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/matters' })}
+    ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/auslaw/matters' })}
     ${tableHtml}
-  `, user, '/matters', undefined, userIsAdmin));
+  `, user, '/auslaw/matters', undefined, userIsAdmin));
 });
 
-// GET /matters/search — global query search (MUST be before /matters/:ref)
-mattersRouter.get('/matters/search', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/search — global query search (MUST be before /auslaw/matters/:ref)
+mattersRouter.get('/auslaw/matters/search', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const q = typeof req.query['q'] === 'string' ? req.query['q'].trim() : '';
-  if (!q) { res.redirect('/matters'); return; }
+  if (!q) { res.redirect('/auslaw/matters'); return; }
 
   const results = await searchQueries(q, userIsAdmin ? undefined : user, 50);
 
   const rows = results.map((r: SearchResult) => `<tr>
-    <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.display_name ?? r.matter_ref)}</a></td>
+    <td><a href="/auslaw/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.display_name ?? r.matter_ref)}</a></td>
     <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
     <td class="date-small">${tsDateTime(r.created_at)}</td>
     ${userIsAdmin ? `<td class="users-cell">${esc(r.user_id ?? '—')}</td>` : ''}
@@ -1438,7 +1438,7 @@ mattersRouter.get('/matters/search', requireSession, async (req: Request, res: R
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Search Results', `
-    <form method="GET" action="/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
+    <form method="GET" action="/auslaw/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
       <input type="text" name="q" value="${esc(q)}" style="flex:1;max-width:400px">
       <button type="submit" class="btn btn-primary">Search</button>
     </form>
@@ -1450,11 +1450,11 @@ mattersRouter.get('/matters/search', requireSession, async (req: Request, res: R
           <thead><tr><th>Matter</th><th>Tool</th><th>Date</th>${userIsAdmin ? '<th>Researcher</th>' : ''}<th>Query</th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`}
-  `, user, '/matters', undefined, userIsAdmin));
+  `, user, '/auslaw/matters', undefined, userIsAdmin));
 });
 
-// GET /matters/export-all.csv — summary CSV of all matters (MUST be before /:ref)
-mattersRouter.get('/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/export-all.csv — summary CSV of all matters (MUST be before /:ref)
+mattersRouter.get('/auslaw/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
 
@@ -1499,8 +1499,8 @@ mattersRouter.get('/matters/export-all.csv', requireSession, async (req: Request
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /matters/export-all.pdf — printable matter list (MUST be before /:ref)
-mattersRouter.get('/matters/export-all.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/export-all.pdf — printable matter list (MUST be before /:ref)
+mattersRouter.get('/auslaw/matters/export-all.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
 
@@ -1548,8 +1548,8 @@ mattersRouter.get('/matters/export-all.pdf', requireSession, async (req: Request
   </body></html>`);
 });
 
-// GET /matters/:ref/export-billing.pdf
-mattersRouter.get('/matters/:ref/export-billing.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref/export-billing.pdf
+mattersRouter.get('/auslaw/matters/:ref/export-billing.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1616,8 +1616,8 @@ mattersRouter.get('/matters/:ref/export-billing.pdf', requireSession, async (req
   </body></html>`);
 });
 
-// GET /matters/:ref/export-billing-summary.csv
-mattersRouter.get('/matters/:ref/export-billing-summary.csv', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref/export-billing-summary.csv
+mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1665,8 +1665,8 @@ mattersRouter.get('/matters/:ref/export-billing-summary.csv', requireSession, as
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /matters/:ref/export-billing-summary.pdf
-mattersRouter.get('/matters/:ref/export-billing-summary.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref/export-billing-summary.pdf
+mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1752,8 +1752,8 @@ mattersRouter.get('/matters/:ref/export-billing-summary.pdf', requireSession, as
   </body></html>`);
 });
 
-// GET /matters/:ref — matter detail
-mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref — matter detail
+mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1853,7 +1853,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
 
   const renameForm = `<details class="no-print" style="margin-bottom:.75rem">
     <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Rename matter…</summary>
-    <form method="POST" action="/matters/${encodeURIComponent(ref)}/rename" style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/rename" style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
       <input type="text" name="display_name" value="${esc(displayName ?? '')}" placeholder="Display name (optional)" maxlength="200" style="min-width:200px;width:auto">
       <button type="submit" class="btn btn-secondary btn-sm">Save</button>
       ${displayName ? `<button type="submit" name="display_name" value="" class="btn btn-secondary btn-sm">Clear</button>` : ''}
@@ -1862,7 +1862,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
 
   const notesForm = `<details class="no-print" style="margin-bottom:.75rem">
     <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Matter notes…</summary>
-    <form method="POST" action="/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
+    <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
       <textarea name="notes" rows="4" maxlength="2000" style="max-width:600px;resize:vertical">${esc(matter?.notes ?? '')}</textarea>
       <div style="margin-top:.375rem">
         <button type="submit" class="btn btn-secondary btn-sm">Save Notes</button>
@@ -1876,14 +1876,14 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     : '';
 
   const closeButton = userIsAdmin
-    ? `<form method="POST" action="/matters/${encodeURIComponent(ref)}/set-status" class="no-print" style="display:inline">
+    ? `<form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/set-status" class="no-print" style="display:inline">
         <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
         <button type="submit" class="btn btn-secondary btn-sm">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
       </form>`
     : '';
 
   res.send(page(`${ref} — Research History`, `
-    <a href="/matters" class="btn-back no-print">← All Matters</a>
+    <a href="/auslaw/matters" class="btn-back no-print">← All Matters</a>
     <div class="print-header">
       <div class="print-header-firm">CP Legal</div>
       <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
@@ -1929,7 +1929,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <details class="export-dd">
         <summary class="btn btn-secondary">Research History ▾</summary>
         <div class="dd-menu">
-          <a href="/matters/${encodeURIComponent(ref)}/export.csv" download>Download CSV</a>
+          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export.csv" download>Download CSV</a>
           <hr class="dd-sep">
           <a href="#" onclick="window.print();return false;">Print as PDF</a>
         </div>
@@ -1937,26 +1937,26 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       <details class="export-dd">
         <summary class="btn btn-secondary">Billing Detail ▾</summary>
         <div class="dd-menu">
-          <a href="/matters/${encodeURIComponent(ref)}/export-billing.csv" download>Download CSV</a>
+          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/matters/${encodeURIComponent(ref)}/export-billing.pdf" target="_blank">Print as PDF</a>
+          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
       <details class="export-dd">
         <summary class="btn btn-secondary">Billing Summary ▾</summary>
         <div class="dd-menu">
-          <a href="/matters/${encodeURIComponent(ref)}/export-billing-summary.csv" download>Download CSV</a>
+          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing-summary.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/matters/${encodeURIComponent(ref)}/export-billing-summary.pdf" target="_blank">Print as PDF</a>
+          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing-summary.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
     </div>
-    <form method="GET" action="/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
+    <form method="GET" action="/auslaw/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
       <div class="filter-group">
         <label>Filter by Tool</label>
         <select name="tool" class="filter-input" onchange="this.form.submit()">${toolOptions}</select>
       </div>
-      ${toolFilter ? `<a href="/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
+      ${toolFilter ? `<a href="/auslaw/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
     </form>
     <div class="table-wrap">
     <table style="table-layout:auto">
@@ -1974,11 +1974,11 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </table>
     </div>
     ${paginationHtml}
-  `, user, '/matters', undefined, userIsAdmin));
+  `, user, '/auslaw/matters', undefined, userIsAdmin));
 });
 
-// GET /matters/:ref/export.csv
-mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref/export.csv
+mattersRouter.get('/auslaw/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -2021,8 +2021,8 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /admin/billing-export.csv — global billing export (admin only)
-mattersRouter.get('/admin/billing-export.csv', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/admin/billing-export.csv — global billing export (admin only)
+mattersRouter.get('/auslaw/admin/billing-export.csv', requireSession, async (req: Request, res: Response) => {
   if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
   if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
 
@@ -2088,8 +2088,8 @@ mattersRouter.get('/admin/billing-export.csv', requireSession, async (req: Reque
   res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
 });
 
-// GET /matters/:ref/export-billing.csv
-mattersRouter.get('/matters/:ref/export-billing.csv', requireSession, async (req: Request, res: Response) => {
+// GET /auslaw/matters/:ref/export-billing.csv
+mattersRouter.get('/auslaw/matters/:ref/export-billing.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -2128,8 +2128,8 @@ mattersRouter.get('/matters/:ref/export-billing.csv', requireSession, async (req
   res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
 });
 
-// POST /matters/:ref/notes
-mattersRouter.post('/matters/:ref/notes', requireSession, async (req: Request, res: Response) => {
+// POST /auslaw/matters/:ref/notes
+mattersRouter.post('/auslaw/matters/:ref/notes', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const rows = await getMatterHistory(ref, 1);
@@ -2137,21 +2137,21 @@ mattersRouter.post('/matters/:ref/notes', requireSession, async (req: Request, r
   if (!getSessionIsAdmin(req) && !rows.some((r) => r.user_id === user)) { res.status(403).send('Forbidden'); return; }
   const { notes } = req.body as Record<string, string>;
   await upsertMatter(ref, { notes: (notes ?? '').trim().slice(0, 2000) || undefined });
-  res.redirect(`/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
 });
 
-// POST /matters/:ref/set-status
-mattersRouter.post('/matters/:ref/set-status', requireSession, async (req: Request, res: Response) => {
+// POST /auslaw/matters/:ref/set-status
+mattersRouter.post('/auslaw/matters/:ref/set-status', requireSession, async (req: Request, res: Response) => {
   if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const { status } = req.body as Record<string, string>;
   if (status !== 'open' && status !== 'closed') { res.status(400).send('Invalid status'); return; }
   await upsertMatter(ref, { status });
-  res.redirect(`/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
 });
 
-// POST /matters/:ref/rename
-mattersRouter.post('/matters/:ref/rename', requireSession, async (req: Request, res: Response) => {
+// POST /auslaw/matters/:ref/rename
+mattersRouter.post('/auslaw/matters/:ref/rename', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   // Check access
@@ -2161,5 +2161,5 @@ mattersRouter.post('/matters/:ref/rename', requireSession, async (req: Request, 
   const { display_name } = req.body as Record<string, string>;
   const clean = (display_name ?? '').trim().slice(0, 200);
   await upsertMatter(ref, { displayName: clean || undefined });
-  res.redirect(`/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
 });

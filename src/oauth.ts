@@ -31,7 +31,7 @@ import { decryptToken, verifyToken } from './token-utils.js';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function issuer(): string {
-  return process.env.OAUTH_ISSUER ?? 'https://api.example.com';
+  return process.env.OAUTH_ISSUER ?? 'https://mcp.example.com/auslaw';
 }
 
 /** Map of username → bearer token, built lazily from MCP_AUTH_TOKENS. */
@@ -120,7 +120,7 @@ oauthRouter.use((req: Request, res: Response, next) => {
 // The `resource` field MUST match the URL ChatGPT (and other clients) use as
 // the MCP server URL — i.e. the /mcp endpoint, not just the base domain.
 // ChatGPT validates resource metadata.resource === its configured connector URL.
-oauthRouter.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
+oauthRouter.get('/auslaw/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
   const base = issuer();
   res.setHeader('Cache-Control', 'no-store');
   res.json({
@@ -131,7 +131,7 @@ oauthRouter.get('/.well-known/oauth-protected-resource', (_req: Request, res: Re
 
 // RFC 8414 — Authorization Server Metadata
 // Tells mcp-remote which endpoints to use and what features are supported.
-oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: Response) => {
+oauthRouter.get('/auslaw/.well-known/oauth-authorization-server', (_req: Request, res: Response) => {
   const base = issuer();
   res.setHeader('Cache-Control', 'no-store');
   res.json({
@@ -153,7 +153,7 @@ oauthRouter.get('/.well-known/oauth-authorization-server', (_req: Request, res: 
 // Used by ChatGPT, mcp-remote, Cursor, Windsurf, and other MCP clients that
 // self-register before starting the OAuth flow. No client secret is issued —
 // PKCE S256 handles the security.
-oauthRouter.post('/oauth/register', (req: Request, res: Response) => {
+oauthRouter.post('/auslaw/oauth/register', (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
   const { redirect_uris, client_name, scope } = body;
 
@@ -192,7 +192,7 @@ oauthRouter.post('/oauth/register', (req: Request, res: Response) => {
 
 // GET /oauth/authorize — Serve login form
 // Parameters come from mcp-remote as query string.
-oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
+oauthRouter.get('/auslaw/oauth/authorize', (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -298,7 +298,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
     <div class="logo">CP Legal</div>
     <h1>Sign in to continue</h1>
     <p class="subtitle">Sign in to authorise access to your research tools.</p>
-    <form method="POST" action="/oauth/authorize">
+    <form method="POST" action="/auslaw/oauth/authorize">
       <input type="hidden" name="client_id" value="${escHtml(client_id)}">
       <input type="hidden" name="redirect_uri" value="${escHtml(redirect_uri)}">
       <input type="hidden" name="code_challenge" value="${escHtml(code_challenge)}">
@@ -316,7 +316,7 @@ oauthRouter.get('/oauth/authorize', (req: Request, res: Response) => {
 });
 
 // POST /oauth/authorize — Validate credentials, issue code, redirect
-oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
+oauthRouter.post('/auslaw/oauth/authorize', async (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -382,7 +382,7 @@ oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
     <h1>Sign in to continue</h1>
     <p class="subtitle">Sign in to authorise access to your research tools.</p>
     <div class="error">Incorrect username or token. Please try again.</div>
-    <form method="POST" action="/oauth/authorize">
+    <form method="POST" action="/auslaw/oauth/authorize">
       <input type="hidden" name="client_id" value="${escHtml(client_id)}">
       <input type="hidden" name="redirect_uri" value="${escHtml(redirect_uri)}">
       <input type="hidden" name="code_challenge" value="${escHtml(code_challenge)}">
@@ -419,7 +419,7 @@ oauthRouter.post('/oauth/authorize', async (req: Request, res: Response) => {
 });
 
 // POST /oauth/token — Exchange code + PKCE verifier for access token
-oauthRouter.post('/oauth/token', async (req: Request, res: Response) => {
+oauthRouter.post('/auslaw/oauth/token', async (req: Request, res: Response) => {
   const {
     grant_type,
     code,

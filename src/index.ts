@@ -22,7 +22,7 @@ app.use(express.urlencoded({ extended: false, limit: '16kb' })); // OAuth login 
 app.use(oauthRouter);
 
 // CORS — allow any origin so browser-based MCP clients (OpenAI, Cursor, etc.) can connect
-app.use('/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use('/auslaw/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
@@ -33,7 +33,7 @@ app.use('/mcp', (req: express.Request, res: express.Response, next: express.Next
 
 // Rate limiting — 60 requests per minute per IP
 app.use(
-  '/mcp',
+  '/auslaw/mcp',
   rateLimit({
     windowMs: 60_000,
     max: 60,
@@ -50,7 +50,7 @@ app.use(mattersRouter);
 app.use(adminRouter);
 
 // Diagnostic: probe auslaw-mcp — no auth required, safe (read-only connectivity test)
-app.get('/health/auslaw', async (_req, res) => {
+app.get('/auslaw/health/upstream', async (_req, res) => {
   const base = config.AUSLAW_BASE_URL;
   const results: Record<string, unknown> = { base };
 
@@ -85,7 +85,7 @@ app.get('/health/auslaw', async (_req, res) => {
 
 // Health check — used by Railway to gate traffic onto new deployments.
 // Returns 503 if the DB is unreachable so Railway holds the old deployment live.
-app.get('/health', async (_req, res) => {
+app.get('/auslaw/health', async (_req, res) => {
   const dbOk = await pingDb();
   const status = !isDbEnabled() || dbOk ? 'ok' : 'degraded';
   res.status(status === 'ok' ? 200 : 503).json({
@@ -175,9 +175,9 @@ function mcpRoute(req: express.Request, res: express.Response): void {
   });
 }
 
-app.post('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.get('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.delete('/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.post('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.get('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.delete('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 
 // Startup
 const server = app.listen(config.PORT, async () => {

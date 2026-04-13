@@ -255,7 +255,7 @@ section[id] { scroll-margin-top:1.5rem; }
   <a class="nav-link" href="#deployment">Deployment</a>
   <a class="nav-link" href="#sop">SOPs &amp; Runbooks</a>
 
-  <div class="nav-footer">Updated April 2026 &nbsp;·&nbsp; <a href="/admin">Admin Panel</a></div>
+  <div class="nav-footer">Updated April 2026 &nbsp;·&nbsp; <a href="/auslaw/admin">Admin Panel</a></div>
 </nav>
 
 <!-- ── Main ── -->
@@ -275,7 +275,7 @@ section[id] { scroll-margin-top:1.5rem; }
   <h1 class="hero-title">CP Legal MCP<br><em>System Documentation</em></h1>
   <p class="hero-desc">Complete reference for the CP Legal remote MCP server — architecture, all 21 tools, URL paths, authentication, environment variables, database schema, billing, deployment, and operational runbooks.</p>
   <div class="hero-chips">
-    <span class="chip chip-pr">Remote MCP · api.example.com</span>
+    <span class="chip chip-pr">Remote MCP · mcp.example.com/auslaw</span>
     <span class="chip chip-ac">Isaacus Kanon AI</span>
     <span class="chip chip-ok">AustLII · LawCite</span>
     <span class="chip chip-wa">ASIC Connect · ABR</span>
@@ -303,7 +303,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="card">
       <div class="card-icon ok">📋</div>
       <div class="card-title">Matter Tracking</div>
-      <div class="card-desc">Every tool call is tagged to a matter reference and stored in PostgreSQL. Full audit trail, per-matter billing, and a web UI at <code>/matters</code> for researchers and admins.</div>
+      <div class="card-desc">Every tool call is tagged to a matter reference and stored in PostgreSQL. Full audit trail, per-matter billing, and a web UI at <code>/auslaw/matters</code> for researchers and admins.</div>
     </div>
     <div class="card">
       <div class="card-icon wa">📡</div>
@@ -318,7 +318,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="card">
       <div class="card-icon n">👤</div>
       <div class="card-title">Admin Portal</div>
-      <div class="card-desc">Web-based admin panel at <code>/admin</code> for user management, spend cap configuration, precedent watchlist, billing export, and system health.</div>
+      <div class="card-desc">Web-based admin panel at <code>/auslaw/admin</code> for user management, spend cap configuration, precedent watchlist, billing export, and system health.</div>
     </div>
   </div>
 
@@ -341,11 +341,11 @@ section[id] { scroll-margin-top:1.5rem; }
         <div class="arch-node-name">Claude / Cursor / ChatGPT</div>
         <div class="arch-node-sub">OAuth 2.0 + PKCE or Bearer token</div>
       </div>
-      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS<br>POST /mcp</span></div>
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS<br>POST /auslaw/mcp</span></div>
       <div class="arch-node prim">
         <div class="arch-node-label">Public · Railway</div>
         <div class="arch-node-name">cp-legal-mcp</div>
-        <div class="arch-node-sub">api.example.com</div>
+        <div class="arch-node-sub">mcp.example.com/auslaw</div>
       </div>
       <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">Private<br>MCP-HTTP</span></div>
       <div class="arch-node ok">
@@ -392,7 +392,7 @@ section[id] { scroll-margin-top:1.5rem; }
 
   <h3>Request lifecycle</h3>
   <div class="code-block">
-    <div class="code-label">Per MCP POST /mcp</div>
+    <div class="code-label">Per MCP POST /auslaw/mcp</div>
     <pre>1. Cloudflare CDN → Railway TLS termination
 2. Express rate limiter (60 req/min per IP pre-auth)
 3. authMiddleware — verifies Bearer token (DB hash lookup, then env fallback)
@@ -427,7 +427,7 @@ section[id] { scroll-margin-top:1.5rem; }
         <tr><td><strong>ABR</strong><br><a href="https://abr.business.gov.au">abr.business.gov.au</a></td><td>ABN lookup and entity details via ABR web services.</td><td><code>ABR_GUID</code> — free at abr.business.gov.au/Tools/WebServices. Graceful fallback to ASIC if not set.</td><td>No published rate limit.</td></tr>
         <tr><td><strong>PostgreSQL</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway managed DB</span></td><td>All persistent data: users, matter queries, judgment cache, login events, OAuth, watchlist, app config.</td><td><code>DATABASE_URL</code> — Railway injects automatically. Schema auto-migrated on startup.</td><td>Pool: max 10 connections. Graceful close on SIGTERM.</td></tr>
         <tr><td><strong>ip-api.com</strong></td><td>IP geolocation for login audit events (city, region, country). Fire-and-forget, non-blocking.</td><td>No key required. Free tier.</td><td>~45 req/min. In-memory cache. 3 s timeout. Private IPs skipped.</td></tr>
-        <tr><td><strong>Cloudflare</strong></td><td>DNS and CDN. CNAME <code>api.example.com</code> → Railway public URL.</td><td>Cloudflare DNS console. No code integration.</td><td>Railway <code>trust proxy: 1</code> set. Real client IP from leftmost <code>X-Forwarded-For</code>.</td></tr>
+        <tr><td><strong>Cloudflare</strong></td><td>DNS and CDN. CNAME <code>mcp.example.com</code> → Railway public URL.</td><td>Cloudflare DNS console. No code integration.</td><td>Railway <code>trust proxy: 1</code> set. Real client IP from leftmost <code>X-Forwarded-For</code>.</td></tr>
       </tbody>
     </table>
   </div>
@@ -837,9 +837,9 @@ section[id] { scroll-margin-top:1.5rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>https://api.example.com/mcp</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
-        <tr><td>https://api.example.com/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
-        <tr><td>https://api.example.com/health/auslaw</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Returns connectivity report.</td></tr>
+        <tr><td>https://mcp.example.com/auslaw/mcp</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
+        <tr><td>https://mcp.example.com/auslaw/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
+        <tr><td>https://mcp.example.com/auslaw/health/upstream</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Returns connectivity report.</td></tr>
       </tbody>
     </table>
   </div>
@@ -849,11 +849,11 @@ section[id] { scroll-margin-top:1.5rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Method</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/.well-known/oauth-authorization-server</td><td>GET</td><td>RFC 8414 server metadata. Auto-discovered by Claude Web, ChatGPT.</td></tr>
-        <tr><td>/.well-known/oauth-protected-resource</td><td>GET</td><td>RFC 9728 resource metadata.</td></tr>
-        <tr><td>/oauth/register</td><td>POST</td><td>RFC 7591 dynamic client registration. Used by mcp-remote and Cursor.</td></tr>
-        <tr><td>/oauth/authorize</td><td>GET POST</td><td>GET: login form. POST: validate credentials and redirect with code.</td></tr>
-        <tr><td>/oauth/token</td><td>POST</td><td>Exchange authorization code for access token (PKCE S256 required).</td></tr>
+        <tr><td>/auslaw/.well-known/oauth-authorization-server</td><td>GET</td><td>RFC 8414 server metadata. Auto-discovered by Claude Web, ChatGPT.</td></tr>
+        <tr><td>/auslaw/.well-known/oauth-protected-resource</td><td>GET</td><td>RFC 9728 resource metadata.</td></tr>
+        <tr><td>/auslaw/oauth/register</td><td>POST</td><td>RFC 7591 dynamic client registration. Used by mcp-remote and Cursor.</td></tr>
+        <tr><td>/auslaw/oauth/authorize</td><td>GET POST</td><td>GET: login form. POST: validate credentials and redirect with code.</td></tr>
+        <tr><td>/auslaw/oauth/token</td><td>POST</td><td>Exchange authorization code for access token (PKCE S256 required).</td></tr>
       </tbody>
     </table>
   </div>
@@ -863,13 +863,13 @@ section[id] { scroll-margin-top:1.5rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Auth</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/matters/login</td><td class="ok">None</td><td>Login. Username + API token as password.</td></tr>
-        <tr><td>/matters/logout</td><td class="warn">Session</td><td>Clears session cookie, redirects to login.</td></tr>
-        <tr><td>/matters/dashboard</td><td class="warn">Session</td><td>Research dashboard — stats, tool usage, spend widget, query volume chart.</td></tr>
-        <tr><td>/matters</td><td class="warn">Session</td><td>Matter list. Admins see all; researchers see their own.</td></tr>
-        <tr><td>/matters/search</td><td class="warn">Session</td><td>Full-text search across all matter queries.</td></tr>
-        <tr><td>/matters/:ref</td><td class="warn">Session</td><td>Matter detail — query history, tool stats, cost breakdown.</td></tr>
-        <tr><td>/matters/:ref/export.csv</td><td class="warn">Session</td><td>Per-matter CSV billing export.</td></tr>
+        <tr><td>/auslaw/matters/login</td><td class="ok">None</td><td>Login. Username + API token as password.</td></tr>
+        <tr><td>/auslaw/matters/logout</td><td class="warn">Session</td><td>Clears session cookie, redirects to login.</td></tr>
+        <tr><td>/auslaw/matters/dashboard</td><td class="warn">Session</td><td>Research dashboard — stats, tool usage, spend widget, query volume chart.</td></tr>
+        <tr><td>/auslaw/matters</td><td class="warn">Session</td><td>Matter list. Admins see all; researchers see their own.</td></tr>
+        <tr><td>/auslaw/matters/search</td><td class="warn">Session</td><td>Full-text search across all matter queries.</td></tr>
+        <tr><td>/auslaw/matters/:ref</td><td class="warn">Session</td><td>Matter detail — query history, tool stats, cost breakdown.</td></tr>
+        <tr><td>/auslaw/matters/:ref/export.csv</td><td class="warn">Session</td><td>Per-matter CSV billing export.</td></tr>
       </tbody>
     </table>
   </div>
@@ -879,22 +879,22 @@ section[id] { scroll-margin-top:1.5rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/admin</td><td>Admin dashboard — service health, error counts, recent logins, today's volume by user.</td></tr>
-        <tr><td>/admin/users</td><td>User list.</td></tr>
-        <tr><td>/admin/users/new</td><td>Create new user. Token shown once.</td></tr>
-        <tr><td>/admin/users/:username</td><td>User detail — login history, OAuth connections, spend, per-user cap, token reveal.</td></tr>
-        <tr><td>/admin/users/:username/rotate-token</td><td>POST — rotate API token. Old token immediately invalid.</td></tr>
-        <tr><td>/admin/users/:username/toggle-admin</td><td>POST — grant/revoke admin flag.</td></tr>
-        <tr><td>/admin/users/:username/toggle-active</td><td>POST — activate/deactivate account.</td></tr>
-        <tr><td>/admin/users/:username/set-spend-cap</td><td>POST — set per-user monthly spend cap (USD). Empty → use global default.</td></tr>
-        <tr><td>/admin/users/:username/force-logout</td><td>POST — increment session version, invalidating all active sessions.</td></tr>
-        <tr><td>/admin/users/:username/delete</td><td>POST — delete user permanently.</td></tr>
-        <tr><td>/admin/matters</td><td>All matters with cost aggregation across all users.</td></tr>
-        <tr><td>/admin/billing-export.csv</td><td>Global billing export. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.</td></tr>
-        <tr><td>/admin/config</td><td>Runtime app config — spend caps, default matter ref.</td></tr>
-        <tr><td>/admin/watchlist</td><td>Precedent watchlist management.</td></tr>
-        <tr><td>/admin/data</td><td>Data management — purge old queries, clear judgment cache.</td></tr>
-        <tr><td>/admin/docs</td><td>This document.</td></tr>
+        <tr><td>/auslaw/admin</td><td>Admin dashboard — service health, error counts, recent logins, today's volume by user.</td></tr>
+        <tr><td>/auslaw/admin/users</td><td>User list.</td></tr>
+        <tr><td>/auslaw/admin/users/new</td><td>Create new user. Token shown once.</td></tr>
+        <tr><td>/auslaw/admin/users/:username</td><td>User detail — login history, OAuth connections, spend, per-user cap, token reveal.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/rotate-token</td><td>POST — rotate API token. Old token immediately invalid.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/toggle-admin</td><td>POST — grant/revoke admin flag.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/toggle-active</td><td>POST — activate/deactivate account.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/set-spend-cap</td><td>POST — set per-user monthly spend cap (USD). Empty → use global default.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/force-logout</td><td>POST — increment session version, invalidating all active sessions.</td></tr>
+        <tr><td>/auslaw/admin/users/:username/delete</td><td>POST — delete user permanently.</td></tr>
+        <tr><td>/auslaw/admin/matters</td><td>All matters with cost aggregation across all users.</td></tr>
+        <tr><td>/auslaw/admin/billing-export.csv</td><td>Global billing export. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.</td></tr>
+        <tr><td>/auslaw/admin/config</td><td>Runtime app config — spend caps, default matter ref.</td></tr>
+        <tr><td>/auslaw/admin/watchlist</td><td>Precedent watchlist management.</td></tr>
+        <tr><td>/auslaw/admin/data</td><td>Data management — purge old queries, clear judgment cache.</td></tr>
+        <tr><td>/auslaw/admin/docs</td><td>This document.</td></tr>
       </tbody>
     </table>
   </div>
@@ -914,7 +914,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="card">
       <div class="card-icon ac">🔐</div>
       <div class="card-title">OAuth 2.0 + PKCE</div>
-      <div class="card-desc">Claude Web and ChatGPT use OAuth Authorization Code + PKCE (S256). Static client pre-registered via <code>OAUTH_CLIENT_ID</code>. Dynamic registration via <code>/oauth/register</code> for mcp-remote/Cursor.</div>
+      <div class="card-desc">Claude Web and ChatGPT use OAuth Authorization Code + PKCE (S256). Static client pre-registered via <code>OAUTH_CLIENT_ID</code>. Dynamic registration via <code>/auslaw/oauth/register</code> for mcp-remote/Cursor.</div>
     </div>
     <div class="card">
       <div class="card-icon ok">🍪</div>
@@ -928,8 +928,8 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="code-label">Settings</div>
     <pre>Client ID:        value of OAUTH_CLIENT_ID env var
 Client Secret:    value of OAUTH_CLIENT_SECRET env var (optional)
-Authorization:    https://api.example.com/oauth/authorize
-Token endpoint:   https://api.example.com/oauth/token
+Authorization:    https://mcp.example.com/auslaw/oauth/authorize
+Token endpoint:   https://mcp.example.com/auslaw/oauth/token
 Callback URL:     https://claude.ai/api/mcp/auth_callback
 PKCE:             S256 (required)</pre>
   </div>
@@ -941,7 +941,7 @@ PKCE:             S256 (required)</pre>
   "mcpServers": {
     "cp-legal": {
       "command": "npx",
-      "args": ["mcp-remote", "https://api.example.com/mcp"],
+      "args": ["mcp-remote", "https://mcp.example.com/auslaw/mcp"],
       "env": {
         "MCP_REMOTE_HEADER_AUTHORIZATION": "Bearer YOUR_TOKEN_HERE"
       }
@@ -967,7 +967,7 @@ PKCE:             S256 (required)</pre>
         <tr><td><code>AUSLAW_BASE_URL</code></td><td class="er">Required</td><td>—</td><td>Private URL of auslaw-mcp. Railway reference: <code>http://$&#123;&#123;auslaw-mcp.RAILWAY_PRIVATE_DOMAIN&#125;&#125;:3000</code></td></tr>
         <tr><td><code>ISAACUS_API_KEY</code></td><td class="er">Required</td><td>—</td><td>Isaacus API key for Kanon model access.</td></tr>
         <tr><td><code>DATABASE_URL</code></td><td class="er">Required</td><td>—</td><td>PostgreSQL connection string. Railway injects automatically.</td></tr>
-        <tr><td><code>OAUTH_ISSUER</code></td><td class="muted">Optional</td><td>https://api.example.com</td><td>OAuth issuer URL. Public base URL, no trailing slash.</td></tr>
+        <tr><td><code>OAUTH_ISSUER</code></td><td class="muted">Optional</td><td>https://mcp.example.com/auslaw</td><td>OAuth issuer URL. Public base URL, no trailing slash.</td></tr>
         <tr><td><code>OAUTH_CLIENT_ID</code></td><td class="muted">Optional</td><td>—</td><td>Static OAuth client ID for Claude Web / ChatGPT pre-registration.</td></tr>
         <tr><td><code>OAUTH_CLIENT_SECRET</code></td><td class="muted">Optional</td><td>—</td><td>Static OAuth client secret. PKCE-only clients don't need it.</td></tr>
         <tr><td><code>SESSION_SECRET</code></td><td class="muted">Optional</td><td>falls back to MCP_AUTH_TOKENS</td><td>HMAC key for session cookies. Explicit secret strongly recommended.</td></tr>
@@ -996,7 +996,7 @@ PKCE:             S256 (required)</pre>
     </table>
   </div>
 
-  <h3>Runtime app config (PostgreSQL — set via <a href="/admin/config">/admin/config</a>)</h3>
+  <h3>Runtime app config (PostgreSQL — set via <a href="/auslaw/admin/config">/auslaw/admin/config</a>)</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Description</th></tr></thead>
@@ -1058,8 +1058,8 @@ PKCE:             S256 (required)</pre>
 
   <div class="callout callout-ac">
     <div class="callout-title">Billing exports</div>
-    Per-matter CSV: <code>/matters/:ref/export.csv</code> — download from the matter detail page.<br>
-    Global export (admin): <code>/admin/billing-export.csv</code> — all matters, all users. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.
+    Per-matter CSV: <code>/auslaw/matters/:ref/export.csv</code> — download from the matter detail page.<br>
+    Global export (admin): <code>/auslaw/admin/billing-export.csv</code> — all matters, all users. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.
   </div>
 
   <div class="callout callout-ok">
@@ -1083,7 +1083,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-healthcheckPath = "/health"
+healthcheckPath = "/auslaw/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3</pre>
@@ -1094,7 +1094,7 @@ restartPolicyMaxRetries = 3</pre>
       <div class="code-block">
         <div class="code-label">DNS record</div>
         <pre>Type:    CNAME
-Name:    api
+Name:    mcp
 Target:  [Railway public URL — cp-legal-mcp]
 Proxy:   Proxied (orange cloud)</pre>
       </div>
@@ -1114,11 +1114,11 @@ Proxy:   Proxied (orange cloud)</pre>
       <tbody>
         <tr><td>1</td><td>Push to GitHub (main branch)</td><td>Railway auto-deploys on push</td></tr>
         <tr><td>2</td><td>Watch Railway build logs for TypeScript errors</td><td><code>npm run build</code> runs in Dockerfile</td></tr>
-        <tr><td>3</td><td>Check <code>/health</code> returns 200</td><td>Confirms DB connection and startup migration ran</td></tr>
-        <tr><td>4</td><td>Check <code>/health/auslaw</code></td><td>Confirms private network connectivity to auslaw-mcp</td></tr>
+        <tr><td>3</td><td>Check <code>/auslaw/health</code> returns 200</td><td>Confirms DB connection and startup migration ran</td></tr>
+        <tr><td>4</td><td>Check <code>/auslaw/health/upstream</code></td><td>Confirms private network connectivity to auslaw-mcp</td></tr>
         <tr><td>5</td><td>Test an MCP initialize call</td><td>Confirms auth middleware and MCP handler are working</td></tr>
-        <tr><td>6</td><td>Log into <code>/matters</code></td><td>Confirms session auth and DB reads</td></tr>
-        <tr><td>7</td><td>Check <code>/admin</code> → service health card</td><td>End-to-end health of both services</td></tr>
+        <tr><td>6</td><td>Log into <code>/auslaw/matters</code></td><td>Confirms session auth and DB reads</td></tr>
+        <tr><td>7</td><td>Check <code>/auslaw/admin</code> → service health card</td><td>End-to-end health of both services</td></tr>
       </tbody>
     </table>
   </div>
@@ -1130,17 +1130,17 @@ Proxy:   Proxied (orange cloud)</pre>
   <h2 class="section-title">SOPs &amp; Runbooks</h2>
 
   <h3>SOP 1 — Add a new user</h3>
-  <div class="code-block"><pre>1. Navigate to /admin/users/new
+  <div class="code-block"><pre>1. Navigate to /auslaw/admin/users/new
 2. Enter username (lowercase, alphanumeric + hyphens)
 3. Click "Create user"
 4. Copy the token shown — displayed ONCE and cannot be recovered
 5. Send via secure channel (not email)
 6. User connects MCP client:
    Claude Web: Add as remote MCP server → OAuth flow handles auth
-   Direct:     Authorization: Bearer &lt;token&gt; on POST /mcp</pre></div>
+   Direct:     Authorization: Bearer &lt;token&gt; on POST /auslaw/mcp</pre></div>
 
   <h3>SOP 2 — Rotate a compromised token</h3>
-  <div class="code-block"><pre>1. Navigate to /admin/users/:username
+  <div class="code-block"><pre>1. Navigate to /auslaw/admin/users/:username
 2. Click "Rotate token"
 3. New token displayed once — save immediately
 4. Send new token to user via secure channel
@@ -1148,15 +1148,15 @@ Proxy:   Proxied (orange cloud)</pre>
 6. User must re-authenticate all clients with new token</pre></div>
 
   <h3>SOP 3 — Force-log a user out of the web UI</h3>
-  <div class="code-block"><pre>1. Navigate to /admin/users/:username
+  <div class="code-block"><pre>1. Navigate to /auslaw/admin/users/:username
 2. Click "Force logout all sessions"
 3. Increments session_version in DB
 4. All cvn_matters cookies for that user immediately invalid
-5. User redirected to /matters/login on next page load
+5. User redirected to /auslaw/matters/login on next page load
 6. Logged as event_type = 'force_logout'</pre></div>
 
   <h3>SOP 4 — Set per-user spend cap</h3>
-  <div class="code-block"><pre>1. Navigate to /admin/users/:username
+  <div class="code-block"><pre>1. Navigate to /auslaw/admin/users/:username
 2. Find the "Spend Cap" section
 3. Enter USD amount (e.g. 50 = $50/month) — leave blank for global default
 4. Click "Set cap"
@@ -1164,7 +1164,7 @@ Proxy:   Proxied (orange cloud)</pre>
 6. To remove: clear field and save → falls back to global default</pre></div>
 
   <h3>SOP 5 — Set global spend cap</h3>
-  <div class="code-block"><pre>1. Navigate to /admin/config
+  <div class="code-block"><pre>1. Navigate to /auslaw/admin/config
 2. spend_cap_monthly_per_user_usd → global default per user (USD)
 3. spend_cap_alert_threshold_pct  → alert threshold (default 80%)
 4. spend_cap_monthly_global_usd   → optional hard cap across ALL users
@@ -1175,15 +1175,15 @@ Proxy:   Proxied (orange cloud)</pre>
 2. Add: RECOVERY_TOKEN = [40+ char random string]
           e.g. openssl rand -base64 32
 3. Save → redeploy
-4. Go to https://api.example.com/matters/login
+4. Go to https://mcp.example.com/auslaw/matters/login
 5. Username: recovery    Password: [the RECOVERY_TOKEN value]
-6. Fix real admin account from /admin/users
+6. Fix real admin account from /auslaw/admin/users
 7. IMPORTANT: Remove RECOVERY_TOKEN from Railway immediately
 8. Save → redeploy to clear recovery access</pre></div>
 
   <h3>SOP 7 — auslaw-mcp is unreachable</h3>
   <div class="code-block"><pre>Diagnosis:
-  curl https://api.example.com/health/auslaw
+  curl https://mcp.example.com/auslaw/health/upstream
 
 Common causes:
   A) auslaw-mcp crashed → restart from Railway dashboard
@@ -1209,12 +1209,12 @@ Unaffected tools:
   monitor_precedents(action: "remove", citation: "[2024] HCA 1")
 
 Via Admin UI:
-  /admin/watchlist → add/remove citations, view last-check counts</pre></div>
+  /auslaw/admin/watchlist → add/remove citations, view last-check counts</pre></div>
 
   <h3>SOP 9 — Export billing data</h3>
-  <div class="code-block"><pre>Per-matter:     /matters/:ref → "Download CSV"
-Global (admin): /admin → Matters → "Export all billing (CSV)"
-                GET /admin/billing-export.csv?from=2024-01-01&to=2024-12-31
+  <div class="code-block"><pre>Per-matter:     /auslaw/matters/:ref → "Download CSV"
+Global (admin): /auslaw/admin → Matters → "Export all billing (CSV)"
+                GET /auslaw/admin/billing-export.csv?from=2024-01-01&to=2024-12-31
 
 Format: Matter Ref, Display Name, Status, First Activity, Last Activity,
         Queries, Tokens, Cost (USD), Cost (AUD)
@@ -1223,8 +1223,8 @@ Includes TOTAL summary row.</pre></div>
   <h3>SOP 10 — Purge judgment cache</h3>
   <div class="code-block"><pre>Normal TTL: 30 days (judgments are permanent documents)
 
-Purge expired:  /admin/data → "Purge expired cache"
-Purge all:      /admin/data → "Purge all judgment cache"
+Purge expired:  /auslaw/admin/data → "Purge expired cache"
+Purge all:      /auslaw/admin/data → "Purge all judgment cache"
 
 Use case: AustLII updated a document and you need the fresh version.</pre></div>
 
@@ -1254,7 +1254,7 @@ Use case: AustLII updated a document and you need the fresh version.</pre></div>
     <span style="font-family:'Playfair Display',Georgia,serif;font-size:.9375rem;color:rgba(255,255,255,.8)">CP Legal</span>
     <span style="color:rgba(255,255,255,.3);font-size:.8125rem">— Internal Technical Reference</span>
   </div>
-  <div style="font-size:.75rem;color:rgba(255,255,255,.35)">cp-legal-mcp · Node 22 · Railway · <a href="https://api.example.com/health" style="color:rgba(255,255,255,.4)">api.example.com</a></div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.35)">cp-legal-mcp · Node 22 · Railway · <a href="https://mcp.example.com/auslaw/health" style="color:rgba(255,255,255,.4)">mcp.example.com/auslaw</a></div>
 </div>
 
 </main>

@@ -115,7 +115,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 }
 
 function sendUnauthorized(res: Response): void {
-  const issuer = process.env.OAUTH_ISSUER ?? 'https://api.example.com';
+  const issuer = process.env.OAUTH_ISSUER ?? 'https://mcp.example.com/auslaw';
   // OAuth resource metadata URL tells Claude web and other OAuth-aware clients
   // where to discover the authorization server and start the flow automatically.
   res.setHeader(
