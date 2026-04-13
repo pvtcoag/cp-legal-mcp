@@ -22,6 +22,9 @@
  *   POST /admin/data/purge-queries
  *   POST /admin/data/purge-cache
  *   POST /admin/data/purge-cache-all
+ *   GET  /admin/watchlist               — Precedent watchlist
+ *   POST /admin/watchlist/add           — Add citation to watchlist
+ *   POST /admin/watchlist/remove        — Remove citation from watchlist
  */
 
 import { createHmac } from 'node:crypto';
@@ -55,6 +58,11 @@ import {
   getDailyQueryVolume,
   getQueryVolumeByUserToday,
   incrementSessionVersion,
+  getMonthlySpendUsd,
+  listWatchlist,
+  addWatchlistEntry,
+  removeWatchlistEntry,
+  type WatchlistEntry,
   type UserRow,
   type LoginEventRow,
   type OAuthAuthRow,
@@ -224,6 +232,8 @@ function sidebar(activePath?: string): string {
     <div class="admin-sidebar-section">Management</div>
     ${link('/admin/users', 'Users')}
     ${link('/admin/matters', 'Matters')}
+    <div class="admin-sidebar-section">Research</div>
+    ${link('/admin/watchlist', 'Watchlist')}
     <div class="admin-sidebar-section">System</div>
     ${link('/admin/config', 'Config')}
     ${link('/admin/data', 'Data')}
@@ -310,8 +320,8 @@ const TOOL_COST_RATES: Record<string, number> = {
   // No Isaacus calls — 0 tokens logged, cost = 0
   get_judgment: 0, format_citation: 0, generate_pinpoint: 0,
   lookup_entity: 0, lookup_entities_bulk: 0, search_regulatory_decisions: 0,
-  search_asx_announcements: 0, check_limitation_period: 0,
-  get_matter_history: 0, inspect_database: 0,
+  search_asx_announcements: 0, check_limitation_period: 0, check_filing_deadline: 0,
+  get_matter_history: 0, inspect_database: 0, monitor_precedents: 0,
 };
 const AUD_PER_USD = 1.57;
 
@@ -958,9 +968,12 @@ adminRouter.post('/admin/users/:username/force-logout', requireCsrf, async (req:
 // ── GET /admin/config — Configuration ─────────────────────────────────────────
 
 const DEFAULT_CONFIG_KEYS = [
-  { key: 'default_matter_ref', description: 'Default matter reference for untagged queries', defaultValue: config.DEFAULT_MATTER_REF ?? '' },
-  { key: 'judgment_cache_ttl_days', description: 'Days to keep judgment cache', defaultValue: '30' },
-  { key: 'matter_retention_days', description: 'Days to keep matter history', defaultValue: '365' },
+  { key: 'default_matter_ref',              description: 'Default matter reference for untagged queries', defaultValue: config.DEFAULT_MATTER_REF ?? '' },
+  { key: 'judgment_cache_ttl_days',         description: 'Days to keep judgment cache', defaultValue: '30' },
+  { key: 'matter_retention_days',           description: 'Days to keep matter history', defaultValue: '365' },
+  { key: 'spend_cap_monthly_per_user_usd',  description: 'Monthly Isaacus spend cap per user (USD). Leave blank to disable.', defaultValue: '' },
+  { key: 'spend_cap_monthly_global_usd',    description: 'Global monthly Isaacus spend cap across all users (USD). Leave blank to disable.', defaultValue: '' },
+  { key: 'spend_alert_threshold_pct',       description: 'Spend alert threshold — log a warning when a user reaches this % of their cap (default: 80)', defaultValue: '80' },
 ];
 
 adminRouter.get('/admin/config', async (req: Request, res: Response) => {
@@ -982,7 +995,41 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
     }
   }
 
-  const rows = await listAppConfig();
+  const [rows, allUsers, globalSpend] = await Promise.all([
+    listAppConfig(),
+    listUsers(),
+    getMonthlySpendUsd(),
+  ]);
+  const perUserCapStr = rows.find((r) => r.key === 'spend_cap_monthly_per_user_usd')?.value ?? '';
+  const globalCapStr  = rows.find((r) => r.key === 'spend_cap_monthly_global_usd')?.value ?? '';
+  const perUserCap = perUserCapStr ? parseFloat(perUserCapStr) : null;
+  const globalCap  = globalCapStr  ? parseFloat(globalCapStr)  : null;
+
+  // Spend per active user this month (fire all in parallel)
+  const userSpends = await Promise.all(
+    allUsers.filter((u) => u.is_active).map(async (u) => ({
+      username: u.username,
+      spend_usd: await getMonthlySpendUsd(u.username),
+    })),
+  );
+
+  const spendRows = userSpends.map(({ username, spend_usd }) => {
+    const pct = perUserCap && perUserCap > 0 ? Math.min(100, (spend_usd / perUserCap) * 100) : null;
+    const bar = pct !== null
+      ? `<div style="background:#e5e7eb;border-radius:3px;height:6px;width:120px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${pct >= 100 ? '#dc2626' : pct >= 80 ? '#f59e0b' : '#16a34a'};border-radius:3px;height:6px;width:${pct}%"></div></div>`
+      : '';
+    return `<tr>
+      <td style="font-weight:500">${esc(username)}</td>
+      <td>$${spend_usd.toFixed(4)}</td>
+      <td>${perUserCap ? `$${perUserCap.toFixed(2)} ${bar}` : '<span style="color:#aaa">—</span>'}</td>
+      <td>${pct !== null ? `${pct.toFixed(1)}%` : '<span style="color:#aaa">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const globalPct = globalCap && globalCap > 0 ? Math.min(100, (globalSpend / globalCap) * 100) : null;
+  const globalBar = globalPct !== null
+    ? `<div style="background:#e5e7eb;border-radius:3px;height:6px;width:160px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${globalPct >= 100 ? '#dc2626' : globalPct >= 80 ? '#f59e0b' : '#16a34a'};border-radius:3px;height:6px;width:${globalPct}%"></div></div>`
+    : '';
 
   const tableRows = rows.map((r) => `<tr>
     <td><code style="font-size:.875rem">${esc(r.key)}</code></td>
@@ -1030,6 +1077,24 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
       document.getElementById('edit-value').focus();
     }
     </script>
+
+    <div class="section-title">This Month's Spend</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <div style="display:flex;align-items:baseline;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap">
+        <div>
+          <span style="font-size:.8125rem;color:#888">Global spend</span><br>
+          <strong>$${globalSpend.toFixed(4)} USD</strong>
+          ${globalCap ? `<span style="color:#888;font-size:.8125rem"> / $${globalCap.toFixed(2)} cap ${globalBar}</span>` : '<span style="color:#aaa;font-size:.8125rem"> (no cap set)</span>'}
+        </div>
+        ${perUserCap ? `<div><span style="font-size:.8125rem;color:#888">Per-user cap</span><br><strong>$${perUserCap.toFixed(2)} USD / month</strong></div>` : ''}
+      </div>
+      ${userSpends.length > 0 ? `
+      <table style="font-size:.875rem">
+        <thead><tr><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">User</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Spend (USD)</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Cap</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Used</th></tr></thead>
+        <tbody>${spendRows}</tbody>
+      </table>` : '<p style="color:#888;font-size:.875rem">No active users.</p>'}
+      <p style="font-size:.75rem;color:#aaa;margin-top:.75rem">Set caps above via <code>spend_cap_monthly_per_user_usd</code> and <code>spend_cap_monthly_global_usd</code>. When a cap is hit, further tool calls return 429 until the next calendar month.</p>
+    </div>
 
     <div class="section-title">Security</div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
@@ -1242,9 +1307,75 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
       </table></div>`;
 
   res.send(page('Matters', `
-    <h1>Matters</h1>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
+      <h1 style="margin-bottom:0">Matters</h1>
+      <a href="/matters/export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>
+    </div>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''} on record, sorted by last activity</p>
     ${periodTabHtml}
     ${tableHtml}
   `, session.user, '/admin/matters'));
+});
+
+// ── Precedent watchlist ───────────────────────────────────────────────────────
+
+adminRouter.get('/admin/watchlist', requireAdmin, async (req, res) => {
+  const entries = await listWatchlist().catch(() => [] as WatchlistEntry[]);
+  const session = getAdminSession(req)!;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8').send(
+    page('Precedent Watchlist', `
+      <div class="card" style="margin-bottom:1.5rem">
+        <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Add to Watchlist</h2>
+        <form method="POST" action="/admin/watchlist/add" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label style="display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem">Neutral Citation</label>
+            <input type="text" name="citation" placeholder="[2024] HCA 12" required style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:6px;font-size:.875rem;width:240px">
+          </div>
+          <div>
+            <label style="display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem">Label (optional)</label>
+            <input type="text" name="label" placeholder="Short case description" style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:6px;font-size:.875rem;width:300px">
+          </div>
+          <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Watched Citations (${entries.length})</h2>
+        ${entries.length === 0 ? '<p style="color:#666;font-size:.875rem">No cases on watchlist yet.</p>' : `
+        <table class="table">
+          <thead><tr><th>Citation</th><th>Label</th><th>Last Checked</th><th>Citing Cases</th><th></th></tr></thead>
+          <tbody>
+            ${entries.map((e) => `
+              <tr>
+                <td><code style="font-size:.8125rem">${esc(e.citation)}</code></td>
+                <td style="color:#444;font-size:.875rem">${esc(e.label ?? '—')}</td>
+                <td style="font-size:.8125rem;color:#666">${e.last_checked ? fmtDateTime(e.last_checked) : '—'}</td>
+                <td style="text-align:center">${e.last_count > 0 ? `<span class="badge-active" style="font-size:.75rem">${e.last_count}</span>` : '—'}</td>
+                <td>
+                  <form method="POST" action="/admin/watchlist/remove" style="display:inline">
+                    <input type="hidden" name="citation" value="${esc(e.citation)}">
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Remove ${esc(e.citation)} from watchlist?')">Remove</button>
+                  </form>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`}
+      </div>
+    `, session.user, '/admin/watchlist')
+  );
+});
+
+adminRouter.post('/admin/watchlist/add', requireAdmin, requireCsrf, async (req, res) => {
+  const { citation, label } = req.body as Record<string, string | undefined>;
+  if (citation?.trim()) {
+    const session = getAdminSession(req)!;
+    await addWatchlistEntry(citation.trim(), label?.trim() || undefined, session.user).catch(() => {});
+  }
+  res.redirect('/admin/watchlist');
+});
+
+adminRouter.post('/admin/watchlist/remove', requireAdmin, requireCsrf, async (req, res) => {
+  const { citation } = req.body as Record<string, string | undefined>;
+  if (citation?.trim()) await removeWatchlistEntry(citation.trim()).catch(() => {});
+  res.redirect('/admin/watchlist');
 });

@@ -152,6 +152,17 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_matters_ref_trgm    ON matters        USING GIN (matter_ref   gin_trgm_ops);
     CREATE INDEX IF NOT EXISTS idx_matters_name_trgm   ON matters        USING GIN (display_name gin_trgm_ops) WHERE display_name IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_users_username_trgm ON users          USING GIN (username     gin_trgm_ops);
+
+    CREATE TABLE IF NOT EXISTS precedent_watchlist (
+      id            SERIAL PRIMARY KEY,
+      citation      TEXT NOT NULL UNIQUE,
+      label         TEXT,
+      added_by      TEXT,
+      last_checked  TIMESTAMPTZ,
+      last_count    INTEGER DEFAULT 0,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_pw_citation ON precedent_watchlist(citation);
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -1375,5 +1386,169 @@ export async function getCachedJudgmentsByUrls(
      WHERE url = ANY($1) AND fetched_at > NOW() - INTERVAL '30 days'`,
     [urls],
   );
+  return result.rows;
+}
+
+// ── Precedent watchlist ───────────────────────────────────────────────────────
+
+export interface WatchlistEntry {
+  id: number;
+  citation: string;
+  label: string | null;
+  added_by: string | null;
+  last_checked: string | null;
+  last_count: number;
+  created_at: string;
+}
+
+export async function listWatchlist(): Promise<WatchlistEntry[]> {
+  if (!pool) return [];
+  const result = await pool.query<WatchlistEntry>(
+    'SELECT * FROM precedent_watchlist ORDER BY created_at DESC',
+  );
+  return result.rows;
+}
+
+export async function addWatchlistEntry(citation: string, label?: string, addedBy?: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO precedent_watchlist (citation, label, added_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (citation) DO UPDATE SET label = EXCLUDED.label, added_by = EXCLUDED.added_by`,
+    [citation, label ?? null, addedBy ?? null],
+  );
+}
+
+export async function removeWatchlistEntry(citation: string): Promise<void> {
+  if (!pool) return;
+  await pool.query('DELETE FROM precedent_watchlist WHERE citation = $1', [citation]);
+}
+
+export async function updateWatchlistCheck(citation: string, citingCount: number): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `UPDATE precedent_watchlist SET last_checked = NOW(), last_count = $2 WHERE citation = $1`,
+    [citation, citingCount],
+  );
+}
+
+// ── Spend cap ─────────────────────────────────────────────────────────────────
+
+// Tool cost rates for spend cap computation.
+// Keep in sync with TOOL_COST_RATES in matters-ui.ts and admin-ui.ts.
+const SPEND_CAP_RATES: Record<string, number> = {
+  ask_judgment: 1.50, ask_legislation: 1.50, compare_cases: 1.50, get_legislation: 1.50,
+  draft_research_memo: 1.50, enrich_judgment: 3.50, build_chronology: 3.50,
+  summarise_judgment: 1.833, research_cases: 1.00, research_legislation: 1.00,
+  search_by_citation: 1.00, find_citing_cases: 1.00, find_related_cases: 1.00,
+  classify_legal_issue: 1.00,
+};
+
+function queryRowCostUsd(tokens: number, toolName: string): number {
+  return (tokens / 1_000_000) * (SPEND_CAP_RATES[toolName] ?? 1.25);
+}
+
+/** Estimated USD spend for the current AEST calendar month. Optionally scoped to a user. */
+export async function getMonthlySpendUsd(userId?: string): Promise<number> {
+  if (!pool) return 0;
+  const params: unknown[] = [];
+  const userClause = userId ? `AND user_id = $1` : '';
+  if (userId) params.push(userId);
+  const result = await pool.query<{ tool_name: string; total_tokens: number }>(`
+    SELECT tool_name, COALESCE(SUM(api_tokens_used), 0)::int AS total_tokens
+    FROM matter_queries
+    WHERE DATE_TRUNC('month', created_at AT TIME ZONE 'Australia/Sydney')
+        = DATE_TRUNC('month', NOW()       AT TIME ZONE 'Australia/Sydney')
+    ${userClause}
+    GROUP BY tool_name
+  `, params);
+  return result.rows.reduce((sum, r) => sum + queryRowCostUsd(r.total_tokens, r.tool_name), 0);
+}
+
+export interface SpendCapStatus {
+  allowed: boolean;
+  current_usd: number;
+  cap_usd: number | null;
+  pct_used: number | null;
+  alert_threshold_pct: number;
+  at_alert: boolean;
+  reason?: 'per_user' | 'global';
+}
+
+/**
+ * Check whether `userId` is allowed to make another tool call given the configured spend caps.
+ * Reads 'spend_cap_monthly_per_user_usd', 'spend_cap_monthly_global_usd', and
+ * 'spend_alert_threshold_pct' from app_config. Empty / absent values = no cap.
+ */
+export async function checkSpendCap(userId: string): Promise<SpendCapStatus> {
+  if (!pool) {
+    return { allowed: true, current_usd: 0, cap_usd: null, pct_used: null, alert_threshold_pct: 80, at_alert: false };
+  }
+
+  const [perUserCapStr, globalCapStr, thresholdStr, currentUser, currentGlobal] = await Promise.all([
+    getAppConfig('spend_cap_monthly_per_user_usd'),
+    getAppConfig('spend_cap_monthly_global_usd'),
+    getAppConfig('spend_alert_threshold_pct'),
+    getMonthlySpendUsd(userId),
+    getMonthlySpendUsd(),
+  ]);
+
+  const threshold = Math.max(1, Math.min(100, parseInt(thresholdStr ?? '80', 10) || 80));
+  const perUserCap = perUserCapStr?.trim() ? parseFloat(perUserCapStr) : null;
+  const globalCap  = globalCapStr?.trim()  ? parseFloat(globalCapStr)  : null;
+
+  if (perUserCap !== null && perUserCap > 0 && currentUser >= perUserCap) {
+    return { allowed: false, current_usd: currentUser, cap_usd: perUserCap,
+      pct_used: (currentUser / perUserCap) * 100, alert_threshold_pct: threshold, at_alert: true, reason: 'per_user' };
+  }
+
+  if (globalCap !== null && globalCap > 0 && currentGlobal >= globalCap) {
+    return { allowed: false, current_usd: currentGlobal, cap_usd: globalCap,
+      pct_used: (currentGlobal / globalCap) * 100, alert_threshold_pct: threshold, at_alert: true, reason: 'global' };
+  }
+
+  const pct      = perUserCap && perUserCap > 0 ? (currentUser / perUserCap) * 100 : null;
+  const atAlert  = pct !== null && pct >= threshold;
+
+  return { allowed: true, current_usd: currentUser, cap_usd: perUserCap, pct_used: pct, alert_threshold_pct: threshold, at_alert: atAlert };
+}
+
+// ── Global billing export ─────────────────────────────────────────────────────
+
+export interface MatterBillingToolRow {
+  matter_ref: string;
+  display_name: string | null;
+  status: string;
+  first_activity: string;
+  last_activity: string;
+  tool_name: string;
+  queries: number;
+  tool_tokens: number;
+}
+
+/** Per-matter per-tool token rows for the global billing export. App layer applies cost rates. */
+export async function getMattersBillingExport(from?: string, to?: string): Promise<MatterBillingToolRow[]> {
+  if (!pool) return [];
+  const params: unknown[] = [];
+  const conditions: string[] = [];
+  if (from) { params.push(from); conditions.push(`mq.created_at >= $${params.length}::date`); }
+  if (to)   { params.push(to);   conditions.push(`mq.created_at < ($${params.length}::date + INTERVAL '1 day')`); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await pool.query<MatterBillingToolRow>(`
+    SELECT
+      mq.matter_ref,
+      MAX(m.display_name)                         AS display_name,
+      COALESCE(MAX(m.status), 'open')             AS status,
+      MIN(mq.created_at)                          AS first_activity,
+      MAX(mq.created_at)                          AS last_activity,
+      mq.tool_name,
+      COUNT(*)::int                               AS queries,
+      COALESCE(SUM(api_tokens_used), 0)::int      AS tool_tokens
+    FROM matter_queries mq
+    LEFT JOIN matters m ON m.matter_ref = mq.matter_ref
+    ${where}
+    GROUP BY mq.matter_ref, mq.tool_name
+    ORDER BY MAX(mq.created_at) DESC, mq.matter_ref, mq.tool_name
+  `, params);
   return result.rows;
 }
