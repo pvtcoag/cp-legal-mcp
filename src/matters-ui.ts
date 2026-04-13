@@ -289,7 +289,15 @@ function accuracyBadge(score: number | null | undefined): string {
 // ── Session ───────────────────────────────────────────────────────────────────
 
 export function sessionSecret(): string {
-  return process.env['SESSION_SECRET'] ?? process.env['MCP_AUTH_TOKENS'] ?? 'dev-fallback';
+  const secret = process.env['SESSION_SECRET'] ?? process.env['MCP_AUTH_TOKENS'];
+  if (!secret) {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('SESSION_SECRET or MCP_AUTH_TOKENS must be set in production');
+    }
+    // Development only — random per restart, sessions don't survive
+    return Math.random().toString(36).repeat(4);
+  }
+  return secret;
 }
 
 /** Session payload: `username:isAdmin:sessionVersion:exp:sig` where isAdmin is '1' or '0'. */
