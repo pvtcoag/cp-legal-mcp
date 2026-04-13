@@ -850,8 +850,13 @@ section[id] { scroll-margin-top:1.5rem; }
       <thead><tr><th>Path</th><th>Method</th><th>Description</th></tr></thead>
       <tbody>
         <tr><td>/auslaw/.well-known/oauth-authorization-server</td><td>GET</td><td>RFC 8414 server metadata. Auto-discovered by Claude Web, ChatGPT.</td></tr>
+        <tr><td>/.well-known/oauth-authorization-server</td><td>GET</td><td>Alias — domain-root discovery for clients that don't follow resource_metadata hints.</td></tr>
+        <tr><td>/.well-known/oauth-authorization-server/auslaw</td><td>GET</td><td>Alias — RFC 8414 path-based issuer form.</td></tr>
         <tr><td>/auslaw/.well-known/oauth-protected-resource</td><td>GET</td><td>RFC 9728 resource metadata.</td></tr>
+        <tr><td>/.well-known/oauth-protected-resource</td><td>GET</td><td>Alias — domain-root discovery.</td></tr>
+        <tr><td>/.well-known/oauth-protected-resource/auslaw</td><td>GET</td><td>Alias — RFC 8414 path-based issuer form.</td></tr>
         <tr><td>/auslaw/oauth/register</td><td>POST</td><td>RFC 7591 dynamic client registration. Used by mcp-remote and Cursor.</td></tr>
+        <tr><td>/register</td><td>POST</td><td>Alias — unprefixed registration path for clients that don't use the service prefix.</td></tr>
         <tr><td>/auslaw/oauth/authorize</td><td>GET POST</td><td>GET: login form. POST: validate credentials and redirect with code.</td></tr>
         <tr><td>/auslaw/oauth/token</td><td>POST</td><td>Exchange authorization code for access token (PKCE S256 required).</td></tr>
       </tbody>
