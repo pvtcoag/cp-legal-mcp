@@ -37,6 +37,9 @@ import {
   getDailyQueryVolume,
   searchQueries,
   listUsers,
+  getMonthlySpendUsd,
+  getAppConfig,
+  getMattersBillingExport,
   type MatterSummaryRow,
   type MatterHistoryRow,
   type DashboardStats,
@@ -92,6 +95,8 @@ const TOOL_LABELS: Record<string, string> = {
   build_chronology:           'Chronology',
   draft_research_memo:        'Research Memo',
   check_limitation_period:    'Limitation Period',
+  check_filing_deadline:      'Filing Deadline',
+  monitor_precedents:         'Precedent Monitor',
   // Admin
   inspect_database:           'Inspect DB',
 };
@@ -143,6 +148,8 @@ const TOOL_COST_RATES: Record<string, number> = {
   search_regulatory_decisions:0,
   search_asx_announcements:   0,
   check_limitation_period:    0,
+  check_filing_deadline:      0,
+  monitor_precedents:         0,
   inspect_database:           0,
 };
 
@@ -1077,7 +1084,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   const scopedUserId = userIsAdmin ? undefined : user;
   const adminBadge = userIsAdmin ? '<span class="admin-badge">All researchers</span>' : '';
 
-  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy, queryVolume] = await Promise.all([
+  const [stats, toolStats, userStats, recentActivity, popularCases, errorStats, costByTool, avgAccuracy, queryVolume, monthlySpend, spendCapStr] = await Promise.all([
     getDashboardStats(scopedUserId),
     getToolUsageStats(scopedUserId),
     userIsAdmin ? getUserStats() : Promise.resolve<UserStatRow[]>([]),
@@ -1087,7 +1094,26 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     getDashboardCostByTool(scopedUserId),
     getAggregateAccuracy(scopedUserId),
     getDailyQueryVolume(scopedUserId, 14),
+    getMonthlySpendUsd(user),
+    getAppConfig('spend_cap_monthly_per_user_usd'),
   ]);
+
+  const spendCap = spendCapStr?.trim() ? parseFloat(spendCapStr) : null;
+  const spendPct = spendCap && spendCap > 0 ? Math.min(100, (monthlySpend / spendCap) * 100) : null;
+  const spendColor = spendPct === null ? '#555' : spendPct >= 100 ? '#dc2626' : spendPct >= 80 ? '#d97706' : '#16a34a';
+  const spendBar = spendPct !== null
+    ? `<div style="background:#e5e7eb;border-radius:3px;height:5px;width:100%;margin-top:.375rem"><div style="background:${spendColor};border-radius:3px;height:5px;width:${spendPct}%"></div></div>`
+    : '';
+  const spendWidget = monthlySpend > 0 || spendCap
+    ? `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.875rem 1.125rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+        <div style="min-width:160px">
+          <div style="font-size:.75rem;color:#888;margin-bottom:.125rem">This month's spend</div>
+          <div style="font-weight:600;color:${spendColor}">$${monthlySpend.toFixed(4)} USD${spendCap ? ` <span style="font-weight:400;color:#888;font-size:.875rem">/ $${spendCap.toFixed(2)} cap</span>` : ''}</div>
+          ${spendBar}
+        </div>
+        ${spendPct !== null ? `<div style="font-size:.8125rem;color:${spendColor}">${spendPct.toFixed(1)}% of monthly cap used</div>` : ''}
+      </div>`
+    : '';
 
   const recentHtml = recentActivity.length > 0 ? `
     <div class="section-block no-print">
@@ -1126,6 +1152,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
 
   res.send(page('Dashboard', `
     ${errorAlertBanner}
+    ${spendWidget}
     <h1>Dashboard ${adminBadge}</h1>
     <p class="subtitle">Aggregated research analytics${userIsAdmin ? ' across all matters and researchers' : ' for your matters'}
       <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time></span>
@@ -1848,6 +1875,73 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="cp-legal-${safeRef}-${date}.csv"`);
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
+});
+
+// GET /matters/export.csv — global billing export (admin only)
+mattersRouter.get('/matters/export.csv', requireSession, async (req: Request, res: Response) => {
+  if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
+  if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
+
+  const { from, to } = req.query as Record<string, string | undefined>;
+
+  const toolRows = await getMattersBillingExport(from, to);
+  if (toolRows.length === 0) {
+    res.status(404).send('No billing data found for the specified period');
+    return;
+  }
+
+  // Aggregate per-matter rows from the per-tool rows
+  interface MatterAgg {
+    matter_ref: string;
+    display_name: string | null;
+    status: string;
+    first_activity: string;
+    last_activity: string;
+    queries: number;
+    total_tokens: number;
+    cost_usd: number;
+  }
+  const matterMap = new Map<string, MatterAgg>();
+  for (const r of toolRows) {
+    let agg = matterMap.get(r.matter_ref);
+    if (!agg) {
+      agg = { matter_ref: r.matter_ref, display_name: r.display_name, status: r.status,
+        first_activity: r.first_activity, last_activity: r.last_activity, queries: 0, total_tokens: 0, cost_usd: 0 };
+      matterMap.set(r.matter_ref, agg);
+    }
+    const rate = TOOL_COST_RATES[r.tool_name] ?? 1.25;
+    agg.queries      += r.queries;
+    agg.total_tokens += r.tool_tokens;
+    agg.cost_usd     += (r.tool_tokens / 1_000_000) * rate;
+    // Keep earliest first_activity and latest last_activity
+    if (r.first_activity < agg.first_activity) agg.first_activity = r.first_activity;
+    if (r.last_activity  > agg.last_activity)  agg.last_activity  = r.last_activity;
+  }
+
+  const matters = [...matterMap.values()].sort((a, b) => b.last_activity.localeCompare(a.last_activity));
+
+  const csvEsc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const header = ['Matter Ref', 'Display Name', 'Status', 'First Activity', 'Last Activity', 'Queries', 'Tokens', 'Cost (USD)', 'Cost (AUD)'].map(csvEsc).join(',');
+
+  const dataRows = matters.map((m) =>
+    [m.matter_ref, m.display_name ?? '', m.status,
+      fmtDateTime(m.first_activity), fmtDateTime(m.last_activity),
+      String(m.queries), String(m.total_tokens),
+      m.cost_usd.toFixed(6), (m.cost_usd * AUD_PER_USD).toFixed(6),
+    ].map(csvEsc).join(','),
+  );
+
+  const grandUsd = matters.reduce((s, m) => s + m.cost_usd, 0);
+  const grandQueries = matters.reduce((s, m) => s + m.queries, 0);
+  const grandTokens  = matters.reduce((s, m) => s + m.total_tokens, 0);
+  const summaryRow = ['TOTAL', '', '', '', '', String(grandQueries), String(grandTokens),
+    grandUsd.toFixed(6), (grandUsd * AUD_PER_USD).toFixed(6)].map(csvEsc).join(',');
+
+  const dateTag = new Date().toISOString().slice(0, 10);
+  const suffix  = from || to ? `-${from ?? ''}-${to ?? ''}` : '';
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="cp-legal-billing-all${suffix}-${dateTag}.csv"`);
+  res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
 });
 
 // GET /matters/:ref/export-billing.csv

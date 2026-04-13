@@ -23,7 +23,9 @@ import { registerSearchRegulatoryDecisions } from './tools/search-regulatory-dec
 import { registerSearchAsxAnnouncements } from './tools/search-asx-announcements.js';
 import { registerBuildChronology } from './tools/build-chronology.js';
 import { registerCheckLimitationPeriod } from './tools/check-limitation-period.js';
+import { registerCheckFilingDeadline } from './tools/check-filing-deadline.js';
 import { registerDraftResearchMemo } from './tools/draft-research-memo.js';
+import { registerMonitorPrecedents } from './tools/monitor-precedents.js';
 
 const ADMIN_ERROR_NOTE = '\n\nIf this error persists, contact your administrator.';
 
@@ -108,9 +110,11 @@ function buildServer(): McpServer {
   // Matter intelligence
   registerBuildChronology(server);
   registerDraftResearchMemo(server);
+  registerMonitorPrecedents(server);
 
   // Time-critical utilities
   registerCheckLimitationPeriod(server);
+  registerCheckFilingDeadline(server);
 
   // Admin (restricted to ADMIN_USERS)
   registerInspectDatabase(server);
