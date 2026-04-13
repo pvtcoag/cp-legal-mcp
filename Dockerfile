@@ -20,6 +20,7 @@ COPY --from=builder /app/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY docs ./docs
 
 RUN addgroup -g 1001 -S nodejs \
  && adduser -S nodejs -u 1001 \

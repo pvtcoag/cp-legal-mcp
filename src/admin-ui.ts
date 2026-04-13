@@ -28,6 +28,9 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Request, Response, NextFunction } from 'express';
 import { Router } from 'express';
 import {
@@ -238,6 +241,7 @@ function page(title: string, body: string, user?: string, activePath?: string): 
   const iconData = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>`;
   const iconMattersRes = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>`;
   const iconLogout = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`;
+  const iconDocs = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>`;
 
   const lnk = (href: string, label: string, icon: string) =>
     `<a href="${href}" class="sb-link${activePath === href ? ' active' : ''}">${icon}<span>${label}</span></a>`;
@@ -262,6 +266,7 @@ function page(title: string, body: string, user?: string, activePath?: string): 
       <div class="sb-section">System</div>
       ${lnk('/admin/config', 'Config', iconConfig)}
       ${lnk('/admin/data', 'Data', iconData)}
+      ${lnk('/admin/docs', 'Docs', iconDocs)}
       <div class="sb-section">Navigation</div>
       ${lnk('/matters', 'Research Portal', iconMattersRes)}
     </nav>
@@ -1436,4 +1441,24 @@ adminRouter.post('/admin/watchlist/remove', requireAdmin, requireCsrf, async (re
   const { citation } = req.body as Record<string, string | undefined>;
   if (citation?.trim()) await removeWatchlistEntry(citation.trim()).catch(() => {});
   res.redirect('/admin/watchlist');
+});
+
+// ── Docs ──────────────────────────────────────────────────────────────────────
+
+adminRouter.get('/admin/docs', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const docsPath = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'docs', 'reference.html');
+    const html = readFileSync(docsPath, 'utf8');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8').send(html);
+  } catch {
+    res.status(404).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+      page('Documentation Not Found',
+        `<div style="text-align:center;padding:4rem 2rem">
+          <h1 style="font-size:1.5rem;margin-bottom:.5rem">Documentation Unavailable</h1>
+          <p style="color:var(--txt-2);margin-bottom:1.5rem">The reference documentation file could not be found. Ensure the <code>docs/</code> directory is present in the deployment.</p>
+          <a href="/admin" class="btn btn-secondary">← Back to Dashboard</a>
+        </div>`,
+        undefined, '/admin/docs'),
+    );
+  }
 });

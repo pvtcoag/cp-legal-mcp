@@ -6,219 +6,228 @@
 <title>CP Legal MCP — Technical Reference</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:opsz,wght@14..32,300..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:       #09090F;
-  --s1:       #111119;
-  --s2:       #17171F;
-  --s3:       #21212C;
-  --s4:       #2C2C3A;
-  --b1:       rgba(255,255,255,0.06);
-  --b2:       rgba(255,255,255,0.10);
-  --b3:       rgba(255,255,255,0.18);
-  --ac:       #7B6EF6;
-  --acl:      #9D93F8;
-  --acxl:     #C4BCF9;
-  --acbg:     rgba(123,110,246,0.10);
-  --go:       #C9973B;
-  --gol:      #DEB86E;
-  --gobg:     rgba(201,151,59,0.11);
-  --ok:       #34D399;
-  --okbg:     rgba(52,211,153,0.10);
-  --wa:       #FBBF24;
-  --wabg:     rgba(251,191,36,0.10);
-  --er:       #F87171;
-  --erbg:     rgba(248,113,113,0.10);
-  --t1:       #EDE9F8;
-  --t2:       #9794B0;
-  --t3:       #5A5770;
-  --r:        8px;
-  --rl:       14px;
-  --nav:      260px;
+  --primary:   #0B1F33;
+  --secondary: #2E3A46;
+  --accent:    #B79A5B;
+  --accent-l:  #C9AE75;
+  --accent-d:  #8C7340;
+  --accent-bg: rgba(183,154,91,0.10);
+  --light:     #F5F3EF;
+  --surface:   #FFFFFF;
+  --surf-2:    #F8F7F4;
+  --surf-3:    #EFECE6;
+  --text:      #1A1A1A;
+  --text-2:    #555555;
+  --text-3:    #999999;
+  --border:    rgba(26,26,26,0.09);
+  --border-2:  rgba(26,26,26,0.15);
+  --border-3:  rgba(26,26,26,0.24);
+  --ok:        #15803D;
+  --ok-bg:     rgba(21,128,61,0.07);
+  --warn:      #B45309;
+  --warn-bg:   rgba(180,83,9,0.07);
+  --err:       #B91C1C;
+  --err-bg:    rgba(185,28,28,0.07);
+  --nav-w:     264px;
+  --r:         7px;
+  --rl:        12px;
 }
+
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 html { scroll-behavior:smooth; }
-body { font-family:'Inter',-apple-system,sans-serif; font-size:14px; line-height:1.6; background:var(--bg); color:var(--t1); -webkit-font-smoothing:antialiased; }
-a { color:var(--acl); text-decoration:none; }
-a:hover { text-decoration:underline; }
-code, pre { font-family:'JetBrains Mono',ui-monospace,monospace; }
+body { font-family:'Inter',-apple-system,sans-serif; font-size:14px; line-height:1.6; background:var(--light); color:var(--text); -webkit-font-smoothing:antialiased; }
+a { color:var(--accent-d); }
+a:hover { color:var(--primary); }
 
 /* ── Layout ── */
 .layout { display:flex; min-height:100vh; }
-.nav { width:var(--nav); flex-shrink:0; position:fixed; top:0; left:0; height:100vh; overflow-y:auto; background:var(--s1); border-right:1px solid var(--b1); padding:0 0 2rem; display:flex; flex-direction:column; }
-.main { margin-left:var(--nav); flex:1; min-width:0; }
+.nav { width:var(--nav-w); flex-shrink:0; position:fixed; top:0; left:0; height:100vh; overflow-y:auto; background:var(--primary); display:flex; flex-direction:column; }
+.main { margin-left:var(--nav-w); flex:1; min-width:0; height:100vh; overflow-y:auto; }
 
 /* ── Nav ── */
-.nav-brand { padding:1.5rem 1.375rem 1.25rem; border-bottom:1px solid var(--b1); display:flex; align-items:center; gap:.625rem; }
-.nav-mark { width:30px; height:30px; background:linear-gradient(135deg,var(--ac),var(--go)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.875rem; font-weight:700; color:#fff; flex-shrink:0; }
-.nav-name { font-family:'DM Serif Display',Georgia,serif; font-size:.9375rem; color:var(--t1); line-height:1.2; }
-.nav-sub  { font-size:.5rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); }
-.nav-section { font-size:.5rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--t3); padding:.875rem 1.375rem .25rem; margin-top:.25rem; }
-.nav-link { display:block; padding:.4375rem 1.375rem; font-size:.8125rem; color:var(--t2); border-left:2px solid transparent; transition:all .12s; }
-.nav-link:hover { color:var(--t1); background:var(--s2); text-decoration:none; }
-.nav-link.active { color:var(--acl); background:var(--acbg); border-left-color:var(--ac); font-weight:500; }
-.nav-updated { margin-top:auto; padding:1rem 1.375rem 0; font-size:.6875rem; color:var(--t3); border-top:1px solid var(--b1); padding-top:.875rem; }
+.nav-brand { padding:1.5rem 1.375rem 1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); }
+.nav-logo { display:flex; align-items:center; gap:.625rem; text-decoration:none; margin-bottom:.375rem; }
+.nav-logo img { height:24px; width:auto; filter:brightness(0) invert(1); display:block; }
+.nav-logo-mark { width:28px; height:28px; background:var(--accent); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:.875rem; font-weight:700; color:var(--primary); flex-shrink:0; }
+.nav-logo-name { font-family:'Playfair Display',Georgia,serif; font-size:1rem; color:#fff; letter-spacing:-.01em; }
+.nav-doc-title { font-size:.6875rem; color:rgba(255,255,255,0.4); letter-spacing:.02em; margin-top:.25rem; }
+.nav-section { font-size:.5rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:rgba(255,255,255,0.3); padding:.875rem 1.375rem .3rem; }
+.nav-link { display:block; padding:.4375rem 1.375rem; font-size:.8125rem; color:rgba(255,255,255,0.55); border-left:2px solid transparent; transition:all .12s; text-decoration:none; }
+.nav-link:hover { color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.05); }
+.nav-link.active { color:#fff; background:rgba(183,154,91,0.18); border-left-color:var(--accent); font-weight:500; }
+.nav-footer { margin-top:auto; padding:.875rem 1.375rem; border-top:1px solid rgba(255,255,255,0.07); font-size:.6875rem; color:rgba(255,255,255,0.3); }
+.nav-footer a { color:rgba(255,255,255,0.4); }
 
 /* ── Hero ── */
-.hero { padding:4rem 3rem 3rem; border-bottom:1px solid var(--b1); background:linear-gradient(160deg,rgba(123,110,246,0.07) 0%,transparent 55%); position:relative; overflow:hidden; }
-.hero::after { content:''; position:absolute; top:-120px; right:-80px; width:400px; height:400px; background:radial-gradient(circle,rgba(201,151,59,0.07),transparent 70%); pointer-events:none; }
-.hero-eyebrow { font-size:.625rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--acl); margin-bottom:1rem; }
-.hero-title { font-family:'DM Serif Display',Georgia,serif; font-size:2.75rem; font-weight:400; color:var(--t1); letter-spacing:-.03em; line-height:1.1; margin-bottom:1rem; }
-.hero-title em { font-style:italic; color:var(--gol); }
-.hero-desc { font-size:1rem; color:var(--t2); max-width:620px; line-height:1.7; margin-bottom:2rem; }
+.hero { padding:3.5rem 3rem 3rem; background:var(--primary); color:#fff; border-bottom:3px solid var(--accent); position:relative; overflow:hidden; }
+.hero::before { content:''; position:absolute; top:0; right:0; bottom:0; width:40%; background:linear-gradient(135deg, rgba(183,154,91,0.07) 0%, transparent 60%); pointer-events:none; }
+.hero-logo { display:flex; align-items:center; gap:.75rem; margin-bottom:2rem; }
+.hero-logo img { height:32px; width:auto; filter:brightness(0) invert(1); display:block; }
+.hero-logo-mark { width:36px; height:36px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; font-weight:700; color:var(--primary); flex-shrink:0; }
+.hero-logo-wordmark { display:flex; flex-direction:column; }
+.hero-logo-name { font-family:'Playfair Display',Georgia,serif; font-size:1.125rem; color:#fff; line-height:1.1; }
+.hero-logo-sub { font-size:.5625rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,0.45); margin-top:.2rem; }
+.hero-eyebrow { font-size:.625rem; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:.875rem; }
+.hero-title { font-family:'Playfair Display',Georgia,serif; font-size:2.375rem; font-weight:400; color:#fff; letter-spacing:-.02em; line-height:1.15; margin-bottom:.875rem; }
+.hero-title em { font-style:italic; color:var(--accent-l); }
+.hero-desc { font-size:.9375rem; color:rgba(255,255,255,0.65); max-width:620px; line-height:1.7; margin-bottom:2rem; }
 .hero-chips { display:flex; flex-wrap:wrap; gap:.5rem; }
-.chip { display:inline-flex; align-items:center; gap:.375rem; padding:.3rem .75rem; border-radius:100px; font-size:.75rem; font-weight:500; border:1px solid; }
-.chip-ac { background:var(--acbg); border-color:rgba(123,110,246,.25); color:var(--acl); }
-.chip-go { background:var(--gobg); border-color:rgba(201,151,59,.25); color:var(--gol); }
-.chip-ok { background:var(--okbg); border-color:rgba(52,211,153,.25); color:var(--ok); }
-.chip-wa { background:var(--wabg); border-color:rgba(251,191,36,.25); color:var(--wa); }
-.chip-er { background:var(--erbg); border-color:rgba(248,113,113,.25); color:var(--er); }
-.chip-n  { background:var(--s3); border-color:var(--b2); color:var(--t2); }
+.chip { display:inline-flex; align-items:center; gap:.3rem; padding:.3125rem .75rem; border-radius:100px; font-size:.6875rem; font-weight:500; }
+.chip-ac { background:var(--accent-bg); color:var(--accent); border:1px solid rgba(183,154,91,0.3); }
+.chip-ok { background:var(--ok-bg); color:var(--ok); border:1px solid rgba(21,128,61,0.2); }
+.chip-wa { background:var(--warn-bg); color:var(--warn); border:1px solid rgba(180,83,9,0.2); }
+.chip-n  { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.55); border:1px solid rgba(255,255,255,0.12); }
+.chip-pr { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.8); border:1px solid rgba(255,255,255,0.18); }
 
 /* ── Sections ── */
-.section { padding:3rem; border-bottom:1px solid var(--b1); }
+.section { padding:3rem; border-bottom:1px solid var(--border); }
 .section:last-child { border-bottom:none; }
-.section-label { font-size:.5625rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--acl); margin-bottom:.75rem; }
-.section-title { font-family:'DM Serif Display',Georgia,serif; font-size:1.875rem; font-weight:400; color:var(--t1); letter-spacing:-.02em; margin-bottom:.75rem; line-height:1.15; }
-.section-desc { font-size:.9375rem; color:var(--t2); max-width:760px; line-height:1.7; margin-bottom:2rem; }
-h3 { font-family:'DM Serif Display',Georgia,serif; font-size:1.1875rem; font-weight:400; color:var(--t1); letter-spacing:-.01em; margin:2rem 0 .875rem; }
-h4 { font-size:.8125rem; font-weight:700; color:var(--t2); text-transform:uppercase; letter-spacing:.06em; margin:1.5rem 0 .625rem; }
+.section-label { font-size:.5625rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-d); margin-bottom:.625rem; }
+.section-title { font-family:'Playfair Display',Georgia,serif; font-size:1.75rem; font-weight:400; color:var(--primary); letter-spacing:-.02em; margin-bottom:.75rem; line-height:1.2; }
+.section-desc { font-size:.9375rem; color:var(--text-2); max-width:760px; line-height:1.75; margin-bottom:2rem; }
+h3 { font-family:'Playfair Display',Georgia,serif; font-size:1.125rem; font-weight:400; color:var(--primary); margin:2rem 0 .875rem; letter-spacing:-.01em; }
+h4 { font-size:.75rem; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.07em; margin:1.5rem 0 .625rem; }
+p { color:var(--text-2); font-size:.9375rem; line-height:1.7; margin-bottom:1rem; }
 
 /* ── Cards ── */
 .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:.875rem; margin-bottom:1.5rem; }
-.card { background:var(--s1); border:1px solid var(--b1); border-radius:var(--rl); padding:1.25rem 1.375rem; transition:border-color .2s,transform .2s,box-shadow .2s; }
-.card:hover { border-color:var(--b2); transform:translateY(-1px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
-.card-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.125rem; margin-bottom:.875rem; }
-.card-icon.ac  { background:var(--acbg); }
-.card-icon.go  { background:var(--gobg); }
-.card-icon.ok  { background:var(--okbg); }
-.card-icon.wa  { background:var(--wabg); }
-.card-icon.er  { background:var(--erbg); }
-.card-icon.n   { background:var(--s3); }
-.card-title { font-size:.9375rem; font-weight:600; color:var(--t1); margin-bottom:.375rem; }
-.card-desc  { font-size:.8125rem; color:var(--t2); line-height:1.5; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl); padding:1.375rem; transition:border-color .2s,box-shadow .2s,transform .2s; }
+.card:hover { border-color:var(--border-2); box-shadow:0 4px 20px rgba(11,31,51,0.07); transform:translateY(-1px); }
+.card-icon { width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:1rem; margin-bottom:.875rem; flex-shrink:0; }
+.card-icon.pr { background:rgba(11,31,51,0.07); }
+.card-icon.ac { background:var(--accent-bg); }
+.card-icon.ok { background:var(--ok-bg); }
+.card-icon.wa { background:var(--warn-bg); }
+.card-icon.er { background:var(--err-bg); }
+.card-icon.n  { background:var(--surf-3); }
+.card-title { font-size:.9375rem; font-weight:600; color:var(--primary); margin-bottom:.375rem; }
+.card-desc  { font-size:.8125rem; color:var(--text-2); line-height:1.55; }
+.card-desc code { background:var(--surf-3); padding:.125rem .35rem; border-radius:4px; font-size:.75rem; font-family:'JetBrains Mono',ui-monospace,monospace; color:var(--secondary); }
 
-/* ── Architecture diagram ── */
-.arch { background:var(--s1); border:1px solid var(--b1); border-radius:var(--rl); padding:2rem; margin-bottom:1.5rem; overflow-x:auto; }
-.arch-flow { display:flex; align-items:center; gap:0; flex-wrap:nowrap; min-width:600px; }
-.arch-node { background:var(--s2); border:1px solid var(--b2); border-radius:var(--r); padding:.875rem 1.125rem; text-align:center; min-width:130px; position:relative; }
-.arch-node.accent { border-color:var(--ac); background:var(--acbg); }
-.arch-node.gold   { border-color:var(--go); background:var(--gobg); }
-.arch-node.ok     { border-color:var(--ok); background:var(--okbg); }
-.arch-node.warn   { border-color:var(--wa); background:var(--wabg); }
-.arch-node-label  { font-size:.6875rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--t3); margin-bottom:.25rem; }
-.arch-node-name   { font-size:.9375rem; font-weight:600; color:var(--t1); }
-.arch-node-sub    { font-size:.6875rem; color:var(--t2); margin-top:.2rem; }
-.arch-arrow { display:flex; align-items:center; padding:0 .375rem; color:var(--t3); font-size:.875rem; flex-shrink:0; }
-.arch-arrow-label { font-size:.5625rem; text-align:center; white-space:nowrap; color:var(--t3); display:block; }
+/* ── Architecture ── */
+.arch { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl); padding:2rem; margin-bottom:1.5rem; overflow-x:auto; }
+.arch-flow { display:flex; align-items:center; gap:0; min-width:600px; }
+.arch-node { background:var(--surf-2); border:1px solid var(--border-2); border-radius:var(--r); padding:.875rem 1.125rem; text-align:center; min-width:130px; }
+.arch-node.prim { border-color:var(--primary); background:rgba(11,31,51,0.05); }
+.arch-node.ac   { border-color:var(--accent); background:var(--accent-bg); }
+.arch-node.ok   { border-color:var(--ok); background:var(--ok-bg); }
+.arch-node.wa   { border-color:var(--warn); background:var(--warn-bg); }
+.arch-node-label { font-size:.5625rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); margin-bottom:.25rem; }
+.arch-node-name  { font-size:.9375rem; font-weight:600; color:var(--primary); }
+.arch-node-sub   { font-size:.6875rem; color:var(--text-2); margin-top:.2rem; }
+.arch-arrow { display:flex; flex-direction:column; align-items:center; padding:0 .5rem; flex-shrink:0; gap:.2rem; }
+.arch-arrow-line { color:var(--text-3); font-size:1rem; line-height:1; }
+.arch-arrow-label { font-size:.5625rem; color:var(--text-3); white-space:nowrap; text-align:center; }
 
 /* ── Tables ── */
-.table-wrap { overflow-x:auto; border-radius:var(--r); border:1px solid var(--b1); margin-bottom:1.5rem; }
-table { width:100%; border-collapse:collapse; font-size:.8125rem; }
-thead th { background:var(--s2); padding:.625rem 1rem; text-align:left; font-size:.5625rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--t3); border-bottom:1px solid var(--b1); white-space:nowrap; }
-tbody tr { border-bottom:1px solid var(--b1); }
+.table-wrap { overflow-x:auto; border-radius:var(--r); border:1px solid var(--border); margin-bottom:1.5rem; }
+table { width:100%; border-collapse:collapse; font-size:.8125rem; background:var(--surface); }
+thead th { background:var(--surf-2); padding:.625rem 1rem; text-align:left; font-size:.5625rem; font-weight:700; text-transform:uppercase; letter-spacing:.09em; color:var(--text-3); border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr { border-bottom:1px solid var(--border); }
 tbody tr:last-child { border-bottom:none; }
-tbody td { padding:.6875rem 1rem; color:var(--t1); vertical-align:top; }
-tbody tr:hover td { background:var(--s2); }
-td code { background:var(--s3); padding:.125rem .4rem; border-radius:4px; font-size:.75rem; color:var(--acxl); }
-td.muted { color:var(--t2); }
-td.ok    { color:var(--ok); font-weight:500; }
-td.warn  { color:var(--wa); font-weight:500; }
-td.er    { color:var(--er); }
-.req { color:var(--er); font-size:.625rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
-.opt { color:var(--t3); font-size:.625rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+tbody td { padding:.6875rem 1rem; color:var(--text); vertical-align:top; line-height:1.5; }
+tbody tr:hover td { background:var(--surf-2); }
+td code, .inline-code { background:var(--surf-3); padding:.125rem .375rem; border-radius:4px; font-size:.75rem; font-family:'JetBrains Mono',ui-monospace,monospace; color:var(--secondary); }
+td.muted { color:var(--text-2); }
+td.ok    { color:var(--ok); font-weight:600; }
+td.warn  { color:var(--warn); font-weight:600; }
+td.er    { color:var(--err); }
+.req { color:var(--err); font-size:.5625rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.opt { color:var(--text-3); font-size:.5625rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
 
 /* ── Code blocks ── */
-.code-block { background:var(--s2); border:1px solid var(--b1); border-radius:var(--r); padding:1.125rem 1.25rem; margin-bottom:1rem; overflow-x:auto; }
-.code-block pre { font-size:.8125rem; color:var(--t1); line-height:1.65; white-space:pre; }
-.code-label { font-size:.5625rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--t3); margin-bottom:.5rem; }
-.inline-code { background:var(--s3); padding:.125rem .4rem; border-radius:4px; font-size:.8125rem; color:var(--acxl); font-family:'JetBrains Mono',ui-monospace,monospace; }
+.code-block { background:var(--primary); border-radius:var(--r); padding:1.25rem 1.375rem; margin-bottom:1rem; overflow-x:auto; }
+.code-block pre { font-size:.8125rem; color:rgba(245,243,239,0.85); line-height:1.7; white-space:pre; font-family:'JetBrains Mono',ui-monospace,monospace; }
+.code-block .code-label { font-size:.5rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:.625rem; }
 
 /* ── Tool entries ── */
-.tool-list { display:flex; flex-direction:column; gap:.625rem; margin-bottom:1.5rem; }
-.tool { background:var(--s1); border:1px solid var(--b1); border-radius:var(--rl); overflow:hidden; transition:border-color .15s; }
-.tool:hover { border-color:var(--b2); }
-.tool-head { padding:1rem 1.25rem; display:flex; align-items:flex-start; gap:1rem; cursor:pointer; }
-.tool-name { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.8125rem; font-weight:500; color:var(--acl); white-space:nowrap; padding:.2rem .5rem; background:var(--acbg); border-radius:6px; flex-shrink:0; }
-.tool-desc { font-size:.875rem; color:var(--t2); line-height:1.5; flex:1; }
-.tool-cost { font-size:.6875rem; font-weight:600; white-space:nowrap; padding:.2rem .5rem; border-radius:100px; flex-shrink:0; margin-top:.1rem; }
-.cost-0    { background:var(--s3); color:var(--t3); }
-.cost-low  { background:var(--gobg); color:var(--gol); }
-.cost-mid  { background:var(--wabg); color:var(--wa); }
-.cost-hi   { background:var(--erbg); color:var(--er); }
-.tool-params { padding:0 1.25rem 1rem; border-top:1px solid var(--b1); margin-top:.125rem; }
-.param-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,2fr); gap:.375rem .875rem; margin-top:.75rem; }
-.param-name { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.75rem; color:var(--acxl); align-self:start; padding-top:.125rem; }
-.param-type { font-size:.6875rem; color:var(--t3); align-self:start; padding-top:.1875rem; }
-.param-desc { font-size:.8125rem; color:var(--t2); line-height:1.45; }
+.tool-list { display:flex; flex-direction:column; gap:.5rem; margin-bottom:1.5rem; }
+.tool { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; transition:border-color .15s,box-shadow .15s; }
+.tool:hover { border-color:var(--border-2); box-shadow:0 2px 12px rgba(11,31,51,0.06); }
+.tool-head { padding:1rem 1.25rem; display:flex; align-items:flex-start; gap:.875rem; }
+.tool-name { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.75rem; font-weight:500; color:var(--primary); white-space:nowrap; padding:.2rem .5rem; background:rgba(11,31,51,0.06); border-radius:5px; flex-shrink:0; border:1px solid rgba(11,31,51,0.12); }
+.tool-desc { font-size:.875rem; color:var(--text-2); line-height:1.55; flex:1; }
+.tool-cost { font-size:.6875rem; font-weight:600; white-space:nowrap; padding:.2rem .5rem; border-radius:100px; flex-shrink:0; margin-top:.125rem; }
+.cost-0   { background:var(--surf-3); color:var(--text-3); }
+.cost-low { background:var(--ok-bg); color:var(--ok); }
+.cost-mid { background:var(--warn-bg); color:var(--warn); }
+.cost-hi  { background:var(--err-bg); color:var(--err); }
+.tool-params { padding:.125rem 1.25rem 1rem; border-top:1px solid var(--border); }
+.param-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.9fr) minmax(0,2fr); gap:.35rem .875rem; margin-top:.75rem; }
+.param-name { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.6875rem; color:var(--secondary); align-self:start; padding-top:.1875rem; }
+.param-type { font-size:.6875rem; color:var(--text-3); align-self:start; padding-top:.25rem; line-height:1.4; }
+.param-desc { font-size:.8125rem; color:var(--text-2); line-height:1.5; }
+.param-desc code { background:var(--surf-3); padding:.1rem .3rem; border-radius:3px; font-size:.6875rem; font-family:'JetBrains Mono',ui-monospace,monospace; color:var(--secondary); }
 
-/* ── Badges / labels ── */
-.badge { display:inline-flex; align-items:center; padding:.175rem .5rem; border-radius:100px; font-size:.625rem; font-weight:700; white-space:nowrap; }
-.badge-ac { background:var(--acbg); color:var(--acl); }
-.badge-go { background:var(--gobg); color:var(--gol); }
-.badge-ok { background:var(--okbg); color:var(--ok); }
-.badge-wa { background:var(--wabg); color:var(--wa); }
-.badge-er { background:var(--erbg); color:var(--er); }
-.badge-n  { background:var(--s3); color:var(--t2); }
+/* ── Badges ── */
+.badge { display:inline-flex; align-items:center; padding:.2rem .5rem; border-radius:100px; font-size:.625rem; font-weight:700; white-space:nowrap; }
+.badge-ok { background:var(--ok-bg); color:var(--ok); }
+.badge-wa { background:var(--warn-bg); color:var(--warn); }
+.badge-er { background:var(--err-bg); color:var(--err); }
+.badge-ac { background:var(--accent-bg); color:var(--accent-d); }
+.badge-n  { background:var(--surf-3); color:var(--text-2); }
 
 /* ── URL table ── */
-.url-table td:first-child { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.75rem; white-space:nowrap; color:var(--acxl); }
+.url-table td:first-child { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.6875rem; color:var(--secondary); white-space:nowrap; }
 
-/* ── Callout boxes ── */
-.callout { border-radius:var(--r); padding:1rem 1.25rem; margin-bottom:1rem; font-size:.875rem; line-height:1.6; }
+/* ── Callouts ── */
+.callout { border-radius:var(--r); padding:1rem 1.25rem; margin-bottom:1rem; font-size:.875rem; line-height:1.65; }
 .callout-title { font-weight:600; margin-bottom:.3rem; font-size:.9375rem; }
-.callout-ac { background:var(--acbg); border:1px solid rgba(123,110,246,.2); color:var(--acl); }
-.callout-go { background:var(--gobg); border:1px solid rgba(201,151,59,.2); color:var(--gol); }
-.callout-ok { background:var(--okbg); border:1px solid rgba(52,211,153,.2); color:var(--ok); }
-.callout-wa { background:var(--wabg); border:1px solid rgba(251,191,36,.2); color:var(--wa); }
-.callout-er { background:var(--erbg); border:1px solid rgba(248,113,113,.2); color:var(--er); }
+.callout-ac { background:var(--accent-bg); border-left:3px solid var(--accent); color:var(--text); }
+.callout-ac .callout-title { color:var(--accent-d); }
+.callout-ok { background:var(--ok-bg); border-left:3px solid var(--ok); color:var(--text); }
+.callout-ok .callout-title { color:var(--ok); }
+.callout-wa { background:var(--warn-bg); border-left:3px solid var(--warn); color:var(--text); }
+.callout-wa .callout-title { color:var(--warn); }
+.callout-er { background:var(--err-bg); border-left:3px solid var(--err); color:var(--text); }
+.callout-er .callout-title { color:var(--err); }
+.callout-pr { background:rgba(11,31,51,0.05); border-left:3px solid var(--primary); color:var(--text); }
+.callout-pr .callout-title { color:var(--primary); }
 
-/* ── Divider ── */
-.divider { height:1px; background:var(--b1); margin:2rem 0; }
-
-/* ── Two-col layout ── */
+/* ── Two/three col ── */
 .two-col { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
 .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
 @media(max-width:900px) { .two-col,.three-col { grid-template-columns:1fr; } }
 
-/* ── Scroll spy highlight ── */
-section[id] { scroll-margin-top:2rem; }
+/* ── Divider ── */
+hr,.divider { height:1px; border:none; background:var(--border); margin:2rem 0; }
 
 /* ── Responsive ── */
+section[id] { scroll-margin-top:1.5rem; }
+
 @media(max-width:860px) {
-  .nav { position:relative; width:100%; height:auto; flex-direction:row; flex-wrap:wrap; border-right:none; border-bottom:1px solid var(--b1); }
-  .main { margin-left:0; }
+  .nav { position:relative; width:100%; height:auto; }
+  .main { margin-left:0; height:auto; }
   .section { padding:2rem 1.25rem; }
   .hero { padding:2.5rem 1.25rem 2rem; }
-  .hero-title { font-size:2rem; }
-  .arch-flow { min-width:500px; }
+  .hero-title { font-size:1.875rem; }
 }
 
-/* Print */
+/* ── Print ── */
 @media print {
-  body { background:#fff; color:#000; font-size:9pt; }
   .nav { display:none; }
   .main { margin-left:0; }
   .section { border-color:#ddd; padding:1.5rem 0; }
-  a { color:#000; }
-  code,.inline-code { background:#f4f4f4; color:#000; }
-  .code-block { background:#f4f4f4; border-color:#ddd; }
-  .tool { border-color:#ddd; }
+  .code-block { background:#f4f4f4; }
+  .code-block pre { color:#333; }
 }
 </style>
 </head>
 <body>
 <div class="layout">
 
-<!-- ── Sidebar nav ── -->
-<nav class="nav">
+<!-- ── Sidebar ── -->
+<nav class="nav" id="site-nav">
   <div class="nav-brand">
-    <div class="nav-mark">C</div>
-    <div>
-      <div class="nav-name">CP Legal</div>
-      <div class="nav-sub">Technical Reference</div>
-    </div>
+    <a class="nav-logo" href="#">
+      <img src="" alt="CP Legal" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="nav-logo-mark" style="display:none">C</div>
+      <div class="nav-logo-name">CP Legal</div>
+    </a>
+    <div class="nav-doc-title">Technical Reference</div>
   </div>
 
   <div class="nav-section">Overview</div>
@@ -246,31 +255,35 @@ section[id] { scroll-margin-top:2rem; }
   <a class="nav-link" href="#deployment">Deployment</a>
   <a class="nav-link" href="#sop">SOPs &amp; Runbooks</a>
 
-  <div class="nav-updated">Updated April 2026</div>
+  <div class="nav-footer">Updated April 2026 &nbsp;·&nbsp; <a href="/admin">Admin Panel</a></div>
 </nav>
 
-<!-- ── Main content ── -->
-<main class="main">
+<!-- ── Main ── -->
+<main class="main" id="main-scroll">
 
-<!-- ════════════════════════════════════════════════════
-     HERO
-════════════════════════════════════════════════════ -->
+<!-- Hero -->
 <div class="hero">
-  <div class="hero-eyebrow">CP Legal — Internal Reference</div>
-  <h1 class="hero-title">CP Legal MCP<br><em>Technical Reference</em></h1>
-  <p class="hero-desc">Complete documentation for the CP Legal remote MCP server — architecture, all 25 tools, URL paths, authentication, environment variables, database schema, billing, deployment, and operational runbooks.</p>
+  <div class="hero-logo">
+    <img src="" alt="CP Legal" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="hero-logo-mark" style="display:none">C</div>
+    <div class="hero-logo-wordmark">
+      <span class="hero-logo-name">CP Legal</span>
+      <span class="hero-logo-sub">Legal Research Platform</span>
+    </div>
+  </div>
+  <div class="hero-eyebrow">Internal Technical Reference</div>
+  <h1 class="hero-title">CP Legal MCP<br><em>System Documentation</em></h1>
+  <p class="hero-desc">Complete reference for the CP Legal remote MCP server — architecture, all 25 tools, URL paths, authentication, environment variables, database schema, billing, deployment, and operational runbooks.</p>
   <div class="hero-chips">
-    <span class="chip chip-ac">Remote MCP · api.example.com</span>
-    <span class="chip chip-go">Isaacus Kanon AI</span>
+    <span class="chip chip-pr">Remote MCP · api.example.com</span>
+    <span class="chip chip-ac">Isaacus Kanon AI</span>
     <span class="chip chip-ok">AustLII · LawCite</span>
     <span class="chip chip-wa">ASIC Connect · ABR</span>
     <span class="chip chip-n">Railway · PostgreSQL · Cloudflare</span>
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════════════
-     OVERVIEW
-════════════════════════════════════════════════════ -->
+<!-- ════════════ OVERVIEW ════════════ -->
 <section class="section" id="overview">
   <div class="section-label">Overview</div>
   <h2 class="section-title">What It Is</h2>
@@ -278,12 +291,12 @@ section[id] { scroll-margin-top:2rem; }
 
   <div class="card-grid">
     <div class="card">
-      <div class="card-icon ac">⚖️</div>
+      <div class="card-icon pr">⚖️</div>
       <div class="card-title">Legal Research</div>
       <div class="card-desc">Search, retrieve and analyse Australian case law and legislation via AustLII. Powered by Isaacus Kanon AI for semantic reranking, extractive QA, enrichment, and summarisation.</div>
     </div>
     <div class="card">
-      <div class="card-icon go">🏢</div>
+      <div class="card-icon ac">🏢</div>
       <div class="card-title">Entity Intelligence</div>
       <div class="card-desc">Look up companies and persons by ABN, ACN, or name using ASIC Connect and the Australian Business Register (ABR). Returns registration status, type, directors/officers, and GST info.</div>
     </div>
@@ -295,29 +308,27 @@ section[id] { scroll-margin-top:2rem; }
     <div class="card">
       <div class="card-icon wa">📡</div>
       <div class="card-title">Regulatory &amp; Market Data</div>
-      <div class="card-desc">Search ASIC and ACCC regulatory decisions, and ASX market announcements. All via public data sources with retry logic and abuse-prevention rate limiting.</div>
+      <div class="card-desc">Search ASIC and ACCC regulatory decisions, and ASX market announcements. All via public data sources with retry logic and rate limiting.</div>
     </div>
     <div class="card">
       <div class="card-icon n">🔐</div>
       <div class="card-title">OAuth 2.0 + PKCE</div>
-      <div class="card-desc">Full OAuth 2.0 Authorization Code + PKCE flow. Supports Claude Web, ChatGPT, Cursor, mcp-remote, and any RFC 7591 dynamic registration client. Bearer token auth for direct API use.</div>
+      <div class="card-desc">Full OAuth 2.0 Authorization Code + PKCE flow. Supports Claude Web, ChatGPT, Cursor, mcp-remote, and any RFC 7591 dynamic registration client.</div>
     </div>
     <div class="card">
       <div class="card-icon n">👤</div>
       <div class="card-title">Admin Portal</div>
-      <div class="card-desc">Web-based admin panel at <code>/admin</code> for user management, spend cap configuration, precedent watchlist, billing export, and system health. Session-cookie auth, admin-flag gated.</div>
+      <div class="card-desc">Web-based admin panel at <code>/admin</code> for user management, spend cap configuration, precedent watchlist, billing export, and system health.</div>
     </div>
   </div>
 
-  <div class="callout callout-ac">
+  <div class="callout callout-pr">
     <div class="callout-title">Primary Use Case</div>
     Practitioners use Claude with this MCP server for NSW/QLD/Federal legal research — drafting research memos, checking limitation periods and filing deadlines, monitoring precedents, and looking up entities for advisory matters.
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     ARCHITECTURE
-════════════════════════════════════════════════════ -->
+<!-- ════════════ ARCHITECTURE ════════════ -->
 <section class="section" id="architecture">
   <div class="section-label">Architecture</div>
   <h2 class="section-title">How It All Connects</h2>
@@ -325,33 +336,24 @@ section[id] { scroll-margin-top:2rem; }
 
   <div class="arch">
     <div class="arch-flow">
-      <div class="arch-node accent">
+      <div class="arch-node prim">
         <div class="arch-node-label">MCP Client</div>
         <div class="arch-node-name">Claude / Cursor / ChatGPT</div>
         <div class="arch-node-sub">OAuth 2.0 + PKCE or Bearer token</div>
       </div>
-      <div class="arch-arrow">
-        <span>→</span>
-        <span class="arch-arrow-label">HTTPS<br>POST /mcp</span>
-      </div>
-      <div class="arch-node accent">
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS<br>POST /mcp</span></div>
+      <div class="arch-node prim">
         <div class="arch-node-label">Public · Railway</div>
         <div class="arch-node-name">cp-legal-mcp</div>
         <div class="arch-node-sub">api.example.com</div>
       </div>
-      <div class="arch-arrow">
-        <span>→</span>
-        <span class="arch-arrow-label">Private<br>MCP-HTTP</span>
-      </div>
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">Private<br>MCP-HTTP</span></div>
       <div class="arch-node ok">
         <div class="arch-node-label">Private · Railway</div>
         <div class="arch-node-name">auslaw-mcp</div>
         <div class="arch-node-sub">:3000 / private domain</div>
       </div>
-      <div class="arch-arrow">
-        <span>→</span>
-        <span class="arch-arrow-label">HTTPS</span>
-      </div>
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS</span></div>
       <div class="arch-node">
         <div class="arch-node-label">External</div>
         <div class="arch-node-name">AustLII / LawCite</div>
@@ -362,31 +364,28 @@ section[id] { scroll-margin-top:2rem; }
 
   <div class="arch">
     <div class="arch-flow">
-      <div class="arch-node accent">
+      <div class="arch-node prim">
         <div class="arch-node-label">cp-legal-mcp</div>
         <div class="arch-node-name">Tool handlers</div>
         <div class="arch-node-sub">25 tools registered</div>
       </div>
-      <div class="arch-arrow">
-        <span>→</span>
-        <span class="arch-arrow-label">SDK<br>HTTPS</span>
-      </div>
-      <div class="arch-node gold">
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">SDK / HTTPS</span></div>
+      <div class="arch-node ac">
         <div class="arch-node-label">AI Layer</div>
         <div class="arch-node-name">Isaacus Kanon</div>
         <div class="arch-node-sub">Rerank · QA · Enrich · Classify</div>
       </div>
-      <div class="arch-arrow" style="padding:0 1.5rem"><span style="color:var(--t3)">+</span></div>
+      <div class="arch-arrow"><span class="arch-arrow-line" style="color:var(--text-3);padding:0 .75rem">+</span></div>
       <div class="arch-node">
         <div class="arch-node-label">Data</div>
         <div class="arch-node-name">PostgreSQL</div>
         <div class="arch-node-sub">Railway managed DB</div>
       </div>
-      <div class="arch-arrow" style="padding:0 1.5rem"><span style="color:var(--t3)">+</span></div>
-      <div class="arch-node warn">
+      <div class="arch-arrow"><span class="arch-arrow-line" style="color:var(--text-3);padding:0 .75rem">+</span></div>
+      <div class="arch-node wa">
         <div class="arch-node-label">Public APIs</div>
         <div class="arch-node-name">ASIC / ABR / ASX</div>
-        <div class="arch-node-sub">No auth (ASIC) · GUID (ABR)</div>
+        <div class="arch-node-sub">No auth · GUID (ABR)</div>
       </div>
     </div>
   </div>
@@ -407,12 +406,10 @@ section[id] { scroll-margin-top:2rem; }
   </div>
 
   <h3>Stateless by design</h3>
-  <p style="color:var(--t2);font-size:.9375rem;line-height:1.7;margin-bottom:1rem">Each MCP request creates a fresh <span class="inline-code">McpServer</span> + <span class="inline-code">StreamableHTTPServerTransport</span> with <span class="inline-code">sessionIdGenerator: undefined</span>. No session state, no shared mutable objects. Safe for concurrent users and horizontal scaling. auslaw-mcp client is also fresh per tool call.</p>
+  <p>Each MCP request creates a fresh <span class="inline-code">McpServer</span> + <span class="inline-code">StreamableHTTPServerTransport</span> with <span class="inline-code">sessionIdGenerator: undefined</span>. No session state, no shared mutable objects. Safe for concurrent users and horizontal scaling. The auslaw-mcp client is also fresh per tool call.</p>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     SERVICES & APIS
-════════════════════════════════════════════════════ -->
+<!-- ════════════ SERVICES ════════════ -->
 <section class="section" id="services">
   <div class="section-label">Infrastructure</div>
   <h2 class="section-title">Services &amp; APIs</h2>
@@ -421,80 +418,27 @@ section[id] { scroll-margin-top:2rem; }
     <table>
       <thead><tr><th>Service</th><th>Role</th><th>Auth / Access</th><th>Rate Limit / Notes</th></tr></thead>
       <tbody>
-        <tr>
-          <td><strong>cp-legal-mcp</strong><br><span class="muted" style="font-size:.75rem">Railway service — public</span></td>
-          <td>Main MCP server. Exposes 25 tools to Claude and other clients. Hosts web UI and OAuth endpoints.</td>
-          <td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, auslaw-mcp (private network — no auth)</td>
-          <td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td>
-        </tr>
-        <tr>
-          <td><strong>auslaw-mcp</strong><br><span class="muted" style="font-size:.75rem">Railway service — private</span></td>
-          <td>AustLII scraper MCP server. Provides 9 tools for case/legislation search, document fetch, citation validation, LawCite citator.</td>
-          <td>No auth on private network. <span class="inline-code">MCP_TRANSPORT=http</span>, <span class="inline-code">PORT=3000</span></td>
-          <td>AustLII: 10 req/min (token bucket). LawCite: 5 req/min. Timeout: 60 s</td>
-        </tr>
-        <tr>
-          <td><strong>Isaacus Kanon API</strong><br><a href="https://isaacus.com" style="font-size:.75rem">isaacus.com</a></td>
-          <td>Legal AI layer. Three models: Kanon 2 Enricher, Kanon Answer Extractor, Kanon Universal Classifier (reranking).</td>
-          <td><span class="inline-code">ISAACUS_API_KEY</span> — passed to <span class="inline-code">new Isaacus({ apiKey })</span></td>
-          <td>SDK: <span class="inline-code">isaacus@^0.13.0</span>. In-memory rerank cache (5 min TTL, 100 entries). QA cache (200 entries, LRU).</td>
-        </tr>
-        <tr>
-          <td><strong>AustLII</strong><br><a href="https://www.austlii.edu.au" style="font-size:.75rem">austlii.edu.au</a></td>
-          <td>Australian Legal Information Institute. Full-text case law and legislation database. Free public access.</td>
-          <td>No API key. Accessed via auslaw-mcp only.</td>
-          <td>Rate limited by auslaw-mcp token bucket. Judgment text cached in PostgreSQL for 30 days.</td>
-        </tr>
-        <tr>
-          <td><strong>LawCite</strong><br><a href="https://www.austlii.edu.au/cgi-bin/LawCite" style="font-size:.75rem">austlii.edu.au/cgi-bin/LawCite</a></td>
-          <td>AustLII citator — finds cases that have cited a given citation. Used by <span class="inline-code">find_citing_cases</span>.</td>
-          <td>No auth. HTML scraping with cheerio. Falls back to AustLII phrase search.</td>
-          <td>5 req/min rate limit in auslaw-mcp.</td>
-        </tr>
-        <tr>
-          <td><strong>ASIC Connect</strong><br><a href="https://connectonline.asic.gov.au" style="font-size:.75rem">connectonline.asic.gov.au</a></td>
-          <td>Company and person register. Used by <span class="inline-code">lookup_entity</span> for name/ACN/ABN searches and officer lookups.</td>
-          <td>No auth required. Public registry.</td>
-          <td>Up to 2 retry attempts on 429/5xx. 15 s timeout per request.</td>
-        </tr>
-        <tr>
-          <td><strong>ABR (Australian Business Register)</strong><br><a href="https://abr.business.gov.au" style="font-size:.75rem">abr.business.gov.au</a></td>
-          <td>ABN lookup and entity details via ABR web services. More reliable than ASIC for ABN/ACN resolution.</td>
-          <td><span class="inline-code">ABR_GUID</span> env var — free registration at abr.business.gov.au/Tools/WebServices</td>
-          <td>Graceful degradation — ASIC Connect used as fallback if GUID not configured.</td>
-        </tr>
-        <tr>
-          <td><strong>PostgreSQL</strong><br><span class="muted" style="font-size:.75rem">Railway managed DB</span></td>
-          <td>All persistent data: users, sessions, matter queries, judgment cache, login events, OAuth, watchlist, app config.</td>
-          <td><span class="inline-code">DATABASE_URL</span> — Railway injects automatically. Schema auto-migrated on startup via <span class="inline-code">initDb()</span>.</td>
-          <td>Pool: max 10 connections. Graceful close on SIGTERM.</td>
-        </tr>
-        <tr>
-          <td><strong>ip-api.com</strong><br><a href="http://ip-api.com" style="font-size:.75rem">ip-api.com</a></td>
-          <td>IP geolocation for login audit events (city, region, country). Fire-and-forget, non-blocking.</td>
-          <td>No key required. Free tier.</td>
-          <td>~45 req/min limit. In-memory cache. 3 s timeout. Private/loopback IPs skipped.</td>
-        </tr>
-        <tr>
-          <td><strong>Cloudflare</strong></td>
-          <td>DNS and CDN. CNAME <span class="inline-code">api.example.com</span> → Railway public URL.</td>
-          <td>Cloudflare DNS console. No code integration.</td>
-          <td>Railway <span class="inline-code">trust proxy: 1</span> set. Real client IP read from leftmost <span class="inline-code">X-Forwarded-For</span>.</td>
-        </tr>
+        <tr><td><strong>cp-legal-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — public</span></td><td>Main MCP server. Exposes 25 tools. Hosts web UI and OAuth endpoints.</td><td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, auslaw-mcp (private — no auth)</td><td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td></tr>
+        <tr><td><strong>auslaw-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — private</span></td><td>AustLII scraper MCP server. 9 tools for case/legislation search, document fetch, citation validation, LawCite citator.</td><td>No auth on private network. <code>MCP_TRANSPORT=http</code>, <code>PORT=3000</code></td><td>AustLII: 10 req/min. LawCite: 5 req/min. Timeout: 60 s</td></tr>
+        <tr><td><strong>Isaacus Kanon API</strong><br><a href="https://isaacus.com">isaacus.com</a></td><td>Legal AI layer — Kanon 2 Enricher, Kanon Answer Extractor, Kanon Universal Classifier.</td><td><code>ISAACUS_API_KEY</code> → SDK singleton</td><td>In-memory rerank cache (5 min, 100 entries). QA cache (200 entries, LRU).</td></tr>
+        <tr><td><strong>AustLII</strong><br><a href="https://www.austlii.edu.au">austlii.edu.au</a></td><td>Australian legal database. Full-text case law and legislation. Free public access via auslaw-mcp.</td><td>No API key. Accessed via auslaw-mcp only.</td><td>Rate limited by auslaw-mcp token bucket. Judgment text cached in PostgreSQL for 30 days.</td></tr>
+        <tr><td><strong>LawCite</strong><br><a href="https://www.austlii.edu.au/cgi-bin/LawCite">austlii.edu.au/cgi-bin/LawCite</a></td><td>AustLII citator — finds cases that have cited a given citation.</td><td>No auth. HTML scraping. Falls back to AustLII phrase search.</td><td>5 req/min in auslaw-mcp.</td></tr>
+        <tr><td><strong>ASIC Connect</strong><br><a href="https://connectonline.asic.gov.au">connectonline.asic.gov.au</a></td><td>Company and person register. Name/ACN/ABN searches and officer lookups.</td><td>No auth required. Public registry.</td><td>2 retry attempts on 429/5xx. 15 s timeout.</td></tr>
+        <tr><td><strong>ABR</strong><br><a href="https://abr.business.gov.au">abr.business.gov.au</a></td><td>ABN lookup and entity details via ABR web services.</td><td><code>ABR_GUID</code> — free at abr.business.gov.au/Tools/WebServices. Graceful fallback to ASIC if not set.</td><td>No published rate limit.</td></tr>
+        <tr><td><strong>PostgreSQL</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway managed DB</span></td><td>All persistent data: users, matter queries, judgment cache, login events, OAuth, watchlist, app config.</td><td><code>DATABASE_URL</code> — Railway injects automatically. Schema auto-migrated on startup.</td><td>Pool: max 10 connections. Graceful close on SIGTERM.</td></tr>
+        <tr><td><strong>ip-api.com</strong></td><td>IP geolocation for login audit events (city, region, country). Fire-and-forget, non-blocking.</td><td>No key required. Free tier.</td><td>~45 req/min. In-memory cache. 3 s timeout. Private IPs skipped.</td></tr>
+        <tr><td><strong>Cloudflare</strong></td><td>DNS and CDN. CNAME <code>api.example.com</code> → Railway public URL.</td><td>Cloudflare DNS console. No code integration.</td><td>Railway <code>trust proxy: 1</code> set. Real client IP from leftmost <code>X-Forwarded-For</code>.</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — CASE RESEARCH
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — CASES ════════════ -->
 <section class="section" id="tools-cases">
   <div class="section-label">MCP Tools — Case Research</div>
   <h2 class="section-title">Case Discovery &amp; Citation</h2>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">research_cases</span>
@@ -503,13 +447,13 @@ section[id] { scroll-margin-top:2rem; }
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Natural language description of the legal issue. 3–500 chars. Supports IQL boolean (AND/OR/NOT) when <code>use_iql: true</code>.</span>
-          <span class="param-name">jurisdiction</span><span class="param-type">enum · opt</span><span class="param-desc">Default <code>all</code>. Values: <code>hca fcafc fca fedcfamc1f fedcfamc2f nswca nswsc nswdc nswcca ncat vsca vsc vcat qca qsc qdc qcat wasca wasc sat sascfc sasc sacat tasfc tassc ntca ntsc actca actsc acat</code></span>
-          <span class="param-name">limit</span><span class="param-type">int 1–20 · opt</span><span class="param-desc">Results to return after reranking. Default <code>5</code>. Fetches 3× this from AustLII for the reranker pool.</span>
-          <span class="param-name">from_year / to_year</span><span class="param-type">int · opt</span><span class="param-desc">Filter by decision year range, e.g. <code>from_year: 2018</code>.</span>
-          <span class="param-name">use_iql</span><span class="param-type">bool · opt</span><span class="param-desc">Treat query as IQL boolean expression. Default <code>false</code>.</span>
-          <span class="param-name">include_citations</span><span class="param-type">bool · opt</span><span class="param-desc">Include formatted citations in results. Default <code>true</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log tagging. Always pass if one has been established.</span>
+          <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Natural language description. 3–500 chars. Supports IQL boolean when <code>use_iql: true</code>.</span>
+          <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc">Default <code>all</code>. Values: <code>hca fcafc fca fedcfamc1f fedcfamc2f nswca nswsc nswdc nswcca ncat vsca vsc vcat qca qsc qdc qcat wasca wasc sat sascfc sasc sacat tasfc tassc ntca ntsc actca actsc acat</code></span>
+          <span class="param-name">limit</span><span class="param-type">int 1–20 · <span class="opt">opt</span></span><span class="param-desc">Results after reranking. Default <code>5</code>. Fetches 3× from AustLII for reranker pool.</span>
+          <span class="param-name">from_year / to_year</span><span class="param-type">int · <span class="opt">opt</span></span><span class="param-desc">Filter by decision year range, e.g. <code>from_year: 2018</code>.</span>
+          <span class="param-name">use_iql</span><span class="param-type">bool · <span class="opt">opt</span></span><span class="param-desc">Treat query as IQL boolean expression (AND/OR/NOT). Default <code>false</code>.</span>
+          <span class="param-name">include_citations</span><span class="param-type">bool · <span class="opt">opt</span></span><span class="param-desc">Include formatted citations in results. Default <code>true</code>.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log. Always include if one has been established.</span>
         </div>
       </div>
     </div>
@@ -517,14 +461,14 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">search_by_citation</span>
-        <span class="tool-desc">Resolve a neutral citation (e.g. "[2024] HCA 12") or case name to an AustLII URL. Faster and more precise than <code>research_cases</code> when you already have the citation.</span>
+        <span class="tool-desc">Resolve a neutral citation (e.g. "[2024] HCA 12") or case name to an AustLII URL. Faster and more precise than <code>research_cases</code> when the citation is already known.</span>
         <span class="tool-cost cost-low">$1.00/M tokens</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">citation_or_name</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation like "[2024] HCA 12" or a case name. 3–500 chars.</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max results. Default <code>5</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">citation_or_name</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation like "[2024] HCA 12" or a case name.</span>
+          <span class="param-name">limit</span><span class="param-type">int · <span class="opt">opt</span></span><span class="param-desc">Max results. Default <code>5</code>.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -538,8 +482,8 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation to look up, e.g. "[1992] HCA 23".</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max results. Default <code>10</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">limit</span><span class="param-type">int · <span class="opt">opt</span></span><span class="param-desc">Max results. Default <code>10</code>.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -553,8 +497,7 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation_or_url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation or AustLII URL of the seed case.</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max results. Default <code>5</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max results (default <code>5</code>). Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -562,47 +505,42 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">format_citation</span>
-        <span class="tool-desc">Format a case citation in AGLC4 style. No Isaacus call — pure formatting via auslaw-mcp.</span>
+        <span class="tool-desc">Format a case citation in AGLC4 style via auslaw-mcp. No Isaacus calls.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">title</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Case title, e.g. "Donoghue v Stevenson".</span>
-          <span class="param-name">neutralCitation</span><span class="param-type">string · opt</span><span class="param-desc">Neutral citation, e.g. "[1932] UKHL 100".</span>
-          <span class="param-name">reportedCitation</span><span class="param-type">string · opt</span><span class="param-desc">Reported citation, e.g. "[1932] AC 562".</span>
-          <span class="param-name">pinpoint</span><span class="param-type">string · opt</span><span class="param-desc">Pinpoint reference, e.g. "572".</span>
-          <span class="param-name">style</span><span class="param-type">enum · opt</span><span class="param-desc"><code>neutral</code> | <code>reported</code> | <code>combined</code></span>
+          <span class="param-name">neutralCitation</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Neutral citation, e.g. "[1932] UKHL 100".</span>
+          <span class="param-name">reportedCitation</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Reported citation, e.g. "[1932] AC 562".</span>
+          <span class="param-name">pinpoint / style</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Pinpoint reference. Style: <code>neutral | reported | combined</code>.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — JUDGMENT ANALYSIS
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — JUDGMENT ════════════ -->
 <section class="section" id="tools-judgment">
   <div class="section-label">MCP Tools — Judgment Analysis</div>
   <h2 class="section-title">Judgment Retrieval &amp; Analysis</h2>
 
-  <div class="callout callout-go">
+  <div class="callout callout-ac">
     <div class="callout-title">Recommended workflow</div>
-    Use <code>summarise_judgment</code> first (not <code>get_judgment</code>). Only call <code>get_judgment</code> when verbatim paragraph text is needed for quoting. Use <code>ask_judgment</code> for targeted follow-up questions not covered by the five summary dimensions.
+    Use <code>summarise_judgment</code> first — not <code>get_judgment</code>. Only call <code>get_judgment</code> when verbatim paragraph text is needed for quoting. Use <code>ask_judgment</code> for targeted follow-up questions not covered by the five summary dimensions.
   </div>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">summarise_judgment</span>
-        <span class="tool-desc">Structured 5-dimension summary: holding, orders, key facts, legal principles, outcome. Blends Kanon 2 Enricher + Kanon Answer Extractor across 6 API calls. Fastest way to understand a case.</span>
+        <span class="tool-desc">Structured 5-dimension summary: holding, orders, key facts, legal principles, outcome. Blends Kanon 2 Enricher + Kanon Answer Extractor across 6 API calls.</span>
         <span class="tool-cost cost-mid">$1.833/M tokens</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation_or_url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation ("[2024] HCA 12") or full AustLII URL. Auto-resolved via <code>validate_citation</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -610,15 +548,15 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">ask_judgment</span>
-        <span class="tool-desc">Extractive QA on a specific judgment. Reads full document text, extracts relevant passages, then uses Kanon Answer Extractor. Returns exact text spans with confidence scores.</span>
+        <span class="tool-desc">Extractive QA on a specific judgment. Extracts relevant passages, then applies Kanon Answer Extractor. Returns exact text spans with confidence scores.</span>
         <span class="tool-cost cost-mid">$1.50/M tokens</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation_or_url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation or AustLII URL.</span>
           <span class="param-name">question</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Specific question, e.g. "What was the reasoning on contributory negligence?" 5–500 chars.</span>
-          <span class="param-name">top_k</span><span class="param-type">int 1–10 · opt</span><span class="param-desc">Max answer candidates. Default <code>3</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">top_k</span><span class="param-type">int 1–10 · <span class="opt">opt</span></span><span class="param-desc">Max answer candidates. Default <code>3</code>.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -626,13 +564,13 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">enrich_judgment</span>
-        <span class="tool-desc">Extract the citation network, parties, and key entities from a judgment using Kanon 2 Enricher. Returns cases cited with reception sentiment (positive/negative/distinguished).</span>
+        <span class="tool-desc">Extract the citation network, parties, and key entities using Kanon 2 Enricher. Returns cases cited with reception sentiment (positive/negative/distinguished).</span>
         <span class="tool-cost cost-hi">$3.50/M tokens</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation_or_url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation or AustLII URL.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -640,13 +578,13 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">get_judgment</span>
-        <span class="tool-desc">Fetch full verbatim text of a judgment from AustLII. Result cached in PostgreSQL for 30 days. Use only when raw paragraph text is needed for quoting — prefer <code>summarise_judgment</code>.</span>
+        <span class="tool-desc">Fetch full verbatim text of a judgment from AustLII. Cached in PostgreSQL for 30 days. Use only when raw text is needed — prefer <code>summarise_judgment</code>.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">citation_or_url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Neutral citation or AustLII URL.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -659,10 +597,9 @@ section[id] { scroll-margin-top:2rem; }
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">citation_or_url_a</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">First case — neutral citation or AustLII URL.</span>
-          <span class="param-name">citation_or_url_b</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Second case — neutral citation or AustLII URL.</span>
-          <span class="param-name">question</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">The comparative question to answer from both cases.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">citation_or_url_a/b</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">First and second case — neutral citation or AustLII URL.</span>
+          <span class="param-name">question</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Comparative question to answer from both cases.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -676,23 +613,19 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">issue</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Description of the legal issue, e.g. "employee dismissed for using sick leave — is this adverse action?"</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — LEGISLATION
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — LEGISLATION ════════════ -->
 <section class="section" id="tools-legislation">
   <div class="section-label">MCP Tools — Legislation</div>
   <h2 class="section-title">Legislation Research &amp; Retrieval</h2>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">research_legislation</span>
@@ -702,9 +635,8 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Natural language query, e.g. "misleading or deceptive conduct". 3–500 chars.</span>
-          <span class="param-name">jurisdiction</span><span class="param-type">enum · opt</span><span class="param-desc"><code>cth nsw vic qld wa sa tas act nt all</code>. Default <code>all</code>.</span>
-          <span class="param-name">limit</span><span class="param-type">int 1–20 · opt</span><span class="param-desc">Default <code>5</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>cth nsw vic qld wa sa tas act nt all</code>. Default <code>all</code>.</span>
+          <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max results (default <code>5</code>). Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -712,31 +644,27 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">get_legislation</span>
-        <span class="tool-desc">Fetch full text of a specific Act or regulation from AustLII. Can also extract answers to specific questions using Kanon Answer Extractor (when question provided).</span>
-        <span class="tool-cost cost-mid">$1.50/M tokens · $0 (retrieval only)</span>
+        <span class="tool-desc">Fetch full text of a specific Act from AustLII. Can also answer specific questions using Kanon Answer Extractor when a question is provided.</span>
+        <span class="tool-cost cost-mid">$1.50/M tokens (QA) · $0 (retrieval only)</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">AustLII URL of the Act/regulation, e.g. <code>https://www.austlii.edu.au/au/legis/cth/consol_act/cca2010182/</code></span>
-          <span class="param-name">question</span><span class="param-type">string · opt</span><span class="param-desc">If provided, uses Kanon Answer Extractor to answer the question from the Act.</span>
-          <span class="param-name">section</span><span class="param-type">string · opt</span><span class="param-desc">Specific section to fetch, e.g. "s 18".</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">url</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">AustLII URL of the Act, e.g. <code>https://www.austlii.edu.au/au/legis/cth/consol_act/cca2010182/</code></span>
+          <span class="param-name">question</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">If provided, uses Kanon Answer Extractor to answer from the Act text.</span>
+          <span class="param-name">section</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Specific section to fetch, e.g. "s 18".</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — ENTITY INTELLIGENCE
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — ENTITIES ════════════ -->
 <section class="section" id="tools-entities">
   <div class="section-label">MCP Tools — Entity Intelligence</div>
   <h2 class="section-title">Entity &amp; Regulatory Intelligence</h2>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">lookup_entity</span>
@@ -746,11 +674,10 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">identifier</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">ABN (11 digits), ACN (9 digits), or entity/person name. Auto-detected.</span>
-          <span class="param-name">identifier_type</span><span class="param-type">enum · opt</span><span class="param-desc"><code>abn | acn | name</code>. Override auto-detection.</span>
-          <span class="param-name">search_type</span><span class="param-type">enum · opt</span><span class="param-desc"><code>company | person | all</code>. For name searches only. Default <code>company</code>.</span>
-          <span class="param-name">limit</span><span class="param-type">int 1–20 · opt</span><span class="param-desc">Max results for name searches. Default <code>10</code>.</span>
-          <span class="param-name">include_officers</span><span class="param-type">bool · opt</span><span class="param-desc">Fetch current/former directors from ASIC Connect (second request). Default <code>false</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">identifier_type</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>abn | acn | name</code>. Override auto-detection.</span>
+          <span class="param-name">search_type</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>company | person | all</code>. For name searches. Default <code>company</code>.</span>
+          <span class="param-name">include_officers</span><span class="param-type">bool · <span class="opt">opt</span></span><span class="param-desc">Fetch current/former directors from ASIC (second request). Default <code>false</code>.</span>
+          <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max name search results (default <code>10</code>). Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -758,13 +685,13 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">lookup_entities_bulk</span>
-        <span class="tool-desc">Look up multiple entities in a single call. Runs lookups concurrently. Returns consolidated results. No Isaacus calls.</span>
+        <span class="tool-desc">Look up multiple entities in a single call. Runs lookups concurrently. No Isaacus calls.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">identifiers</span><span class="param-type">array · <span class="req">req</span></span><span class="param-desc">Array of ABNs, ACNs, or names.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -777,10 +704,9 @@ section[id] { scroll-margin-top:2rem; }
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Search query, e.g. company name or regulatory topic.</span>
-          <span class="param-name">regulator</span><span class="param-type">enum · opt</span><span class="param-desc"><code>asic | accc | all</code>. Default <code>all</code>.</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max results. Default <code>10</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Company name or regulatory topic.</span>
+          <span class="param-name">regulator</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>asic | accc | all</code>. Default <code>all</code>.</span>
+          <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max results (default <code>10</code>). Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -794,24 +720,19 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">query</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Company name, ASX code (e.g. "CBA"), or announcement topic.</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max results. Default <code>10</code>.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max results (default <code>10</code>). Matter reference for audit log.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — MATTER & WORKFLOW
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — MATTER ════════════ -->
 <section class="section" id="tools-matter">
   <div class="section-label">MCP Tools — Matter &amp; Workflow</div>
   <h2 class="section-title">Matter Management &amp; Workflow Automation</h2>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">get_matter_history</span>
@@ -821,7 +742,7 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">matter_ref</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Matter reference to retrieve history for.</span>
-          <span class="param-name">limit</span><span class="param-type">int · opt</span><span class="param-desc">Max records. Default <code>50</code>.</span>
+          <span class="param-name">limit</span><span class="param-type">int · <span class="opt">opt</span></span><span class="param-desc">Max records. Default <code>50</code>.</span>
         </div>
       </div>
     </div>
@@ -835,7 +756,6 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">matter_ref</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Matter reference to build chronology from.</span>
-          <span class="param-name">matter_ref (param)</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -844,12 +764,12 @@ section[id] { scroll-margin-top:2rem; }
       <div class="tool-head">
         <span class="tool-name">draft_research_memo</span>
         <span class="tool-desc">Draft a structured legal research memo from matter history. Can include case analysis using Kanon Answer Extractor. Returns a formatted memo ready for review.</span>
-        <span class="tool-cost cost-mid">$1.50/M tokens (with_case_analysis) · $0 (default)</span>
+        <span class="tool-cost cost-mid">$1.50/M tokens (with analysis) · $0 (default)</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">matter_ref</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">Matter reference to draft memo from.</span>
-          <span class="param-name">with_case_analysis</span><span class="param-type">bool · opt</span><span class="param-desc">Run Kanon Answer Extractor on referenced cases. Default <code>false</code>.</span>
+          <span class="param-name">with_case_analysis</span><span class="param-type">bool · <span class="opt">opt</span></span><span class="param-desc">Run Kanon Answer Extractor on referenced cases. Default <code>false</code>.</span>
         </div>
       </div>
     </div>
@@ -857,48 +777,44 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">monitor_precedents</span>
-        <span class="tool-desc">Manage a watchlist of citations to monitor for new citing cases. Actions: <code>check</code> (scan all), <code>add</code> (add citation), <code>remove</code> (remove), <code>list</code> (show watchlist). Stored in PostgreSQL <code>precedent_watchlist</code> table.</span>
+        <span class="tool-desc">Manage a watchlist of citations to monitor for new citing cases. Stored in PostgreSQL. Actions: <code>check</code> (scan all), <code>add</code>, <code>remove</code>, <code>list</code>.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
           <span class="param-name">action</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>check | add | remove | list</code></span>
-          <span class="param-name">citation</span><span class="param-type">string · opt</span><span class="param-desc">Citation for <code>add</code> / <code>remove</code> actions.</span>
-          <span class="param-name">label</span><span class="param-type">string · opt</span><span class="param-desc">Human-readable label for the watchlist entry.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">citation</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Citation for <code>add</code> / <code>remove</code> actions.</span>
+          <span class="param-name">label</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Human-readable label for the watchlist entry.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — TIME-CRITICAL
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — TIME ════════════ -->
 <section class="section" id="tools-time">
   <div class="section-label">MCP Tools — Time-Critical</div>
   <h2 class="section-title">Limitation Periods &amp; Filing Deadlines</h2>
 
   <div class="callout callout-er">
-    <div class="callout-title">⚠️ Important disclaimer</div>
-    All outputs from these tools include a disclaimer. They are reference guides based on static rule tables, not legal advice. Always verify against the current version of the relevant rules and consult the court's registry for filing deadlines.
+    <div class="callout-title">⚠️ Disclaimer</div>
+    All outputs include a disclaimer. These tools are reference guides based on static rule tables, not legal advice. Always verify against the current version of the relevant rules and consult the court registry for filing deadlines.
   </div>
 
   <div class="tool-list">
-
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">check_limitation_period</span>
-        <span class="tool-desc">Look up the limitation period for a cause of action across Australian jurisdictions. Covers 17 cause-of-action types across all 9 jurisdictions. Optional deadline calculation from a trigger date.</span>
+        <span class="tool-desc">Look up the limitation period for a cause of action across Australian jurisdictions. 17 cause-of-action types × 9 jurisdictions. Optional deadline calculation from a trigger date.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">cause_of_action</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc">One of: <code>contract deed debt negligence_general negligence_pi defamation fraud contribution property_recovery judicial_review unfair_dismissal general_protections underpayment corporations_civil oppression competition misleading_conduct</code></span>
+          <span class="param-name">cause_of_action</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>contract deed debt negligence_general negligence_pi defamation fraud contribution property_recovery judicial_review unfair_dismissal general_protections underpayment corporations_civil oppression competition misleading_conduct</code></span>
           <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>nsw | qld | vic | sa | wa | tas | act | nt | federal</code></span>
-          <span class="param-name">trigger_date</span><span class="param-type">string · opt</span><span class="param-desc">ISO date of the triggering event (accrual/discovery/dismissal). If provided, calculates the deadline date and flags if urgent or overdue.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">trigger_date</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of triggering event. Calculates deadline and flags if urgent or overdue.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -906,43 +822,37 @@ section[id] { scroll-margin-top:2rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">check_filing_deadline</span>
-        <span class="tool-desc">Look up the filing deadline for a court document type across NSW, QLD, Federal Court, and FCFCOA. 8 proceeding types × 4 jurisdictions. Optional deadline calculation from event date.</span>
+        <span class="tool-desc">Filing deadline for a court document type across NSW, QLD, Federal Court, and FCFCOA. 8 proceeding types × 4 jurisdictions. Optional deadline calculation.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">proceeding_type</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc">One of: <code>defence response reply appeal_notice summary_judgment discovery interrogatories subpoena_objection</code></span>
+          <span class="param-name">proceeding_type</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>defence response reply appeal_notice summary_judgment discovery interrogatories subpoena_objection</code></span>
           <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>nsw | qld | federal | fcfcoa</code></span>
-          <span class="param-name">event_date</span><span class="param-type">string · opt</span><span class="param-desc">ISO date of the trigger event (e.g. date of service). Calculates deadline date and urgency flags.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · opt</span><span class="param-desc">Matter reference for audit log.</span>
+          <span class="param-name">event_date</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of the trigger event (e.g. date of service). Calculates deadline and urgency flags.</span>
+          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     TOOLS — ADMIN
-════════════════════════════════════════════════════ -->
+<!-- ════════════ TOOLS — ADMIN ════════════ -->
 <section class="section" id="tools-admin">
   <div class="section-label">MCP Tools — Admin</div>
   <h2 class="section-title">Admin Tool</h2>
-
   <div class="tool-list">
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">inspect_database</span>
-        <span class="tool-desc">Admin-only tool. Run read-only diagnostic queries against the PostgreSQL database. Restricted to users listed in <code>ADMIN_USERS</code>. Returns schema info, row counts, or query results.</span>
+        <span class="tool-desc">Admin-only. Run read-only diagnostic queries against the PostgreSQL database. Restricted to users listed in <code>ADMIN_USERS</code>.</span>
         <span class="tool-cost cost-0">$0 · Admin only</span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     URLS & PATHS
-════════════════════════════════════════════════════ -->
+<!-- ════════════ URLS ════════════ -->
 <section class="section" id="urls">
   <div class="section-label">Reference</div>
   <h2 class="section-title">URLs &amp; Paths</h2>
@@ -952,9 +862,9 @@ section[id] { scroll-margin-top:2rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>https://api.example.com/mcp</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls go here.</td></tr>
-        <tr><td>https://api.example.com/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns <code>{"status":"ok","db":"ok"}</code>. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
-        <tr><td>https://api.example.com/health/auslaw</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Tries multiple paths and returns connectivity report.</td></tr>
+        <tr><td>https://api.example.com/mcp</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
+        <tr><td>https://api.example.com/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
+        <tr><td>https://api.example.com/health/auslaw</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Returns connectivity report.</td></tr>
       </tbody>
     </table>
   </div>
@@ -962,81 +872,74 @@ section[id] { scroll-margin-top:2rem; }
   <h3>OAuth 2.0</h3>
   <div class="table-wrap">
     <table class="url-table">
-      <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
+      <thead><tr><th>Path</th><th>Method</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/.well-known/oauth-authorization-server</td><td>GET</td><td class="ok">None</td><td>RFC 8414 server metadata. Auto-discovered by Claude Web, ChatGPT, and other OAuth clients.</td></tr>
-        <tr><td>/.well-known/oauth-protected-resource</td><td>GET</td><td class="ok">None</td><td>RFC 9728 resource metadata. Tells clients which authorization server to use.</td></tr>
-        <tr><td>/oauth/register</td><td>POST</td><td class="ok">None</td><td>RFC 7591 dynamic client registration. Used by mcp-remote, Cursor, etc.</td></tr>
-        <tr><td>/oauth/authorize</td><td>GET POST</td><td class="ok">None</td><td>OAuth authorization endpoint. GET: show login form. POST: validate credentials + redirect with code.</td></tr>
-        <tr><td>/oauth/token</td><td>POST</td><td class="ok">None</td><td>Exchange authorization code for access token (PKCE S256 required). Issues the user's existing bearer token as the access_token.</td></tr>
+        <tr><td>/.well-known/oauth-authorization-server</td><td>GET</td><td>RFC 8414 server metadata. Auto-discovered by Claude Web, ChatGPT.</td></tr>
+        <tr><td>/.well-known/oauth-protected-resource</td><td>GET</td><td>RFC 9728 resource metadata.</td></tr>
+        <tr><td>/oauth/register</td><td>POST</td><td>RFC 7591 dynamic client registration. Used by mcp-remote and Cursor.</td></tr>
+        <tr><td>/oauth/authorize</td><td>GET POST</td><td>GET: login form. POST: validate credentials and redirect with code.</td></tr>
+        <tr><td>/oauth/token</td><td>POST</td><td>Exchange authorization code for access token (PKCE S256 required).</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>Web UI — Matters Portal</h3>
+  <h3>Matters Portal</h3>
   <div class="table-wrap">
     <table class="url-table">
-      <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
+      <thead><tr><th>Path</th><th>Auth</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/matters/login</td><td>GET POST</td><td class="ok">None</td><td>Login page. POST: username + token (API token used as password).</td></tr>
-        <tr><td>/matters/logout</td><td>GET</td><td class="warn">Session</td><td>Clears session cookie, redirects to login.</td></tr>
-        <tr><td>/matters/dashboard</td><td>GET</td><td class="warn">Session</td><td>Research dashboard. Stats, tool usage, query volume chart, spend widget.</td></tr>
-        <tr><td>/matters</td><td>GET</td><td class="warn">Session</td><td>Matter list. Admins see all; researchers see their own. Filterable by status, date, researcher.</td></tr>
-        <tr><td>/matters/search</td><td>GET</td><td class="warn">Session</td><td>Full-text query search across all matter queries.</td></tr>
-        <tr><td>/matters/:ref</td><td>GET</td><td class="warn">Session</td><td>Matter detail. Query history, per-tool stats, cost breakdown, billing table.</td></tr>
-        <tr><td>/matters/:ref/export.csv</td><td>GET</td><td class="warn">Session</td><td>Download per-matter CSV billing export with token/cost breakdown.</td></tr>
-        <tr><td>/matters/:ref/print</td><td>GET</td><td class="warn">Session</td><td>Print-optimised matter billing view.</td></tr>
-        <tr><td>/admin/billing-export.csv</td><td>GET</td><td class="er">Admin</td><td>Global billing export — all matters, all users, with per-matter cost aggregation. Optional <code>?from=&amp;to=</code> date filters.</td></tr>
+        <tr><td>/matters/login</td><td class="ok">None</td><td>Login. Username + API token as password.</td></tr>
+        <tr><td>/matters/logout</td><td class="warn">Session</td><td>Clears session cookie, redirects to login.</td></tr>
+        <tr><td>/matters/dashboard</td><td class="warn">Session</td><td>Research dashboard — stats, tool usage, spend widget, query volume chart.</td></tr>
+        <tr><td>/matters</td><td class="warn">Session</td><td>Matter list. Admins see all; researchers see their own.</td></tr>
+        <tr><td>/matters/search</td><td class="warn">Session</td><td>Full-text search across all matter queries.</td></tr>
+        <tr><td>/matters/:ref</td><td class="warn">Session</td><td>Matter detail — query history, tool stats, cost breakdown.</td></tr>
+        <tr><td>/matters/:ref/export.csv</td><td class="warn">Session</td><td>Per-matter CSV billing export.</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>Web UI — Admin Panel</h3>
+  <h3>Admin Panel</h3>
   <div class="table-wrap">
     <table class="url-table">
-      <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
+      <thead><tr><th>Path</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>/admin</td><td>GET</td><td class="er">Admin</td><td>Admin dashboard. Service health, error counts, recent logins, today's query volume by user.</td></tr>
-        <tr><td>/admin/users</td><td>GET</td><td class="er">Admin</td><td>User list. All users with status, role, last active date.</td></tr>
-        <tr><td>/admin/users/new</td><td>GET POST</td><td class="er">Admin</td><td>Create new user. Token shown once after creation.</td></tr>
-        <tr><td>/admin/users/:username</td><td>GET</td><td class="er">Admin</td><td>User detail. Login history, OAuth connections, spend, per-user spend cap management, token reveal.</td></tr>
-        <tr><td>/admin/users/:username/rotate-token</td><td>POST</td><td class="er">Admin</td><td>Rotate a user's API token. Old token immediately invalid.</td></tr>
-        <tr><td>/admin/users/:username/toggle-admin</td><td>POST</td><td class="er">Admin</td><td>Grant/revoke admin flag.</td></tr>
-        <tr><td>/admin/users/:username/toggle-active</td><td>POST</td><td class="er">Admin</td><td>Activate/deactivate user account.</td></tr>
-        <tr><td>/admin/users/:username/set-spend-cap</td><td>POST</td><td class="er">Admin</td><td>Set per-user monthly spend cap in USD. Empty → use global default.</td></tr>
-        <tr><td>/admin/users/:username/force-logout</td><td>POST</td><td class="er">Admin</td><td>Increment session version → invalidates all active sessions for this user.</td></tr>
-        <tr><td>/admin/users/:username/delete</td><td>POST</td><td class="er">Admin</td><td>Delete user account permanently.</td></tr>
-        <tr><td>/admin/matters</td><td>GET</td><td class="er">Admin</td><td>Admin matter list with cost aggregation across all users.</td></tr>
-        <tr><td>/admin/config</td><td>GET POST</td><td class="er">Admin</td><td>App config management. Spend caps, default matter ref, and other runtime settings.</td></tr>
-        <tr><td>/admin/watchlist</td><td>GET</td><td class="er">Admin</td><td>Precedent watchlist management UI.</td></tr>
-        <tr><td>/admin/watchlist/add</td><td>POST</td><td class="er">Admin</td><td>Add citation to watchlist.</td></tr>
-        <tr><td>/admin/watchlist/remove</td><td>POST</td><td class="er">Admin</td><td>Remove citation from watchlist.</td></tr>
-        <tr><td>/admin/data</td><td>GET</td><td class="er">Admin</td><td>Data management. Purge old queries, clear judgment cache.</td></tr>
-        <tr><td>/admin/data/purge-queries</td><td>POST</td><td class="er">Admin</td><td>Purge matter queries older than a specified number of days.</td></tr>
-        <tr><td>/admin/data/purge-cache</td><td>POST</td><td class="er">Admin</td><td>Purge judgment cache entries older than 30 days.</td></tr>
-        <tr><td>/admin/data/purge-cache-all</td><td>POST</td><td class="er">Admin</td><td>Purge entire judgment cache.</td></tr>
+        <tr><td>/admin</td><td>Admin dashboard — service health, error counts, recent logins, today's volume by user.</td></tr>
+        <tr><td>/admin/users</td><td>User list.</td></tr>
+        <tr><td>/admin/users/new</td><td>Create new user. Token shown once.</td></tr>
+        <tr><td>/admin/users/:username</td><td>User detail — login history, OAuth connections, spend, per-user cap, token reveal.</td></tr>
+        <tr><td>/admin/users/:username/rotate-token</td><td>POST — rotate API token. Old token immediately invalid.</td></tr>
+        <tr><td>/admin/users/:username/toggle-admin</td><td>POST — grant/revoke admin flag.</td></tr>
+        <tr><td>/admin/users/:username/toggle-active</td><td>POST — activate/deactivate account.</td></tr>
+        <tr><td>/admin/users/:username/set-spend-cap</td><td>POST — set per-user monthly spend cap (USD). Empty → use global default.</td></tr>
+        <tr><td>/admin/users/:username/force-logout</td><td>POST — increment session version, invalidating all active sessions.</td></tr>
+        <tr><td>/admin/users/:username/delete</td><td>POST — delete user permanently.</td></tr>
+        <tr><td>/admin/matters</td><td>All matters with cost aggregation across all users.</td></tr>
+        <tr><td>/admin/billing-export.csv</td><td>Global billing export. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.</td></tr>
+        <tr><td>/admin/config</td><td>Runtime app config — spend caps, default matter ref.</td></tr>
+        <tr><td>/admin/watchlist</td><td>Precedent watchlist management.</td></tr>
+        <tr><td>/admin/data</td><td>Data management — purge old queries, clear judgment cache.</td></tr>
+        <tr><td>/admin/docs</td><td>This document.</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     AUTHENTICATION
-════════════════════════════════════════════════════ -->
+<!-- ════════════ AUTH ════════════ -->
 <section class="section" id="auth">
   <div class="section-label">Reference</div>
   <h2 class="section-title">Authentication &amp; Access Control</h2>
 
   <div class="three-col">
     <div class="card">
-      <div class="card-icon ac">🔑</div>
+      <div class="card-icon pr">🔑</div>
       <div class="card-title">Bearer Token (MCP)</div>
-      <div class="card-desc">All <code>/mcp</code> requests require <code>Authorization: Bearer &lt;token&gt;</code>. Token verified against hashed value in PostgreSQL <code>users</code> table, then falls back to <code>MCP_AUTH_TOKENS</code> env var.</div>
+      <div class="card-desc">All <code>/mcp</code> requests require <code>Authorization: Bearer &lt;token&gt;</code>. Verified against hashed value in PostgreSQL, then falls back to <code>MCP_AUTH_TOKENS</code> env var.</div>
     </div>
     <div class="card">
-      <div class="card-icon go">🔐</div>
-      <div class="card-title">OAuth 2.0 + PKCE (Claude / ChatGPT)</div>
-      <div class="card-desc">Claude Web and ChatGPT use OAuth Authorization Code + PKCE (S256). Static client pre-registered via <code>OAUTH_CLIENT_ID</code>. Dynamic registration via <code>/oauth/register</code> for mcp-remote and Cursor.</div>
+      <div class="card-icon ac">🔐</div>
+      <div class="card-title">OAuth 2.0 + PKCE</div>
+      <div class="card-desc">Claude Web and ChatGPT use OAuth Authorization Code + PKCE (S256). Static client pre-registered via <code>OAUTH_CLIENT_ID</code>. Dynamic registration via <code>/oauth/register</code> for mcp-remote/Cursor.</div>
     </div>
     <div class="card">
       <div class="card-icon ok">🍪</div>
@@ -1045,9 +948,9 @@ section[id] { scroll-margin-top:2rem; }
     </div>
   </div>
 
-  <h3>OAuth flow for Claude Web</h3>
+  <h3>OAuth — Claude Web configuration</h3>
   <div class="code-block">
-    <div class="code-label">Configuration</div>
+    <div class="code-label">Settings</div>
     <pre>Client ID:        value of OAUTH_CLIENT_ID env var
 Client Secret:    value of OAUTH_CLIENT_SECRET env var (optional)
 Authorization:    https://api.example.com/oauth/authorize
@@ -1056,7 +959,7 @@ Callback URL:     https://claude.ai/api/mcp/auth_callback
 PKCE:             S256 (required)</pre>
   </div>
 
-  <h3>MCP connection for Claude Desktop / mcp-remote</h3>
+  <h3>Direct Bearer token — Claude Desktop / mcp-remote</h3>
   <div class="code-block">
     <div class="code-label">claude_desktop_config.json</div>
     <pre>{
@@ -1072,74 +975,58 @@ PKCE:             S256 (required)</pre>
 }</pre>
   </div>
 
-  <h3>Direct Bearer token (Cursor, API testing)</h3>
-  <div class="code-block">
-    <div class="code-label">curl</div>
-    <pre>curl -X POST https://api.example.com/mcp \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}},"id":1}'</pre>
-  </div>
-
-  <h3>Admin access</h3>
-  <p style="color:var(--t2);margin-bottom:1rem;font-size:.9375rem;line-height:1.7">Admin access to the web UI is controlled by the <span class="inline-code">is_admin</span> flag in the <span class="inline-code">users</span> table (set via <code>/admin/users/:username/toggle-admin</code>) and the <span class="inline-code">ADMIN_USERS</span> env var (comma-separated, applies to env-only users). Admin flag is baked into the session cookie and verified on every admin request without a DB query.</p>
-
   <h3>Recovery access</h3>
-  <p style="color:var(--t2);font-size:.9375rem;line-height:1.7">Set <span class="inline-code">RECOVERY_TOKEN</span> (32+ chars) in Railway env vars. Log into the web UI with username <code>recovery</code> and this token as the password. Grants full admin access. Remove the env var after use.</p>
+  <p>Set <span class="inline-code">RECOVERY_TOKEN</span> (32+ chars) in Railway env vars. Log in with username <code>recovery</code> and this token as the password. Grants full admin access. Remove the env var immediately after use.</p>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     ENVIRONMENT VARIABLES
-════════════════════════════════════════════════════ -->
+<!-- ════════════ ENV VARS ════════════ -->
 <section class="section" id="env">
   <div class="section-label">Reference</div>
   <h2 class="section-title">Environment Variables</h2>
 
-  <h3>cp-legal-mcp (Railway service 1 — public)</h3>
+  <h3>cp-legal-mcp (Railway — public service)</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Variable</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>AUSLAW_BASE_URL</code></td><td class="req">Required</td><td>—</td><td>Private URL of auslaw-mcp. Railway reference variable: <code>http://$&#123;&#123;auslaw-mcp.RAILWAY_PRIVATE_DOMAIN&#125;&#125;:3000</code></td></tr>
-        <tr><td><code>ISAACUS_API_KEY</code></td><td class="req">Required</td><td>—</td><td>Isaacus API key for Kanon model access. Obtain from isaacus.com.</td></tr>
-        <tr><td><code>DATABASE_URL</code></td><td class="req">Required</td><td>—</td><td>PostgreSQL connection string. Railway injects this automatically from the linked database.</td></tr>
-        <tr><td><code>OAUTH_ISSUER</code></td><td class="opt">Optional</td><td>https://api.example.com</td><td>OAuth issuer URL. Must be the public base URL with no trailing slash.</td></tr>
-        <tr><td><code>OAUTH_CLIENT_ID</code></td><td class="opt">Optional</td><td>—</td><td>Static OAuth client ID for Claude Web / ChatGPT pre-registration.</td></tr>
-        <tr><td><code>OAUTH_CLIENT_SECRET</code></td><td class="opt">Optional</td><td>—</td><td>Static OAuth client secret. Recommended for production; PKCE-only clients (mcp-remote, Cursor) don't need it.</td></tr>
-        <tr><td><code>SESSION_SECRET</code></td><td class="opt">Optional</td><td>falls back to MCP_AUTH_TOKENS</td><td>HMAC key for session cookies. Explicit secret strongly recommended in production.</td></tr>
-        <tr><td><code>ADMIN_USERS</code></td><td class="opt">Optional</td><td>admin</td><td>Comma-separated list of usernames with admin access (applies to env-only users).</td></tr>
-        <tr><td><code>MCP_AUTH_TOKENS</code></td><td class="opt">Optional</td><td>—</td><td>Fallback auth: <code>user1:token1,user2:token2</code>. Used if user not found in DB. Also seeds DB on first startup via migration.</td></tr>
-        <tr><td><code>ABR_GUID</code></td><td class="opt">Optional</td><td>—</td><td>ABR web services GUID for ABN lookups. Free registration at abr.business.gov.au/Tools/WebServices.</td></tr>
-        <tr><td><code>DEFAULT_MATTER_REF</code></td><td class="opt">Optional</td><td>—</td><td>Fallback matter reference when no <code>matter_ref</code> is passed in a tool call. E.g. <code>general-research</code>.</td></tr>
-        <tr><td><code>RECOVERY_TOKEN</code></td><td class="opt">Optional</td><td>—</td><td>32+ char recovery password. Log in as username <code>recovery</code> with this value. Remove after use.</td></tr>
-        <tr><td><code>AUSLAW_TIMEOUT_MS</code></td><td class="opt">Optional</td><td>30000</td><td>Timeout for auslaw-mcp calls in milliseconds. Must be less than auslaw-mcp's own 60 s timeout.</td></tr>
-        <tr><td><code>PORT</code></td><td class="opt">Optional</td><td>8080</td><td>HTTP port. Railway sets this automatically.</td></tr>
-        <tr><td><code>LOG_LEVEL</code></td><td class="opt">Optional</td><td>info</td><td><code>debug | info | warn | error</code></td></tr>
-        <tr><td><code>ENCRYPTION_KEY</code></td><td class="opt">Optional</td><td>—</td><td>32+ char key for future encrypted config. Not currently in use.</td></tr>
+        <tr><td><code>AUSLAW_BASE_URL</code></td><td class="er">Required</td><td>—</td><td>Private URL of auslaw-mcp. Railway reference: <code>http://$&#123;&#123;auslaw-mcp.RAILWAY_PRIVATE_DOMAIN&#125;&#125;:3000</code></td></tr>
+        <tr><td><code>ISAACUS_API_KEY</code></td><td class="er">Required</td><td>—</td><td>Isaacus API key for Kanon model access.</td></tr>
+        <tr><td><code>DATABASE_URL</code></td><td class="er">Required</td><td>—</td><td>PostgreSQL connection string. Railway injects automatically.</td></tr>
+        <tr><td><code>OAUTH_ISSUER</code></td><td class="muted">Optional</td><td>https://api.example.com</td><td>OAuth issuer URL. Public base URL, no trailing slash.</td></tr>
+        <tr><td><code>OAUTH_CLIENT_ID</code></td><td class="muted">Optional</td><td>—</td><td>Static OAuth client ID for Claude Web / ChatGPT pre-registration.</td></tr>
+        <tr><td><code>OAUTH_CLIENT_SECRET</code></td><td class="muted">Optional</td><td>—</td><td>Static OAuth client secret. PKCE-only clients don't need it.</td></tr>
+        <tr><td><code>SESSION_SECRET</code></td><td class="muted">Optional</td><td>falls back to MCP_AUTH_TOKENS</td><td>HMAC key for session cookies. Explicit secret strongly recommended.</td></tr>
+        <tr><td><code>ADMIN_USERS</code></td><td class="muted">Optional</td><td>admin</td><td>Comma-separated usernames with admin access (env-only users).</td></tr>
+        <tr><td><code>MCP_AUTH_TOKENS</code></td><td class="muted">Optional</td><td>—</td><td>Fallback auth: <code>user1:token1,user2:token2</code>. Seeds DB on first startup.</td></tr>
+        <tr><td><code>ABR_GUID</code></td><td class="muted">Optional</td><td>—</td><td>ABR web services GUID for ABN lookups. Free at abr.business.gov.au/Tools/WebServices.</td></tr>
+        <tr><td><code>DEFAULT_MATTER_REF</code></td><td class="muted">Optional</td><td>—</td><td>Fallback matter reference when no <code>matter_ref</code> is passed in a tool call.</td></tr>
+        <tr><td><code>RECOVERY_TOKEN</code></td><td class="muted">Optional</td><td>—</td><td>32+ char recovery password. Log in as <code>recovery</code>. Remove after use.</td></tr>
+        <tr><td><code>AUSLAW_TIMEOUT_MS</code></td><td class="muted">Optional</td><td>30000</td><td>Timeout for auslaw-mcp calls in ms. Must be less than auslaw-mcp's 60 s timeout.</td></tr>
+        <tr><td><code>PORT</code></td><td class="muted">Optional</td><td>8080</td><td>HTTP port. Railway sets automatically.</td></tr>
+        <tr><td><code>LOG_LEVEL</code></td><td class="muted">Optional</td><td>info</td><td><code>debug | info | warn | error</code></td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>auslaw-mcp (Railway service 2 — private)</h3>
+  <h3>auslaw-mcp (Railway — private service)</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Variable</th><th>Required</th><th>Value</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>MCP_TRANSPORT</code></td><td class="req">Required</td><td>http</td><td>Must be <code>http</code> for Railway deployment.</td></tr>
-        <tr><td><code>PORT</code></td><td class="opt">Optional</td><td>3000</td><td>HTTP port. Must match what cp-legal-mcp connects to.</td></tr>
-        <tr><td><code>LOG_LEVEL</code></td><td class="opt">Optional</td><td>1</td><td>0=DEBUG, 1=INFO, 2=WARN, 3=ERROR</td></tr>
-        <tr><td><code>AUSTLII_TIMEOUT</code></td><td class="opt">Optional</td><td>60000</td><td>AustLII request timeout in ms.</td></tr>
+        <tr><td><code>MCP_TRANSPORT</code></td><td class="er">Required</td><td>http</td><td>Must be <code>http</code> for Railway deployment.</td></tr>
+        <tr><td><code>PORT</code></td><td class="muted">Optional</td><td>3000</td><td>HTTP port. Must match what cp-legal-mcp connects to.</td></tr>
+        <tr><td><code>LOG_LEVEL</code></td><td class="muted">Optional</td><td>1 (INFO)</td><td>0=DEBUG, 1=INFO, 2=WARN, 3=ERROR</td></tr>
+        <tr><td><code>AUSTLII_TIMEOUT</code></td><td class="muted">Optional</td><td>60000</td><td>AustLII request timeout in ms.</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>App config (runtime — stored in PostgreSQL)</h3>
-  <p style="color:var(--t2);font-size:.875rem;margin-bottom:.75rem">Set and managed via <code>/admin/config</code>. Editable at runtime without redeployment.</p>
+  <h3>Runtime app config (PostgreSQL — set via <a href="/admin/config">/admin/config</a>)</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>spend_cap_monthly_per_user_usd</code></td><td>—</td><td>Global default monthly spend cap per user in USD. Overridden by per-user <code>spend_cap_monthly_usd</code> column on the users table.</td></tr>
+        <tr><td><code>spend_cap_monthly_per_user_usd</code></td><td>—</td><td>Global default monthly spend cap per user (USD). Overridden by per-user cap on the users table.</td></tr>
         <tr><td><code>spend_cap_monthly_global_usd</code></td><td>—</td><td>Hard monthly cap across all users combined.</td></tr>
         <tr><td><code>spend_cap_alert_threshold_pct</code></td><td>80</td><td>Log a warning when a user's spend reaches this percentage of their cap.</td></tr>
       </tbody>
@@ -1147,66 +1034,30 @@ PKCE:             S256 (required)</pre>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     DATABASE SCHEMA
-════════════════════════════════════════════════════ -->
+<!-- ════════════ DATABASE ════════════ -->
 <section class="section" id="database">
   <div class="section-label">Reference</div>
   <h2 class="section-title">Database Schema</h2>
-  <p class="section-desc">PostgreSQL on Railway. Schema auto-created and migrated on startup via <span class="inline-code">initDb()</span>. All migrations use <span class="inline-code">ADD COLUMN IF NOT EXISTS</span> — safe to run on existing DBs.</p>
+  <p class="section-desc">PostgreSQL on Railway. Schema auto-created and migrated on startup via <span class="inline-code">initDb()</span>. All migrations use <span class="inline-code">ADD COLUMN IF NOT EXISTS</span> — safe to run on existing databases.</p>
 
   <div class="table-wrap">
     <table>
       <thead><tr><th>Table</th><th>Purpose</th><th>Key Columns</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>users</code></td>
-          <td>User accounts, tokens, admin flag, spend caps</td>
-          <td><code>username</code> (PK), <code>token_hash</code>, <code>token_salt</code>, <code>is_admin</code>, <code>is_active</code>, <code>session_version</code>, <code>spend_cap_monthly_usd</code>, <code>last_active</code>, <code>created_at</code></td>
-        </tr>
-        <tr>
-          <td><code>matter_queries</code></td>
-          <td>Full audit log of all tool calls tagged to a matter</td>
-          <td><code>id</code>, <code>matter_ref</code>, <code>user_id</code>, <code>tool_name</code>, <code>query_text</code>, <code>jurisdiction</code>, <code>result_count</code>, <code>top_results</code> (JSONB), <code>api_tokens_used</code>, <code>accuracy_score</code>, <code>is_error</code>, <code>error_message</code>, <code>created_at</code></td>
-        </tr>
-        <tr>
-          <td><code>matters</code></td>
-          <td>Matter metadata (display name, status, notes)</td>
-          <td><code>ref</code> (PK), <code>display_name</code>, <code>status</code> (open/closed), <code>notes</code>, <code>created_at</code>, <code>updated_at</code></td>
-        </tr>
-        <tr>
-          <td><code>judgment_cache</code></td>
-          <td>30-day cache of fetched judgment full text from AustLII</td>
-          <td><code>url</code> (PK), <code>canonical_url</code>, <code>title</code>, <code>citation</code>, <code>body_text</code>, <code>char_count</code>, <code>created_at</code>, <code>expires_at</code></td>
-        </tr>
-        <tr>
-          <td><code>login_events</code></td>
-          <td>Audit log of all login, logout, and admin actions</td>
-          <td><code>id</code>, <code>username</code>, <code>event_type</code> (login/logout/token_rotated/force_logout/admin_action/token_viewed), <code>ip</code>, <code>user_agent</code>, <code>client_name</code>, <code>meta</code> (JSONB), <code>created_at</code></td>
-        </tr>
-        <tr>
-          <td><code>oauth_authorizations</code></td>
-          <td>Record of OAuth authorization grants per user per client</td>
-          <td><code>id</code>, <code>username</code>, <code>client_id</code>, <code>client_name</code>, <code>authorized_at</code>, <code>last_used_at</code>, <code>revoked_at</code></td>
-        </tr>
-        <tr>
-          <td><code>app_config</code></td>
-          <td>Runtime key-value configuration (spend caps, etc.)</td>
-          <td><code>key</code> (PK), <code>value</code>, <code>updated_at</code></td>
-        </tr>
-        <tr>
-          <td><code>precedent_watchlist</code></td>
-          <td>Citations being monitored for new citing cases</td>
-          <td><code>id</code>, <code>citation</code>, <code>label</code>, <code>last_checked</code>, <code>last_count</code>, <code>created_at</code></td>
-        </tr>
+        <tr><td><code>users</code></td><td>User accounts, tokens, admin flag, spend caps</td><td><code>username</code> (PK) · <code>token_hash</code> · <code>token_salt</code> · <code>is_admin</code> · <code>is_active</code> · <code>session_version</code> · <code>spend_cap_monthly_usd</code> · <code>last_active</code></td></tr>
+        <tr><td><code>matter_queries</code></td><td>Full audit log of all tool calls</td><td><code>id</code> · <code>matter_ref</code> · <code>user_id</code> · <code>tool_name</code> · <code>query_text</code> · <code>jurisdiction</code> · <code>result_count</code> · <code>top_results</code> (JSONB) · <code>api_tokens_used</code> · <code>accuracy_score</code> · <code>is_error</code> · <code>created_at</code></td></tr>
+        <tr><td><code>matters</code></td><td>Matter metadata</td><td><code>ref</code> (PK) · <code>display_name</code> · <code>status</code> (open/closed) · <code>notes</code> · <code>created_at</code></td></tr>
+        <tr><td><code>judgment_cache</code></td><td>30-day cache of AustLII full-text</td><td><code>url</code> (PK) · <code>title</code> · <code>citation</code> · <code>body_text</code> · <code>expires_at</code></td></tr>
+        <tr><td><code>login_events</code></td><td>Audit log of all auth actions</td><td><code>username</code> · <code>event_type</code> (login/logout/token_rotated/force_logout/admin_action/token_viewed) · <code>ip</code> · <code>user_agent</code> · <code>client_name</code> · <code>meta</code> (JSONB)</td></tr>
+        <tr><td><code>oauth_authorizations</code></td><td>OAuth grant records per user/client</td><td><code>username</code> · <code>client_id</code> · <code>client_name</code> · <code>authorized_at</code> · <code>revoked_at</code></td></tr>
+        <tr><td><code>app_config</code></td><td>Runtime key-value config</td><td><code>key</code> (PK) · <code>value</code> · <code>updated_at</code></td></tr>
+        <tr><td><code>precedent_watchlist</code></td><td>Citations monitored for new citing cases</td><td><code>citation</code> · <code>label</code> · <code>last_checked</code> · <code>last_count</code></td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     BILLING & COST
-════════════════════════════════════════════════════ -->
+<!-- ════════════ BILLING ════════════ -->
 <section class="section" id="billing">
   <div class="section-label">Reference</div>
   <h2 class="section-title">Billing &amp; Cost</h2>
@@ -1214,73 +1065,34 @@ PKCE:             S256 (required)</pre>
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Tool(s)</th><th>Isaacus Model</th><th>Rate</th><th>Notes</th></tr></thead>
+      <thead><tr><th>Tool(s)</th><th>Model</th><th>Rate</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>ask_judgment</code> <code>ask_legislation</code> <code>compare_cases</code> <code>get_legislation</code> <code>draft_research_memo</code></td>
-          <td>Kanon Answer Extractor</td>
-          <td class="warn">$1.50 / 1M tokens</td>
-          <td>Per question extraction. Passes relevant passages only (not full document).</td>
-        </tr>
-        <tr>
-          <td><code>enrich_judgment</code> <code>build_chronology</code></td>
-          <td>Kanon 2 Enricher</td>
-          <td class="er">$3.50 / 1M tokens</td>
-          <td>Full document enrichment. Most expensive per call. Use judiciously.</td>
-        </tr>
-        <tr>
-          <td><code>summarise_judgment</code></td>
-          <td>Blended (1× Enricher + 5× Extractor)</td>
-          <td class="warn">$1.833 / 1M tokens</td>
-          <td>Blended rate across 6 API calls on same document. Tokens logged = sum of all 6.</td>
-        </tr>
-        <tr>
-          <td><code>research_cases</code> <code>research_legislation</code> <code>search_by_citation</code> <code>find_citing_cases</code> <code>find_related_cases</code> <code>classify_legal_issue</code></td>
-          <td>Kanon Universal Classifier</td>
-          <td class="ok">$1.00 / 1M tokens</td>
-          <td>Reranking and classification. Low token usage per result.</td>
-        </tr>
-        <tr>
-          <td><code>get_judgment</code> <code>format_citation</code> <code>lookup_entity</code> <code>lookup_entities_bulk</code> <code>search_regulatory_decisions</code> <code>search_asx_announcements</code> <code>check_limitation_period</code> <code>check_filing_deadline</code> <code>get_matter_history</code> <code>monitor_precedents</code> <code>inspect_database</code></td>
-          <td>None</td>
-          <td class="ok">$0</td>
-          <td>No Isaacus calls. AustLII/ASIC/ABR/ASX scraping only. api_tokens_used always 0.</td>
-        </tr>
+        <tr><td><code>ask_judgment</code> <code>ask_legislation</code> <code>compare_cases</code> <code>get_legislation</code> <code>draft_research_memo</code></td><td>Kanon Answer Extractor</td><td class="warn">$1.50 / 1M tokens</td><td>Per-question extraction. Relevant passages only, not full document.</td></tr>
+        <tr><td><code>enrich_judgment</code> <code>build_chronology</code></td><td>Kanon 2 Enricher</td><td class="er">$3.50 / 1M tokens</td><td>Full document enrichment. Most expensive per call. Use judiciously.</td></tr>
+        <tr><td><code>summarise_judgment</code></td><td>Blended (1× Enricher + 5× Extractor)</td><td class="warn">$1.833 / 1M tokens</td><td>Blended rate across 6 API calls on same document.</td></tr>
+        <tr><td><code>research_cases</code> <code>research_legislation</code> <code>search_by_citation</code> <code>find_citing_cases</code> <code>find_related_cases</code> <code>classify_legal_issue</code></td><td>Kanon Universal Classifier</td><td class="ok">$1.00 / 1M tokens</td><td>Reranking and classification. Low token usage per result.</td></tr>
+        <tr><td><code>get_judgment</code> <code>format_citation</code> <code>lookup_entity</code> <code>lookup_entities_bulk</code> <code>search_regulatory_decisions</code> <code>search_asx_announcements</code> <code>check_limitation_period</code> <code>check_filing_deadline</code> <code>get_matter_history</code> <code>monitor_precedents</code> <code>inspect_database</code></td><td>None</td><td class="ok">$0</td><td>No Isaacus calls. api_tokens_used always 0.</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>Spend caps</h3>
-  <div class="two-col">
-    <div class="card">
-      <div class="card-title">Per-user cap</div>
-      <div class="card-desc">Set via <code>/admin/users/:username</code> → Spend Cap form. Stored in <code>users.spend_cap_monthly_usd</code>. Takes precedence over the global default. Resets monthly (AEST).</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Global default cap</div>
-      <div class="card-desc">Set via <code>/admin/config</code> → <code>spend_cap_monthly_per_user_usd</code>. Applied to users without a per-user cap. Alert threshold at <code>spend_cap_alert_threshold_pct</code>% (default 80%).</div>
-    </div>
-  </div>
-
-  <div class="callout callout-wa">
+  <div class="callout callout-ac">
     <div class="callout-title">Billing exports</div>
     Per-matter CSV: <code>/matters/:ref/export.csv</code> — download from the matter detail page.<br>
-    Global CSV (admin): <code>/admin/billing-export.csv</code> — all matters, all users. Supports optional <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code> query params.
+    Global export (admin): <code>/admin/billing-export.csv</code> — all matters, all users. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     DEPLOYMENT
-════════════════════════════════════════════════════ -->
+<!-- ════════════ DEPLOYMENT ════════════ -->
 <section class="section" id="deployment">
   <div class="section-label">Operations</div>
   <h2 class="section-title">Deployment</h2>
 
   <div class="two-col">
     <div>
-      <h3>Railway setup</h3>
+      <h3>Railway config</h3>
       <div class="code-block">
-        <div class="code-label">railway.toml (cp-legal-mcp)</div>
+        <div class="code-label">railway.toml</div>
         <pre>[build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
@@ -1291,7 +1103,6 @@ healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3</pre>
       </div>
-      <p style="color:var(--t2);font-size:.875rem;line-height:1.6;margin-top:.75rem">Railway gates new deployments on the <code>/health</code> endpoint — returns 503 if DB is unreachable, keeping the old deployment live. 10-second SIGTERM force-exit guard prevents hanging on idle keep-alive connections.</p>
     </div>
     <div>
       <h3>Cloudflare DNS</h3>
@@ -1299,39 +1110,36 @@ restartPolicyMaxRetries = 3</pre>
         <div class="code-label">DNS record</div>
         <pre>Type:    CNAME
 Name:    api
-Target:  [Railway public URL of cp-legal-mcp]
+Target:  [Railway public URL — cp-legal-mcp]
 Proxy:   Proxied (orange cloud)</pre>
       </div>
-      <p style="color:var(--t2);font-size:.875rem;line-height:1.6;margin-top:.75rem">Railway sets <code>app.set('trust proxy', 1)</code> to read the real client IP from <code>X-Forwarded-For</code>. The custom <code>clientIp(req)</code> helper reads the <strong>leftmost</strong> IP from the header (real client, not proxy).</p>
+      <p>Railway sets <code>app.set('trust proxy', 1)</code>. The <code>clientIp(req)</code> helper reads the <strong>leftmost</strong> IP from <code>X-Forwarded-For</code> (real client, not proxy).</p>
     </div>
   </div>
 
-  <h3>Node.js version</h3>
   <div class="callout callout-wa">
-    <div class="callout-title">Node 22 — required</div>
-    Both Dockerfiles use <code>FROM node:22-alpine</code>. Node.js 20 reaches end-of-life <strong>30 April 2026</strong>. Do not downgrade. <code>engines: "node": ">=22.0.0"</code> in both package.json files.
+    <div class="callout-title">Node.js 22 required</div>
+    Both Dockerfiles use <code>FROM node:22-alpine</code>. Node.js 20 reached end-of-life 30 April 2026. Do not downgrade. <code>"node": ">=22.0.0"</code> in both package.json files.
   </div>
 
   <h3>Deploy checklist</h3>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Step</th><th>What to do</th><th>Why</th></tr></thead>
+      <thead><tr><th>#</th><th>Step</th><th>Why</th></tr></thead>
       <tbody>
         <tr><td>1</td><td>Push to GitHub (main branch)</td><td>Railway auto-deploys on push</td></tr>
         <tr><td>2</td><td>Watch Railway build logs for TypeScript errors</td><td><code>npm run build</code> runs in Dockerfile</td></tr>
         <tr><td>3</td><td>Check <code>/health</code> returns 200</td><td>Confirms DB connection and startup migration ran</td></tr>
         <tr><td>4</td><td>Check <code>/health/auslaw</code></td><td>Confirms private network connectivity to auslaw-mcp</td></tr>
         <tr><td>5</td><td>Test an MCP initialize call</td><td>Confirms auth middleware and MCP handler are working</td></tr>
-        <tr><td>6</td><td>Log into <code>/matters</code></td><td>Confirms session auth, DB reads</td></tr>
+        <tr><td>6</td><td>Log into <code>/matters</code></td><td>Confirms session auth and DB reads</td></tr>
         <tr><td>7</td><td>Check <code>/admin</code> → service health card</td><td>End-to-end health of both services</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════════════════
-     SOPs & RUNBOOKS
-════════════════════════════════════════════════════ -->
+<!-- ════════════ SOPs ════════════ -->
 <section class="section" id="sop">
   <div class="section-label">Operations</div>
   <h2 class="section-title">SOPs &amp; Runbooks</h2>
@@ -1340,179 +1148,168 @@ Proxy:   Proxied (orange cloud)</pre>
   <div class="code-block"><pre>1. Navigate to /admin/users/new
 2. Enter username (lowercase, alphanumeric + hyphens)
 3. Click "Create user"
-4. Copy the token shown — it is displayed ONCE and cannot be recovered
-5. Send the token to the user via a secure channel (not email)
-6. User connects their MCP client with:
-   - URL: https://api.example.com/mcp
-   - Token: paste as password / bearer token
-   - Claude Web: add as remote MCP server → OAuth flow handles auth automatically</pre></div>
+4. Copy the token shown — displayed ONCE and cannot be recovered
+5. Send via secure channel (not email)
+6. User connects MCP client:
+   Claude Web: Add as remote MCP server → OAuth flow handles auth
+   Direct:     Authorization: Bearer &lt;token&gt; on POST /mcp</pre></div>
 
   <h3>SOP 2 — Rotate a compromised token</h3>
   <div class="code-block"><pre>1. Navigate to /admin/users/:username
 2. Click "Rotate token"
-3. New token is displayed once — save immediately
+3. New token displayed once — save immediately
 4. Send new token to user via secure channel
-5. All existing MCP sessions using the old token are immediately rejected
-6. User must re-authenticate Claude Web / Cursor / other clients with the new token</pre></div>
+5. Old token immediately invalid — all existing MCP sessions rejected
+6. User must re-authenticate all clients with new token</pre></div>
 
   <h3>SOP 3 — Force-log a user out of the web UI</h3>
   <div class="code-block"><pre>1. Navigate to /admin/users/:username
 2. Click "Force logout all sessions"
-3. This increments the user's session_version in the DB
-4. All existing cvn_matters session cookies for that user are immediately invalid
-5. User will be redirected to /matters/login on their next page load
-6. Login event logged with event_type = 'force_logout'</pre></div>
+3. Increments session_version in DB
+4. All cvn_matters cookies for that user immediately invalid
+5. User redirected to /matters/login on next page load
+6. Logged as event_type = 'force_logout'</pre></div>
 
-  <h3>SOP 4 — Set spend cap for a user</h3>
+  <h3>SOP 4 — Set per-user spend cap</h3>
   <div class="code-block"><pre>1. Navigate to /admin/users/:username
 2. Find the "Spend Cap" section
-3. Enter USD amount (e.g. 50 for $50/month) — leave blank to use global default
+3. Enter USD amount (e.g. 50 = $50/month) — leave blank for global default
 4. Click "Set cap"
-5. Dashboard at /matters/dashboard will show a spend progress bar
-6. When cap is reached, tool calls return HTTP 429 with error: spend_cap_exceeded
-7. To remove individual cap: clear the field and save → falls back to global default</pre></div>
+5. When cap reached: tool calls return HTTP 429, error: spend_cap_exceeded
+6. To remove: clear field and save → falls back to global default</pre></div>
 
   <h3>SOP 5 — Set global spend cap</h3>
   <div class="code-block"><pre>1. Navigate to /admin/config
-2. Find spend_cap_monthly_per_user_usd → set global default in USD
-3. Find spend_cap_alert_threshold_pct → set alert threshold (default 80%)
-4. Find spend_cap_monthly_global_usd → optional hard cap across ALL users combined
+2. spend_cap_monthly_per_user_usd → global default per user (USD)
+3. spend_cap_alert_threshold_pct  → alert threshold (default 80%)
+4. spend_cap_monthly_global_usd   → optional hard cap across ALL users
 5. Changes apply immediately — no restart required</pre></div>
 
   <h3>SOP 6 — Recover admin access (locked out)</h3>
-  <div class="code-block"><pre>1. In Railway → cp-legal-mcp service → Variables
-2. Add: RECOVERY_TOKEN = [generate 40+ char random string, e.g. via openssl rand -base64 32]
-3. Save (triggers redeploy)
-4. After redeploy, go to https://api.example.com/matters/login
+  <div class="code-block"><pre>1. Railway → cp-legal-mcp service → Variables
+2. Add: RECOVERY_TOKEN = [40+ char random string]
+          e.g. openssl rand -base64 32
+3. Save → redeploy
+4. Go to https://api.example.com/matters/login
 5. Username: recovery    Password: [the RECOVERY_TOKEN value]
-6. You now have full admin access
-7. Create/fix your real admin account from /admin/users
-8. IMPORTANT: Remove RECOVERY_TOKEN env var from Railway immediately after
-9. Save (triggers redeploy to clear the recovery token)</pre></div>
+6. Fix real admin account from /admin/users
+7. IMPORTANT: Remove RECOVERY_TOKEN from Railway immediately
+8. Save → redeploy to clear recovery access</pre></div>
 
   <h3>SOP 7 — auslaw-mcp is unreachable</h3>
   <div class="code-block"><pre>Diagnosis:
   curl https://api.example.com/health/auslaw
-  Check Railway logs for auslaw-mcp service
 
 Common causes:
-  A) auslaw-mcp service crashed → restart from Railway dashboard
-  B) AUSLAW_BASE_URL is wrong → verify it uses Railway private domain, not public URL
-     Correct format: http://[service-name].railway.internal:3000
-  C) auslaw-mcp is not in same Railway project → must be co-located for private networking
+  A) auslaw-mcp crashed → restart from Railway dashboard
+  B) AUSLAW_BASE_URL wrong → must use Railway private domain:
+     http://[service].railway.internal:3000
+  C) Not co-located in same Railway project → private networking requires same project
 
-Impact:
-  Tools that call auslaw-mcp return: { error: 'upstream_unavailable' }
-  These tools are affected: research_cases, research_legislation, get_judgment,
-    ask_judgment, enrich_judgment, summarise_judgment, find_citing_cases,
-    find_related_cases, compare_cases, search_by_citation, format_citation, get_legislation
+Affected tools (all call auslaw-mcp):
+  research_cases, research_legislation, get_judgment, ask_judgment,
+  enrich_judgment, summarise_judgment, find_citing_cases, find_related_cases,
+  compare_cases, search_by_citation, format_citation, get_legislation
 
-Tools NOT affected (no auslaw dependency):
+Unaffected tools:
   lookup_entity, lookup_entities_bulk, search_regulatory_decisions,
   search_asx_announcements, check_limitation_period, check_filing_deadline,
   get_matter_history, build_chronology, draft_research_memo, monitor_precedents</pre></div>
 
   <h3>SOP 8 — Monitor precedent watchlist</h3>
-  <div class="code-block"><pre>Via Claude (MCP tool):
-  monitor_precedents(action: "list")              — see all watched citations
+  <div class="code-block"><pre>Via Claude (MCP):
+  monitor_precedents(action: "list")
   monitor_precedents(action: "add", citation: "[2024] HCA 1", label: "Smith v Jones")
-  monitor_precedents(action: "check")             — scan all for new citing cases
+  monitor_precedents(action: "check")   ← scans all for new citing cases
   monitor_precedents(action: "remove", citation: "[2024] HCA 1")
 
 Via Admin UI:
-  /admin/watchlist — add/remove citations, see last-check counts</pre></div>
+  /admin/watchlist → add/remove citations, view last-check counts</pre></div>
 
   <h3>SOP 9 — Export billing data</h3>
-  <div class="code-block"><pre>Per-matter CSV:
-  /matters/:ref → click "Download CSV" button
-  OR: GET /matters/:ref/export.csv
+  <div class="code-block"><pre>Per-matter:     /matters/:ref → "Download CSV"
+Global (admin): /admin → Matters → "Export all billing (CSV)"
+                GET /admin/billing-export.csv?from=2024-01-01&to=2024-12-31
 
-Global billing export (admin):
-  /admin → Matters section → "Export all billing (CSV)"
-  OR: GET /admin/billing-export.csv
-  With date filter: GET /admin/billing-export.csv?from=2024-01-01&to=2024-12-31
-
-CSV format: Matter Ref, Display Name, Status, First Activity, Last Activity,
-            Queries, Tokens, Cost (USD), Cost (AUD)
-Includes TOTAL summary row at bottom.</pre></div>
+Format: Matter Ref, Display Name, Status, First Activity, Last Activity,
+        Queries, Tokens, Cost (USD), Cost (AUD)
+Includes TOTAL summary row.</pre></div>
 
   <h3>SOP 10 — Purge judgment cache</h3>
-  <div class="code-block"><pre>Normal operation: judgments cached 30 days in judgment_cache table.
-Cache hits are logged at DEBUG level: "judgment cache hit".
+  <div class="code-block"><pre>Normal TTL: 30 days (judgments are permanent documents)
 
-Purge expired entries:
-  /admin/data → "Purge expired cache" → removes entries older than 30 days
+Purge expired:  /admin/data → "Purge expired cache"
+Purge all:      /admin/data → "Purge all judgment cache"
 
-Purge all:
-  /admin/data → "Purge all judgment cache" → clears entire cache
-  Next fetch of any cached judgment will re-fetch from AustLII
+Use case: AustLII updated a document and you need the fresh version.</pre></div>
 
-When to purge: if AustLII updated a document and you need the fresh version.</pre></div>
-
-  <div class="divider"></div>
+  <hr>
 
   <h3>Rate limits summary</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Layer</th><th>Limit</th><th>Scope</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>cp-legal-mcp IP rate limit</td><td>60 req/min</td><td>Per client IP, pre-auth</td><td>Protects against unauthenticated flood. Returns 429.</td></tr>
-        <tr><td>cp-legal-mcp user rate limit</td><td>60 req/min</td><td>Per authenticated user</td><td>Applied after auth middleware. Keyed on username. Returns 429.</td></tr>
-        <tr><td>auslaw-mcp AustLII rate limit</td><td>10 req/min</td><td>Global (token bucket)</td><td>Inside auslaw-mcp. Queue-based — callers may wait, not fail.</td></tr>
-        <tr><td>auslaw-mcp LawCite rate limit</td><td>5 req/min</td><td>Global (token bucket)</td><td>Inside auslaw-mcp for find_citing_cases only.</td></tr>
-        <tr><td>ASIC Connect / ABR</td><td>Soft (retry on 429)</td><td>Global</td><td>2 retries with 1s / 2s delay. No explicit published limit.</td></tr>
-        <tr><td>ip-api.com (geolocation)</td><td>~45 req/min</td><td>Global</td><td>Fire-and-forget. Failure silently ignored. In-memory cache reduces calls.</td></tr>
-        <tr><td>Spend cap</td><td>Configurable USD/month</td><td>Per user and/or global</td><td>Returns HTTP 429 with <code>error: spend_cap_exceeded</code> when cap reached.</td></tr>
+        <tr><td>IP rate limit (pre-auth)</td><td>60 req/min</td><td>Per client IP</td><td>Returns 429.</td></tr>
+        <tr><td>User rate limit (post-auth)</td><td>60 req/min</td><td>Per authenticated user</td><td>Keyed on username. Returns 429.</td></tr>
+        <tr><td>AustLII (auslaw-mcp)</td><td>10 req/min</td><td>Global (token bucket)</td><td>Queue-based — callers may wait, not fail.</td></tr>
+        <tr><td>LawCite (auslaw-mcp)</td><td>5 req/min</td><td>Global</td><td>For find_citing_cases only.</td></tr>
+        <tr><td>ASIC Connect / ABR</td><td>Soft (retry on 429)</td><td>Global</td><td>2 retries with 1 s / 2 s delay.</td></tr>
+        <tr><td>ip-api.com (geo)</td><td>~45 req/min</td><td>Global</td><td>Fire-and-forget. In-memory cache reduces calls.</td></tr>
+        <tr><td>Spend cap</td><td>Configurable USD/month</td><td>Per user + global</td><td>Returns HTTP 429 with <code>error: spend_cap_exceeded</code>.</td></tr>
       </tbody>
     </table>
   </div>
-
 </section>
 
-<!-- ── Footer ── -->
-<div style="padding:2rem 3rem;border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
-  <div>
-    <span style="font-family:'DM Serif Display',Georgia,serif;font-size:.9375rem;color:var(--t1)">CP Legal</span>
-    <span style="color:var(--t3);font-size:.8125rem;margin-left:.5rem">— Internal Technical Reference</span>
+<!-- Footer -->
+<div style="padding:1.75rem 3rem;border-top:3px solid var(--accent);background:var(--primary);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <img src="" alt="" style="height:20px;width:auto;filter:brightness(0) invert(1);opacity:.7" onerror="this.style.display='none'">
+    <span style="font-family:'Playfair Display',Georgia,serif;font-size:.9375rem;color:rgba(255,255,255,.8)">CP Legal</span>
+    <span style="color:rgba(255,255,255,.3);font-size:.8125rem">— Internal Technical Reference</span>
   </div>
-  <div style="font-size:.75rem;color:var(--t3)">cp-legal-mcp · Node 22 · Railway · <a href="https://api.example.com/health">api.example.com</a></div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.35)">cp-legal-mcp · Node 22 · Railway · <a href="https://api.example.com/health" style="color:rgba(255,255,255,.4)">api.example.com</a></div>
 </div>
 
 </main>
 </div>
 
 <script>
-// Simple scroll-spy for nav links
 (function(){
-  var links = document.querySelectorAll('.nav-link');
+  var main = document.getElementById('main-scroll');
+  var links = Array.from(document.querySelectorAll('.nav-link'));
   var sections = Array.from(document.querySelectorAll('section[id]'));
-  var hero = document.querySelector('.hero');
+  if(!main) return;
 
+  // ── Scroll spy ──
   function onScroll(){
-    var scrollY = document.querySelector('.main').scrollTop;
+    var scrollTop = main.scrollTop;
+    var mainTop = main.getBoundingClientRect().top;
     var current = '';
     sections.forEach(function(s){
-      if(scrollY >= s.offsetTop - 60) current = s.id;
+      var top = s.getBoundingClientRect().top - mainTop;
+      if(top <= 80) current = s.id;
     });
     links.forEach(function(l){
-      var href = l.getAttribute('href');
-      if(href === '#' + current){ l.classList.add('active'); }
-      else { l.classList.remove('active'); }
+      l.classList.toggle('active', l.getAttribute('href') === '#' + current);
     });
   }
-
-  var main = document.querySelector('.main');
-  if(main) main.addEventListener('scroll', onScroll, {passive:true});
+  main.addEventListener('scroll', onScroll, {passive:true});
   onScroll();
 
-  // Smooth scroll from nav links
+  // ── Smooth scroll ──
   links.forEach(function(l){
     l.addEventListener('click', function(e){
       var href = l.getAttribute('href');
       if(!href || href[0] !== '#') return;
+      var id = href.slice(1);
+      var target = document.getElementById(id);
+      if(!target) return;
       e.preventDefault();
-      var target = document.getElementById(href.slice(1));
-      if(target && main){ main.scrollTo({ top: target.offsetTop - 20, behavior: 'smooth' }); }
+      var mainTop = main.getBoundingClientRect().top;
+      var targetTop = target.getBoundingClientRect().top;
+      main.scrollTo({ top: main.scrollTop + (targetTop - mainTop) - 24, behavior:'smooth' });
     });
   });
 })();
