@@ -273,7 +273,7 @@ section[id] { scroll-margin-top:1.5rem; }
   </div>
   <div class="hero-eyebrow">Internal Technical Reference</div>
   <h1 class="hero-title">CP Legal MCP<br><em>System Documentation</em></h1>
-  <p class="hero-desc">Complete reference for the CP Legal remote MCP server — architecture, all 25 tools, URL paths, authentication, environment variables, database schema, billing, deployment, and operational runbooks.</p>
+  <p class="hero-desc">Complete reference for the CP Legal remote MCP server — architecture, all 21 tools, URL paths, authentication, environment variables, database schema, billing, deployment, and operational runbooks.</p>
   <div class="hero-chips">
     <span class="chip chip-pr">Remote MCP · api.example.com</span>
     <span class="chip chip-ac">Isaacus Kanon AI</span>
@@ -287,7 +287,7 @@ section[id] { scroll-margin-top:1.5rem; }
 <section class="section" id="overview">
   <div class="section-label">Overview</div>
   <h2 class="section-title">What It Is</h2>
-  <p class="section-desc">CP Legal MCP is a production remote Model Context Protocol server built for Australian legal research. It gives Claude (and other MCP clients) access to 25 specialised legal research tools covering case law, legislation, entity intelligence, regulatory decisions, ASX data, and matter management.</p>
+  <p class="section-desc">CP Legal MCP is a production remote Model Context Protocol server built for Australian legal research. It gives Claude (and other MCP clients) access to 21 specialised legal research tools covering case law, legislation, entity intelligence, regulatory decisions, ASX data, and matter management.</p>
 
   <div class="card-grid">
     <div class="card">
@@ -367,7 +367,7 @@ section[id] { scroll-margin-top:1.5rem; }
       <div class="arch-node prim">
         <div class="arch-node-label">cp-legal-mcp</div>
         <div class="arch-node-name">Tool handlers</div>
-        <div class="arch-node-sub">25 tools registered</div>
+        <div class="arch-node-sub">21 tools registered</div>
       </div>
       <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">SDK / HTTPS</span></div>
       <div class="arch-node ac">
@@ -418,7 +418,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <table>
       <thead><tr><th>Service</th><th>Role</th><th>Auth / Access</th><th>Rate Limit / Notes</th></tr></thead>
       <tbody>
-        <tr><td><strong>cp-legal-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — public</span></td><td>Main MCP server. Exposes 25 tools. Hosts web UI and OAuth endpoints.</td><td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, auslaw-mcp (private — no auth)</td><td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td></tr>
+        <tr><td><strong>cp-legal-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — public</span></td><td>Main MCP server. Exposes 21 tools. Hosts web UI and OAuth endpoints.</td><td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, auslaw-mcp (private — no auth)</td><td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td></tr>
         <tr><td><strong>auslaw-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — private</span></td><td>AustLII scraper MCP server. 9 tools for case/legislation search, document fetch, citation validation, LawCite citator.</td><td>No auth on private network. <code>MCP_TRANSPORT=http</code>, <code>PORT=3000</code></td><td>AustLII: 10 req/min. LawCite: 5 req/min. Timeout: 60 s</td></tr>
         <tr><td><strong>Isaacus Kanon API</strong><br><a href="https://isaacus.com">isaacus.com</a></td><td>Legal AI layer — Kanon 2 Enricher, Kanon Answer Extractor, Kanon Universal Classifier.</td><td><code>ISAACUS_API_KEY</code> → SDK singleton</td><td>In-memory rerank cache (5 min, 100 entries). QA cache (200 entries, LRU).</td></tr>
         <tr><td><strong>AustLII</strong><br><a href="https://www.austlii.edu.au">austlii.edu.au</a></td><td>Australian legal database. Full-text case law and legislation. Free public access via auslaw-mcp.</td><td>No API key. Accessed via auslaw-mcp only.</td><td>Rate limited by auslaw-mcp token bucket. Judgment text cached in PostgreSQL for 30 days.</td></tr>
@@ -668,30 +668,17 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">lookup_entity</span>
-        <span class="tool-desc">Look up an Australian company or person by ABN, ACN, or name. Queries ABR (for ABN/ACN) and ASIC Connect (for name/officer search). No Isaacus calls.</span>
+        <span class="tool-desc">Look up an Australian company or person by ABN, ACN, or name. Queries ABR (for ABN/ACN) and ASIC Connect (for name/officer search). Also accepts an <code>identifiers</code> array of 2–10 for parallel bulk lookups (ABR only, no ASIC fallback). No Isaacus calls.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">identifier</span><span class="param-type">string · <span class="req">req</span></span><span class="param-desc">ABN (11 digits), ACN (9 digits), or entity/person name. Auto-detected.</span>
+          <span class="param-name">identifier</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ABN (11 digits), ACN (9 digits), or entity/person name. Auto-detected.</span>
+          <span class="param-name">identifiers</span><span class="param-type">array · <span class="opt">opt</span></span><span class="param-desc">Array of 2–10 ABNs, ACNs, or names for parallel bulk lookup (ABR only). Provide either <code>identifier</code> or <code>identifiers</code>, not both.</span>
           <span class="param-name">identifier_type</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>abn | acn | name</code>. Override auto-detection.</span>
           <span class="param-name">search_type</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc"><code>company | person | all</code>. For name searches. Default <code>company</code>.</span>
           <span class="param-name">include_officers</span><span class="param-type">bool · <span class="opt">opt</span></span><span class="param-desc">Fetch current/former directors from ASIC (second request). Default <code>false</code>.</span>
           <span class="param-name">limit / matter_ref</span><span class="param-type">int · string · <span class="opt">opt</span></span><span class="param-desc">Max name search results (default <code>10</code>). Matter reference for audit log.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="tool">
-      <div class="tool-head">
-        <span class="tool-name">lookup_entities_bulk</span>
-        <span class="tool-desc">Look up multiple entities in a single call. Runs lookups concurrently. No Isaacus calls.</span>
-        <span class="tool-cost cost-0">$0</span>
-      </div>
-      <div class="tool-params">
-        <div class="param-grid">
-          <span class="param-name">identifiers</span><span class="param-type">array · <span class="req">req</span></span><span class="param-desc">Array of ABNs, ACNs, or names.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
     </div>
@@ -805,31 +792,19 @@ section[id] { scroll-margin-top:1.5rem; }
   <div class="tool-list">
     <div class="tool">
       <div class="tool-head">
-        <span class="tool-name">check_limitation_period</span>
-        <span class="tool-desc">Look up the limitation period for a cause of action across Australian jurisdictions. 17 cause-of-action types × 9 jurisdictions. Optional deadline calculation from a trigger date.</span>
+        <span class="tool-name">check_deadlines</span>
+        <span class="tool-desc">Look up limitation periods or court filing deadlines. Set <code>type</code> to <code>limitation</code> (17 cause-of-action types × 9 jurisdictions) or <code>filing</code> (8 proceeding types × 4 jurisdictions: NSW, QLD, Federal Court, FCFCOA). All computation is local — no network calls, no Isaacus.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
         <div class="param-grid">
-          <span class="param-name">cause_of_action</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>contract deed debt negligence_general negligence_pi defamation fraud contribution property_recovery judicial_review unfair_dismissal general_protections underpayment corporations_civil oppression competition misleading_conduct</code></span>
-          <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>nsw | qld | vic | sa | wa | tas | act | nt | federal</code></span>
-          <span class="param-name">trigger_date</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of triggering event. Calculates deadline and flags if urgent or overdue.</span>
-          <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="tool">
-      <div class="tool-head">
-        <span class="tool-name">check_filing_deadline</span>
-        <span class="tool-desc">Filing deadline for a court document type across NSW, QLD, Federal Court, and FCFCOA. 8 proceeding types × 4 jurisdictions. Optional deadline calculation.</span>
-        <span class="tool-cost cost-0">$0</span>
-      </div>
-      <div class="tool-params">
-        <div class="param-grid">
-          <span class="param-name">proceeding_type</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>defence response reply appeal_notice summary_judgment discovery interrogatories subpoena_objection</code></span>
-          <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>nsw | qld | federal | fcfcoa</code></span>
-          <span class="param-name">event_date</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of the trigger event (e.g. date of service). Calculates deadline and urgency flags.</span>
+          <span class="param-name">type</span><span class="param-type">enum · <span class="req">req</span></span><span class="param-desc"><code>limitation | filing</code></span>
+          <span class="param-name">cause_of_action</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc">Required for <code>limitation</code>. <code>contract deed debt negligence_general negligence_pi defamation fraud contribution property_recovery judicial_review unfair_dismissal general_protections underpayment corporations_civil oppression competition misleading_conduct</code></span>
+          <span class="param-name">jurisdiction</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc">Required for <code>limitation</code>. <code>nsw | qld | vic | sa | wa | tas | act | nt | federal</code></span>
+          <span class="param-name">date_of_accrual</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of triggering event (limitation). Calculates deadline and urgency flags.</span>
+          <span class="param-name">proceeding_type</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc">Required for <code>filing</code>. <code>defence response reply appeal_notice summary_judgment discovery interrogatories subpoena_objection</code></span>
+          <span class="param-name">filing_jurisdiction</span><span class="param-type">enum · <span class="opt">opt</span></span><span class="param-desc">Required for <code>filing</code>. <code>nsw | qld | federal | fcfcoa</code></span>
+          <span class="param-name">event_date</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">ISO date of trigger event (filing). Calculates deadline and urgency flags.</span>
           <span class="param-name">matter_ref</span><span class="param-type">string · <span class="opt">opt</span></span><span class="param-desc">Matter reference for audit log.</span>
         </div>
       </div>
@@ -1048,6 +1023,11 @@ PKCE:             S256 (required)</pre>
         <tr><td><code>matter_queries</code></td><td>Full audit log of all tool calls</td><td><code>id</code> · <code>matter_ref</code> · <code>user_id</code> · <code>tool_name</code> · <code>query_text</code> · <code>jurisdiction</code> · <code>result_count</code> · <code>top_results</code> (JSONB) · <code>api_tokens_used</code> · <code>accuracy_score</code> · <code>is_error</code> · <code>created_at</code></td></tr>
         <tr><td><code>matters</code></td><td>Matter metadata</td><td><code>ref</code> (PK) · <code>display_name</code> · <code>status</code> (open/closed) · <code>notes</code> · <code>created_at</code></td></tr>
         <tr><td><code>judgment_cache</code></td><td>30-day cache of AustLII full-text</td><td><code>url</code> (PK) · <code>title</code> · <code>citation</code> · <code>body_text</code> · <code>expires_at</code></td></tr>
+        <tr>
+          <td><code>judgment_enrichments</code></td>
+          <td><code>url</code> (PK), <code>enrichment</code> JSONB, <code>tokens_used</code>, <code>created_at</code></td>
+          <td>Permanent cache for Kanon 2 Enricher results. Avoids repeat enrichment charges (~$0.10/judgment) — keyed by judgment URL, never overwritten once set.</td>
+        </tr>
         <tr><td><code>login_events</code></td><td>Audit log of all auth actions</td><td><code>username</code> · <code>event_type</code> (login/logout/token_rotated/force_logout/admin_action/token_viewed) · <code>ip</code> · <code>user_agent</code> · <code>client_name</code> · <code>meta</code> (JSONB)</td></tr>
         <tr><td><code>oauth_authorizations</code></td><td>OAuth grant records per user/client</td><td><code>username</code> · <code>client_id</code> · <code>client_name</code> · <code>authorized_at</code> · <code>revoked_at</code></td></tr>
         <tr><td><code>app_config</code></td><td>Runtime key-value config</td><td><code>key</code> (PK) · <code>value</code> · <code>updated_at</code></td></tr>
@@ -1071,7 +1051,7 @@ PKCE:             S256 (required)</pre>
         <tr><td><code>enrich_judgment</code> <code>build_chronology</code></td><td>Kanon 2 Enricher</td><td class="er">$3.50 / 1M tokens</td><td>Full document enrichment. Most expensive per call. Use judiciously.</td></tr>
         <tr><td><code>summarise_judgment</code></td><td>Blended (1× Enricher + 5× Extractor)</td><td class="warn">$1.833 / 1M tokens</td><td>Blended rate across 6 API calls on same document.</td></tr>
         <tr><td><code>research_cases</code> <code>research_legislation</code> <code>search_by_citation</code> <code>find_citing_cases</code> <code>find_related_cases</code> <code>classify_legal_issue</code></td><td>Kanon Universal Classifier</td><td class="ok">$1.00 / 1M tokens</td><td>Reranking and classification. Low token usage per result.</td></tr>
-        <tr><td><code>get_judgment</code> <code>format_citation</code> <code>lookup_entity</code> <code>lookup_entities_bulk</code> <code>search_regulatory_decisions</code> <code>search_asx_announcements</code> <code>check_limitation_period</code> <code>check_filing_deadline</code> <code>get_matter_history</code> <code>monitor_precedents</code> <code>inspect_database</code></td><td>None</td><td class="ok">$0</td><td>No Isaacus calls. api_tokens_used always 0.</td></tr>
+        <tr><td><code>get_judgment</code> <code>format_citation</code> <code>lookup_entity</code> <code>search_regulatory_decisions</code> <code>search_asx_announcements</code> <code>check_deadlines</code> <code>get_matter_history</code> <code>monitor_precedents</code> <code>inspect_database</code></td><td>None</td><td class="ok">$0</td><td>No Isaacus calls. api_tokens_used always 0.</td></tr>
       </tbody>
     </table>
   </div>
@@ -1080,6 +1060,11 @@ PKCE:             S256 (required)</pre>
     <div class="callout-title">Billing exports</div>
     Per-matter CSV: <code>/matters/:ref/export.csv</code> — download from the matter detail page.<br>
     Global export (admin): <code>/admin/billing-export.csv</code> — all matters, all users. Supports <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code>.
+  </div>
+
+  <div class="callout callout-ok">
+    <div class="callout-title">In-memory &amp; DB caching</div>
+    Several layers of caching minimise both cost and latency: <strong>Rerank cache</strong> (5 min, 100 entries) deduplicates identical Isaacus rerank calls. <strong>QA cache</strong> (200 entries, permanent) deduplicates extractAnswer calls by (document, question) pair. <strong>Enrichment cache</strong> (DB, permanent) eliminates repeat Kanon 2 Enricher charges. <strong>Search cache</strong> (5 min, 200 entries) deduplicates auslaw-mcp search calls. <strong>Spend cap cache</strong> (5 min per user) avoids a DB aggregate on every MCP request.
   </div>
 </section>
 
@@ -1212,9 +1197,9 @@ Affected tools (all call auslaw-mcp):
   compare_cases, search_by_citation, format_citation, get_legislation
 
 Unaffected tools:
-  lookup_entity, lookup_entities_bulk, search_regulatory_decisions,
-  search_asx_announcements, check_limitation_period, check_filing_deadline,
-  get_matter_history, build_chronology, draft_research_memo, monitor_precedents</pre></div>
+  lookup_entity, search_regulatory_decisions, search_asx_announcements,
+  check_deadlines, get_matter_history, build_chronology, draft_research_memo,
+  monitor_precedents</pre></div>
 
   <h3>SOP 8 — Monitor precedent watchlist</h3>
   <div class="code-block"><pre>Via Claude (MCP):
