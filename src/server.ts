@@ -18,12 +18,10 @@ import { registerGetLegislation } from './tools/get-legislation.js';
 import { registerGetMatterHistory } from './tools/get-matter-history.js';
 import { registerInspectDatabase } from './tools/inspect-database.js';
 import { registerLookupEntity } from './tools/lookup-entity.js';
-import { registerLookupEntitiesBulk } from './tools/lookup-entities-bulk.js';
 import { registerSearchRegulatoryDecisions } from './tools/search-regulatory-decisions.js';
 import { registerSearchAsxAnnouncements } from './tools/search-asx-announcements.js';
 import { registerBuildChronology } from './tools/build-chronology.js';
-import { registerCheckLimitationPeriod } from './tools/check-limitation-period.js';
-import { registerCheckFilingDeadline } from './tools/check-filing-deadline.js';
+import { registerCheckDeadlines } from './tools/check-deadlines.js';
 import { registerDraftResearchMemo } from './tools/draft-research-memo.js';
 import { registerMonitorPrecedents } from './tools/monitor-precedents.js';
 
@@ -99,7 +97,6 @@ function buildServer(): McpServer {
 
   // Entity intelligence
   registerLookupEntity(server);
-  registerLookupEntitiesBulk(server);
 
   // Regulatory decisions (ASIC + ACCC)
   registerSearchRegulatoryDecisions(server);
@@ -113,8 +110,7 @@ function buildServer(): McpServer {
   registerMonitorPrecedents(server);
 
   // Time-critical utilities
-  registerCheckLimitationPeriod(server);
-  registerCheckFilingDeadline(server);
+  registerCheckDeadlines(server);
 
   // Admin (restricted to ADMIN_USERS)
   registerInspectDatabase(server);

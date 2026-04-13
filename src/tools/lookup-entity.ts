@@ -15,14 +15,118 @@ const TYPE_MAP: Record<string, string> = {
   all:     'OrgAndBus',
 };
 
+// ── ABR bulk lookup helper (used by identifiers batch mode) ───────────────────
+
+type SingleResult =
+  | ({ identifier: string; identifier_type: 'abn' | 'acn' | 'name' } & ReturnType<typeof parseAbrEntity> & { abr_url: string })
+  | { identifier: string; identifier_type: 'abn' | 'acn' | 'name'; error: string; message: string };
+
+async function lookupOne(identifier: string, guid: string): Promise<SingleResult> {
+  const idType = detectType(identifier);
+  const digits = normaliseDigits(identifier);
+
+  let url: string;
+  if (idType === 'abn') {
+    url = `https://abr.business.gov.au/json/AbnDetails.aspx?abn=${encodeURIComponent(digits)}&guid=${encodeURIComponent(guid)}`;
+  } else if (idType === 'acn') {
+    url = `https://abr.business.gov.au/json/AcnDetails.aspx?acn=${encodeURIComponent(digits)}&guid=${encodeURIComponent(guid)}`;
+  } else {
+    url = `https://abr.business.gov.au/json/MatchingNames.aspx?name=${encodeURIComponent(identifier)}&guid=${encodeURIComponent(guid)}`;
+  }
+
+  try {
+    const res = await externalFetch(url);
+    if (!res.ok) {
+      return { identifier, identifier_type: idType, error: 'upstream_error', message: `ABR returned status ${res.status}` };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await res.json() as any;
+    const payload = data?.ABRPayloadSearchResults?.response;
+
+    if (!payload || payload.exception) {
+      return {
+        identifier,
+        identifier_type: idType,
+        error: 'not_found',
+        message: payload?.exception?.exceptionDescription ?? 'Entity not found in ABR',
+      };
+    }
+
+    if (idType === 'name') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const list = payload.searchResultsList?.searchResultsRecord as any[];
+      if (!list || list.length === 0) {
+        return { identifier, identifier_type: idType, error: 'not_found', message: `No entities found matching "${identifier}"` };
+      }
+      const top = list[0];
+      const name =
+        top.mainName?.organisationName ??
+        top.legalName?.organisationName ??
+        top.mainTradingName?.organisationName ??
+        null;
+      return {
+        identifier,
+        identifier_type: idType,
+        abn: top.ABN?.identifierValue ?? null,
+        abn_status: 'current' as const,
+        entity_name: name,
+        entity_type: top.entityType?.entityDescription ?? null,
+        status: top.ABNStatus ?? null,
+        acn: null,
+        gst_registered: false,
+        state: top.mainBusinessPhysicalAddress?.stateCode ?? null,
+        postcode: top.mainBusinessPhysicalAddress?.postcode ?? null,
+        abr_url: `https://abr.business.gov.au/ABN/View?abn=${top.ABN?.identifierValue ?? ''}`,
+      };
+    }
+
+    const entityKey = Object.keys(payload).find((k) => k.startsWith('businessEntity'));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const entity = entityKey ? (payload as any)[entityKey] as AbrBusinessEntity : null;
+
+    if (!entity) {
+      return { identifier, identifier_type: idType, error: 'not_found', message: `No entity record for ${identifier}` };
+    }
+
+    const parsed = parseAbrEntity(entity);
+    return {
+      identifier,
+      identifier_type: idType,
+      ...parsed,
+      abr_url: `https://abr.business.gov.au/ABN/View?abn=${parsed.abn ?? ''}`,
+    };
+  } catch (err) {
+    return {
+      identifier,
+      identifier_type: idType,
+      error: 'lookup_failed',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
 // ── Input schema ───────────────────────────────────────────────────────────────
 const inputSchema = z.object({
   identifier: z
     .string()
     .min(1)
     .max(200)
+    .optional()
     .describe(
-      'ABN (e.g. "72 629 951 766"), ACN (e.g. "629 951 766"), or entity/person name to search',
+      'ABN (e.g. "72 629 951 766"), ACN (e.g. "629 951 766"), or entity/person name to search. ' +
+      'Provide either this or identifiers (batch mode), not both.',
+    ),
+  identifiers: z
+    .array(z.string().min(1).max(200))
+    .min(2)
+    .max(10)
+    .optional()
+    .describe(
+      'Batch mode: list of 2–10 ABNs, ACNs, or entity names to look up in parallel against ABR. ' +
+      'Mixed types are supported — each identifier is auto-detected. ' +
+      'Does not support include_officers. ' +
+      'Examples: ["72 629 951 766", "629 951 766", "Westpac Banking Corporation"]',
     ),
   identifier_type: z
     .enum(['abn', 'acn', 'name'])
@@ -245,19 +349,77 @@ async function fetchOfficers(acn: string, log: any): Promise<{ current: Officeho
 export function registerLookupEntity(server: McpServer): void {
   server.tool(
     'lookup_entity',
-    '[Entity Intelligence] Look up an Australian business entity by ABN, ACN, or name. ' +
-    'Uses the Australian Business Register (ABR) for verified registration data (name, type, GST status, state) ' +
+    '[Entity Intelligence] Look up one or multiple Australian business entities by ABN, ACN, or name. ' +
+    'Single mode (identifier): Uses ABR for verified registration data (name, type, GST status, state) ' +
     'and ASIC Connect for company search and officeholder information. ' +
     'ABN/ACN lookups: queries ABR first (requires ABR_GUID), falls back to ASIC Connect for company details. ' +
     'Name searches: queries ABR name index and ASIC Connect in parallel. ' +
     'Set include_officers: true to retrieve current and former directors/officeholders. ' +
+    'Batch mode (identifiers): Provide 2–10 identifiers to look up in parallel via ABR only. Does not support include_officers. ' +
     'Use for counterparty due diligence, conflicts checking, entity verification, and corporate governance research.',
     inputSchema.shape,
     async (input) => {
       const log = logger.child({ tool: 'lookup_entity' });
 
-      const idType  = input.identifier_type ?? detectType(input.identifier);
-      const digits  = normaliseDigits(input.identifier);
+      if (!input.identifier && !input.identifiers) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'missing_input',
+            message: 'Either identifier (single lookup) or identifiers (batch lookup) must be provided.',
+          }) }],
+          isError: true,
+        };
+      }
+
+      // ── Batch mode ─────────────────────────────────────────────────────────
+      if (input.identifiers) {
+        if (!config.ABR_GUID) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: 'not_configured',
+              message:
+                'ABR_GUID is not configured. Register for a free GUID at https://abr.business.gov.au/Tools/WebServices ' +
+                'and set it as the ABR_GUID environment variable.',
+            }) }],
+            isError: true,
+          };
+        }
+
+        const guid = config.ABR_GUID;
+        log.debug({ identifiers: input.identifiers }, 'bulk entity lookup starting');
+
+        const results = await Promise.all(
+          input.identifiers.map((id) => lookupOne(id, guid)),
+        );
+
+        const found  = results.filter((r) => !('error' in r)).length;
+        const errors = results.filter((r) => 'error' in r).length;
+
+        recordMatterQuery({
+          matter_ref: input.matter_ref,
+          tool_name: 'lookup_entity',
+          query_text: input.identifiers.join(', ').slice(0, 200),
+          result_count: found,
+          top_results: results
+            .filter((r): r is Extract<typeof r, { entity_name: string | null }> => 'entity_name' in r && r.entity_name != null)
+            .slice(0, 3)
+            .map((r) => ({ title: r.entity_name!, url: (r as { abr_url: string }).abr_url })),
+        });
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            requested: input.identifiers.length,
+            found,
+            errors,
+            results,
+          }) }],
+        };
+      }
+
+      // ── Single mode ────────────────────────────────────────────────────────
+      const singleId = input.identifier!;
+      const idType  = input.identifier_type ?? detectType(singleId);
+      const digits  = normaliseDigits(singleId);
       const hasAbr  = !!config.ABR_GUID;
 
       // ── ABN / ACN lookup ───────────────────────────────────────────────────
@@ -303,7 +465,7 @@ export function registerLookupEntity(server: McpServer): void {
                 recordMatterQuery({
                   matter_ref: input.matter_ref,
                   tool_name: 'lookup_entity',
-                  query_text: input.identifier,
+                  query_text: singleId,
                   result_count: 1,
                   top_results: parsed.entity_name
                     ? [{ title: parsed.entity_name, url: `https://abr.business.gov.au/ABN/View?abn=${parsed.abn ?? ''}` }]
@@ -330,7 +492,7 @@ export function registerLookupEntity(server: McpServer): void {
         // ── ASIC Connect fallback (ACN or when ABR not configured / failed) ──
         const acnDigits = idType === 'acn' ? digits : null; // for ABN we don't have ACN yet
         if (acnDigits || !hasAbr) {
-          const searchText = acnDigits ?? input.identifier;
+          const searchText = acnDigits ?? singleId;
           const detailUrl = `${ASIC_CONNECT_BASE}/panelOrganisationResult.jspx?searchText=${encodeURIComponent(searchText)}&resultsPerPage=1&action=googleSearch&searchType=OrgAndBus`;
           try {
             const res = await externalFetch(detailUrl, {
@@ -349,7 +511,7 @@ export function registerLookupEntity(server: McpServer): void {
               recordMatterQuery({
                 matter_ref: input.matter_ref,
                 tool_name: 'lookup_entity',
-                query_text: input.identifier,
+                query_text: singleId,
                 result_count: results.length,
                 top_results: results.slice(0, 1).map((r) => ({ title: r.name, url: r.asic_url })),
               });
@@ -373,7 +535,7 @@ export function registerLookupEntity(server: McpServer): void {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'not_found',
-            message: `Could not retrieve entity for ${idType.toUpperCase()} ${input.identifier}. ` +
+            message: `Could not retrieve entity for ${idType.toUpperCase()} ${singleId}. ` +
               (hasAbr ? 'Both ABR and ASIC Connect are unavailable.' : 'ABR_GUID is not configured and ASIC Connect is unavailable.') +
               ` Search manually at ${ASIC_MANUAL_URL}`,
             manual_url: ASIC_MANUAL_URL,
@@ -390,7 +552,7 @@ export function registerLookupEntity(server: McpServer): void {
       }>> = (async () => {
         if (!hasAbr) return [];
         const guid = config.ABR_GUID!;
-        const url = `https://abr.business.gov.au/json/MatchingNames.aspx?name=${encodeURIComponent(input.identifier)}&guid=${encodeURIComponent(guid)}`;
+        const url = `https://abr.business.gov.au/json/MatchingNames.aspx?name=${encodeURIComponent(singleId)}&guid=${encodeURIComponent(guid)}`;
         try {
           const res = await externalFetch(url);
           if (!res.ok) return [];
@@ -420,7 +582,7 @@ export function registerLookupEntity(server: McpServer): void {
 
       const asicResultsP: Promise<AsicResult[]> = (async () => {
         const searchType = TYPE_MAP[input.search_type] ?? 'OrgAndBus';
-        const url = `${ASIC_CONNECT_BASE}/panelSearchResult.jspx?action=googleSearch&searchText=${encodeURIComponent(input.identifier)}&searchType=${searchType}&pResultsPerPage=${input.limit}`;
+        const url = `${ASIC_CONNECT_BASE}/panelSearchResult.jspx?action=googleSearch&searchText=${encodeURIComponent(singleId)}&searchType=${searchType}&pResultsPerPage=${input.limit}`;
         try {
           const res = await externalFetch(url, {
             headers: { Accept: 'text/html,application/xhtml+xml', Referer: ASIC_MANUAL_URL },
@@ -450,7 +612,7 @@ export function registerLookupEntity(server: McpServer): void {
       recordMatterQuery({
         matter_ref: input.matter_ref,
         tool_name: 'lookup_entity',
-        query_text: input.identifier,
+        query_text: singleId,
         result_count: totalCount,
         top_results: [
           ...abrResults
@@ -466,9 +628,9 @@ export function registerLookupEntity(server: McpServer): void {
       if (totalCount === 0) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
-            query: input.identifier,
+            query: singleId,
             result_count: 0,
-            message: `No entities found matching "${input.identifier}" in ABR or ASIC Connect.`,
+            message: `No entities found matching "${singleId}" in ABR or ASIC Connect.`,
             manual_url: ASIC_MANUAL_URL,
           }) }],
         };
@@ -476,7 +638,7 @@ export function registerLookupEntity(server: McpServer): void {
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
-          query: input.identifier,
+          query: singleId,
           search_type: input.search_type,
           abr_results: abrResults.length > 0 ? { count: abrResults.length, results: abrResults } : null,
           asic_results: asicResults.length > 0 ? { count: asicResults.length, results: asicResults } : null,

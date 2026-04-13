@@ -63,7 +63,7 @@ app.get('/health/auslaw', async (_req, res) => {
     { path: '/',         method: 'GET',  body: undefined },
   ] as const;
 
-  for (const probe of probes) {
+  await Promise.all(probes.map(async (probe) => {
     const key = `${probe.method} ${probe.path}`;
     try {
       const r = await fetch(new URL(probe.path, base), {
@@ -78,7 +78,7 @@ app.get('/health/auslaw', async (_req, res) => {
       const e = err as NodeJS.ErrnoException;
       results[key] = { error: e.message, cause: e.cause instanceof Error ? e.cause.message : String(e.cause ?? ''), code: e.code };
     }
-  }
+  }));
 
   res.json(results);
 });
@@ -96,6 +96,10 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// Spend cap cache — 5-minute TTL per user to avoid hammering the DB on every request.
+const spendCapCache = new Map<string, { result: Awaited<ReturnType<typeof checkSpendCap>>; expiresAt: number }>();
+const SPEND_CAP_CACHE_TTL_MS = 5 * 60 * 1000;
+
 // Spend cap middleware — blocks requests when the user's or global monthly spend cap is exceeded.
 // Runs after auth so res.locals['user'] is set. Fails open on DB errors (logs warning).
 async function spendCapMiddleware(
@@ -106,7 +110,23 @@ async function spendCapMiddleware(
   const user = res.locals['user'] as string | undefined;
   if (!user || !isDbEnabled()) { next(); return; }
   try {
+    // Check cache first — avoids repeated DB reads within the TTL window
+    const cached = spendCapCache.get(user);
+    if (cached && Date.now() < cached.expiresAt) {
+      const cap = cached.result;
+      if (!cap.allowed) {
+        const capStr = cap.cap_usd != null ? `$${cap.cap_usd.toFixed(2)}` : 'set limit';
+        res.status(429).json({
+          error: 'spend_cap_exceeded',
+          message: `Monthly spend cap reached ($${cap.current_usd.toFixed(2)} of ${capStr} USD). Contact your administrator.`,
+        });
+        return;
+      }
+      next();
+      return;
+    }
     const cap = await checkSpendCap(user);
+    spendCapCache.set(user, { result: cap, expiresAt: Date.now() + SPEND_CAP_CACHE_TTL_MS });
     if (!cap.allowed) {
       const capStr = cap.cap_usd != null ? `$${cap.cap_usd.toFixed(2)}` : 'set limit';
       res.status(429).json({

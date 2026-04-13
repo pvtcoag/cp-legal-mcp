@@ -34,7 +34,8 @@ export function registerSearchByCitation(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'search_by_citation' });
 
-      const fetchLimit = Math.min((input.limit ?? 5) * 4, 20);
+      const isCitationQuery = /^\[\d{4}\]\s+[A-Z]+\s+\d+$/i.test(input.citation_or_name.trim());
+      const fetchLimit = isCitationQuery ? (input.limit ?? 5) : Math.min((input.limit ?? 5) * 4, 20);
 
       let rawResults;
       try {
@@ -63,16 +64,20 @@ export function registerSearchByCitation(server: McpServer): void {
         throw err;
       }
 
-      // Rerank when searching by name (multiple candidates); less useful for exact citation lookup
+      // Skip reranking for exact citation queries (e.g. "[2024] HCA 12") — results are already precise
       let ranked;
       let rerankTokens = 0;
-      try {
-        const rerankResult = await rerank(input.citation_or_name, rawResults, input.limit ?? 5);
-        ranked = rerankResult.results;
-        rerankTokens = rerankResult.tokensUsed;
-      } catch (err) {
-        log.warn({ err }, 'Isaacus reranking failed, using original order');
+      if (isCitationQuery || rawResults.length <= 1) {
         ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
+      } else {
+        try {
+          const rerankResult = await rerank(input.citation_or_name, rawResults, input.limit ?? 5);
+          ranked = rerankResult.results;
+          rerankTokens = rerankResult.tokensUsed;
+        } catch (err) {
+          log.warn({ err }, 'Isaacus reranking failed, using original order');
+          ranked = rawResults.slice(0, input.limit ?? 5).map((item) => ({ item, score: 1.0 }));
+        }
       }
 
       const results = ranked.map(({ item, score }) => ({

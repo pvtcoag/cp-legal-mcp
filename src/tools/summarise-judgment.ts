@@ -5,10 +5,11 @@ import {
   resolveJudgmentUrl,
   AuslawError,
 } from '../auslaw-client.js';
-import { enrichDocument, extractAnswer, type ExtractedAnswer } from '../isaacus-client.js';
+import { enrichDocument, extractAnswer, type ExtractedAnswer, type EnrichedJudgment } from '../isaacus-client.js';
 import { extractRelevantPassages, truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
+import { getCachedEnrichment, upsertEnrichment } from '../db.js';
 
 const inputSchema = z.object({
   citation_or_url: z
@@ -112,11 +113,23 @@ export function registerSummariseJudgment(server: McpServer): void {
         extractAnswer(QA_QUESTIONS.legal_principles, qaText, 1),
         extractAnswer(QA_QUESTIONS.outcome,          qaText, 1),
       ]);
+
+      // For enrichment, check cache before calling Isaacus
       const enrichPromise: Promise<EnrichResult | null> = input.include_metadata
-        ? enrichDocument(enrichText).catch((enrichErr) => {
-            log.warn({ enrichErr }, 'enrichment failed — returning QA-only summary');
-            return null;
-          })
+        ? (async () => {
+            const cachedEnrich = await getCachedEnrichment(resolved.url).catch(() => null);
+            if (cachedEnrich) {
+              return { data: cachedEnrich.enrichment as unknown as EnrichedJudgment, tokensUsed: 0 };
+            }
+            return enrichDocument(enrichText).then((result) => {
+              upsertEnrichment(resolved.url, result.data as unknown as Record<string, unknown>, result.tokensUsed)
+                .catch(() => { /* non-critical */ });
+              return result;
+            }).catch((enrichErr) => {
+              log.warn({ enrichErr }, 'enrichment failed — returning QA-only summary');
+              return null;
+            });
+          })()
         : Promise.resolve(null);
 
       let holdingR: QAResult, ordersR: QAResult, factsR: QAResult, principlesR: QAResult, outcomeR: QAResult;

@@ -228,26 +228,27 @@ export function registerDraftResearchMemo(server: McpServer): void {
 
             // Limit text to first 50k chars to control token usage
             const text = judgment.body_text.slice(0, 50_000);
-            const extracts: CaseExtract['extracts'] = [];
 
-            for (const question of CASE_EXTRACT_QUESTIONS) {
-              try {
-                const result = await extractAnswer(question, text, 1);
-                totalExtractTokens += result.tokensUsed;
-                if (!result.inextractable && result.answers.length > 0) {
-                  extracts.push({
-                    question,
-                    answer:     result.answers[0]!.text,
-                    confidence: Math.round(result.answers[0]!.score * 1000) / 1000,
-                  });
-                } else {
-                  extracts.push({ question, answer: null, confidence: null });
+            const extractResults = await Promise.all(
+              CASE_EXTRACT_QUESTIONS.map(async (question) => {
+                try {
+                  const result = await extractAnswer(question, text, 1);
+                  totalExtractTokens += result.tokensUsed;
+                  if (!result.inextractable && result.answers.length > 0) {
+                    return {
+                      question,
+                      answer:     result.answers[0]!.text,
+                      confidence: Math.round(result.answers[0]!.score * 1000) / 1000,
+                    };
+                  }
+                  return { question, answer: null as string | null, confidence: null as number | null };
+                } catch (err) {
+                  log.warn({ err, url: c.url, question }, 'extractAnswer failed for case — skipping');
+                  return { question, answer: null as string | null, confidence: null as number | null };
                 }
-              } catch (err) {
-                log.warn({ err, url: c.url, question }, 'extractAnswer failed for case — skipping');
-                extracts.push({ question, answer: null, confidence: null });
-              }
-            }
+              }),
+            );
+            const extracts: CaseExtract['extracts'] = extractResults;
 
             return { ...c, cached: true, extracts };
           }),

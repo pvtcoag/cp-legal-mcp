@@ -4,6 +4,25 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { getCachedJudgment, upsertJudgmentCache } from './db.js';
 
+// ── Search result cache (in-memory, 5-min TTL) ────────────────────────────────
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const SEARCH_CACHE_MAX = 200;
+const _searchCache = new Map<string, { results: unknown; expiresAt: number }>();
+
+function _searchCacheKey(fn: string, params: unknown): string {
+  return `${fn}:${JSON.stringify(params)}`;
+}
+function _searchCacheGet<T>(key: string): T | undefined {
+  const entry = _searchCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) { _searchCache.delete(key); return undefined; }
+  return entry.results as T;
+}
+function _searchCacheSet(key: string, results: unknown): void {
+  if (_searchCache.size >= SEARCH_CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value as string);
+  _searchCache.set(key, { results, expiresAt: Date.now() + SEARCH_CACHE_TTL_MS });
+}
+
 // --- Response types (inferred from AusLaw MCP source) ---
 
 export interface AuslawCase {
@@ -145,13 +164,18 @@ export async function searchCases(params: {
   toYear?: number;
 }): Promise<AuslawCase[]> {
   logger.debug({ params }, 'auslaw: search_cases');
-  return withRetry(() => callAuslawTool<AuslawCase[]>('search_cases', {
+  const cacheKey = _searchCacheKey('searchCases', params);
+  const cached = _searchCacheGet<AuslawCase[]>(cacheKey);
+  if (cached) return cached;
+  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('search_cases', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
     ...(params.fromYear !== undefined && { fromYear: params.fromYear }),
     ...(params.toYear !== undefined && { toYear: params.toYear }),
   }));
+  _searchCacheSet(cacheKey, results);
+  return results;
 }
 
 export async function searchLegislation(params: {
@@ -160,11 +184,16 @@ export async function searchLegislation(params: {
   limit?: number;
 }): Promise<AuslawLegislation[]> {
   logger.debug({ params }, 'auslaw: search_legislation');
-  return withRetry(() => callAuslawTool<AuslawLegislation[]>('search_legislation', {
+  const cacheKey = _searchCacheKey('searchLegislation', params);
+  const cached = _searchCacheGet<AuslawLegislation[]>(cacheKey);
+  if (cached) return cached;
+  const results = await withRetry(() => callAuslawTool<AuslawLegislation[]>('search_legislation', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
   }));
+  _searchCacheSet(cacheKey, results);
+  return results;
 }
 
 export async function fetchDocumentText(url: string): Promise<AuslawDocumentText> {
@@ -232,6 +261,9 @@ export async function searchCitingCases(params: {
   limit?: number;
 }): Promise<AuslawCitingCase[]> {
   logger.debug({ params }, 'auslaw: search_citing_cases');
+  const cacheKey = _searchCacheKey('searchCitingCases', params);
+  const cached = _searchCacheGet<AuslawCitingCase[]>(cacheKey);
+  if (cached) return cached;
   // auslaw-mcp returns { totalCount: number, results: AuslawCitingCase[] }, not a bare array.
   // The generic cast in callAuslawTool doesn't validate at runtime, so unwrap here.
   const response = await withRetry(() =>
@@ -240,8 +272,9 @@ export async function searchCitingCases(params: {
       ...(params.limit && { limit: params.limit }),
     })
   );
-  if (Array.isArray(response)) return response;
-  return (response as { results: AuslawCitingCase[] }).results ?? [];
+  const results = Array.isArray(response) ? response : ((response as { results: AuslawCitingCase[] }).results ?? []);
+  _searchCacheSet(cacheKey, results);
+  return results;
 }
 
 export async function searchByCitation(params: {
@@ -249,10 +282,15 @@ export async function searchByCitation(params: {
   limit?: number;
 }): Promise<AuslawCase[]> {
   logger.debug({ params }, 'auslaw: search_by_citation');
-  return withRetry(() => callAuslawTool<AuslawCase[]>('search_by_citation', {
+  const cacheKey = _searchCacheKey('searchByCitation', params);
+  const cached = _searchCacheGet<AuslawCase[]>(cacheKey);
+  if (cached) return cached;
+  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('search_by_citation', {
     citation: params.citation_or_name,
     ...(params.limit && { limit: params.limit }),
   }));
+  _searchCacheSet(cacheKey, results);
+  return results;
 }
 
 export async function formatCitation(params: {

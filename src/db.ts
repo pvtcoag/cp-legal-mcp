@@ -6,6 +6,11 @@ const { Pool } = pg;
 
 let pool: pg.Pool | null = null;
 
+// ── Matter status cache ───────────────────────────────────────────────────────
+// Avoids repeated status lookups on every logMatterQuery call within a 10-minute window.
+const _matterStatusCache = new Map<string, { status: string | null; expiresAt: number }>();
+const MATTER_STATUS_TTL_MS = 10 * 60 * 1000;
+
 // DB is optional — if DATABASE_URL is not set, matter tracking is silently disabled.
 export function isDbEnabled(): boolean {
   return !!process.env.DATABASE_URL;
@@ -164,6 +169,13 @@ export async function initDb(): Promise<void> {
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_pw_citation ON precedent_watchlist(citation);
+
+    CREATE TABLE IF NOT EXISTS judgment_enrichments (
+      url          TEXT PRIMARY KEY,
+      enrichment   JSONB        NOT NULL,
+      tokens_used  INTEGER      NOT NULL DEFAULT 0,
+      created_at   TIMESTAMPTZ  DEFAULT NOW()
+    );
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -472,14 +484,15 @@ export async function upsertJudgmentEmbedding(url: string, embedding: number[]):
   );
 }
 
-/** Returns all embedded judgments joined with cache metadata for similarity search. */
+/** Returns embedded judgments joined with cache metadata for similarity search.
+ *  Capped at the 500 most recent to prevent memory bloat on large deployments. */
 export async function getAllJudgmentEmbeddings(): Promise<EmbeddingEntry[]> {
   if (!pool) return [];
   const result = await pool.query<EmbeddingEntry>(`
     SELECT je.url, jc.title, jc.citation, je.embedding
     FROM judgment_embeddings je
     LEFT JOIN judgment_cache jc ON je.url = jc.url
-    ORDER BY je.created_at DESC
+    ORDER BY je.created_at DESC LIMIT 500
   `);
   return result.rows;
 }
@@ -804,12 +817,23 @@ export async function upsertMatter(ref: string, updates: { displayName?: string;
       notes        = CASE WHEN $4 IS NOT NULL THEN $4 ELSE matters.notes END,
       updated_at   = NOW()
   `, [ref, updates.displayName ?? null, updates.status ?? null, updates.notes !== undefined ? (updates.notes || null) : null]);
+  // Invalidate matter status cache when status may have changed
+  if (updates.status !== undefined) {
+    _matterStatusCache.delete(ref);
+  }
 }
 
 export async function isMatterClosed(ref: string): Promise<boolean> {
   if (!pool) return false;
+  // Check cache first
+  const cached = _matterStatusCache.get(ref);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.status === 'closed';
+  }
   const r = await pool.query<{ status: string }>('SELECT status FROM matters WHERE matter_ref = $1', [ref]);
-  return r.rows[0]?.status === 'closed';
+  const status = r.rows[0]?.status ?? null;
+  _matterStatusCache.set(ref, { status, expiresAt: Date.now() + MATTER_STATUS_TTL_MS });
+  return status === 'closed';
 }
 
 async function resolveOpenMatterRef(ref: string): Promise<string> {
@@ -1535,6 +1559,29 @@ export interface MatterBillingToolRow {
   tool_name: string;
   queries: number;
   tool_tokens: number;
+}
+
+// ── Judgment enrichment cache ─────────────────────────────────────────────────
+
+export async function getCachedEnrichment(url: string): Promise<{ url: string; enrichment: Record<string, unknown>; tokens_used: number } | null> {
+  if (!pool) return null;
+  try {
+    const res = await pool.query<{ url: string; enrichment: Record<string, unknown>; tokens_used: number }>(
+      'SELECT url, enrichment, tokens_used FROM judgment_enrichments WHERE url = $1',
+      [url],
+    );
+    return res.rows[0] ?? null;
+  } catch { return null; }
+}
+
+export async function upsertEnrichment(url: string, enrichment: Record<string, unknown>, tokensUsed: number): Promise<void> {
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO judgment_enrichments (url, enrichment, tokens_used) VALUES ($1, $2, $3) ON CONFLICT (url) DO NOTHING`,
+      [url, JSON.stringify(enrichment), tokensUsed],
+    );
+  } catch { /* non-critical */ }
 }
 
 /** Per-matter per-tool token rows for the global billing export. App layer applies cost rates. */

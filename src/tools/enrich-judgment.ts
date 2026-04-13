@@ -5,10 +5,11 @@ import {
   resolveJudgmentUrl,
   AuslawError,
 } from '../auslaw-client.js';
-import { enrichDocument } from '../isaacus-client.js';
+import { enrichDocument, type EnrichedJudgment } from '../isaacus-client.js';
 import { truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
+import { getCachedEnrichment, upsertEnrichment } from '../db.js';
 
 const inputSchemaBase = z.object({
   citation_or_url: z
@@ -88,15 +89,25 @@ export function registerEnrichJudgment(server: McpServer): void {
           throw err;
         }
 
-        let enriched;
+        let enriched: EnrichedJudgment;
         let enrichTokens = 0;
-        try {
-          const enrichResult = await enrichDocument(truncateText(doc.text, 50_000));
-          enriched = enrichResult.data;
-          enrichTokens = enrichResult.tokensUsed;
-        } catch (err) {
-          log.warn({ err }, 'Isaacus enrichDocument failed');
-          throw { error: 'enrichment_failed', message: 'Could not enrich the judgment. Please use get_judgment to read the full text instead.' };
+        // Check enrichment cache first
+        const cachedEnrich = await getCachedEnrichment(resolved.url);
+        if (cachedEnrich) {
+          enriched = cachedEnrich.enrichment as unknown as EnrichedJudgment;
+          enrichTokens = 0;
+        } else {
+          try {
+            const enrichResult = await enrichDocument(truncateText(doc.text, 50_000));
+            enriched = enrichResult.data;
+            enrichTokens = enrichResult.tokensUsed;
+            // Fire-and-forget cache write
+            upsertEnrichment(resolved.url, enrichResult.data as unknown as Record<string, unknown>, enrichTokens)
+              .catch(() => { /* non-critical */ });
+          } catch (err) {
+            log.warn({ err }, 'Isaacus enrichDocument failed');
+            throw { error: 'enrichment_failed', message: 'Could not enrich the judgment. Please use get_judgment to read the full text instead.' };
+          }
         }
 
         const citation = doc.citation ?? resolved.citation;
