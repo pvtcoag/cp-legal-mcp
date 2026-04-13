@@ -341,7 +341,7 @@ section[id] { scroll-margin-top:1.5rem; }
         <div class="arch-node-name">Claude / Cursor / ChatGPT</div>
         <div class="arch-node-sub">OAuth 2.0 + PKCE or Bearer token</div>
       </div>
-      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS<br>POST /auslaw/mcp</span></div>
+      <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS<br>POST /auslaw</span></div>
       <div class="arch-node prim">
         <div class="arch-node-label">Public · Railway</div>
         <div class="arch-node-name">cp-legal-mcp</div>
@@ -392,7 +392,7 @@ section[id] { scroll-margin-top:1.5rem; }
 
   <h3>Request lifecycle</h3>
   <div class="code-block">
-    <div class="code-label">Per MCP POST /auslaw/mcp</div>
+    <div class="code-label">Per MCP POST /auslaw</div>
     <pre>1. Cloudflare CDN → Railway TLS termination
 2. Express rate limiter (60 req/min per IP pre-auth)
 3. authMiddleware — verifies Bearer token (DB hash lookup, then env fallback)
@@ -837,7 +837,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <table class="url-table">
       <thead><tr><th>Path</th><th>Method</th><th>Auth</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td>https://mcp.example.com/auslaw/mcp</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
+        <tr><td>https://mcp.example.com/auslaw</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
         <tr><td>https://mcp.example.com/auslaw/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
         <tr><td>https://mcp.example.com/auslaw/health/upstream</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Returns connectivity report.</td></tr>
       </tbody>
@@ -941,7 +941,7 @@ PKCE:             S256 (required)</pre>
   "mcpServers": {
     "cp-legal": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.example.com/auslaw/mcp"],
+      "args": ["mcp-remote", "https://mcp.example.com/auslaw"],
       "env": {
         "MCP_REMOTE_HEADER_AUTHORIZATION": "Bearer YOUR_TOKEN_HERE"
       }
@@ -1137,7 +1137,7 @@ Proxy:   Proxied (orange cloud)</pre>
 5. Send via secure channel (not email)
 6. User connects MCP client:
    Claude Web: Add as remote MCP server → OAuth flow handles auth
-   Direct:     Authorization: Bearer &lt;token&gt; on POST /auslaw/mcp</pre></div>
+   Direct:     Authorization: Bearer &lt;token&gt; on POST /auslaw</pre></div>
 
   <h3>SOP 2 — Rotate a compromised token</h3>
   <div class="code-block"><pre>1. Navigate to /auslaw/admin/users/:username

@@ -22,26 +22,24 @@ app.use(express.urlencoded({ extended: false, limit: '16kb' })); // OAuth login 
 app.use(oauthRouter);
 
 // CORS — allow any origin so browser-based MCP clients (OpenAI, Cursor, etc.) can connect
-app.use('/auslaw/mcp', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Scoped inline to the MCP route only (not app.use — avoids matching /auslaw/matters etc.)
+const mcpCors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
   if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
   next();
-});
+};
 
 // Rate limiting — 60 requests per minute per IP
-app.use(
-  '/auslaw/mcp',
-  rateLimit({
-    windowMs: 60_000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many requests, please slow down.' },
-  }),
-);
+const mcpRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+});
 
 // Matter history UI — cookie-session auth, independent of MCP bearer auth
 app.use(mattersRouter);
@@ -175,9 +173,11 @@ function mcpRoute(req: express.Request, res: express.Response): void {
   });
 }
 
-app.post('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.get('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.delete('/auslaw/mcp', authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+// MCP endpoint at /auslaw — OPTIONS for CORS preflight, then authenticated methods
+app.options('/auslaw', mcpCors);
+app.post('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.get('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.delete('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 
 // Startup
 const server = app.listen(config.PORT, async () => {

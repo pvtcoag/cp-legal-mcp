@@ -120,18 +120,16 @@ oauthRouter.use((req: Request, res: Response, next) => {
 // The `resource` field MUST match the URL ChatGPT (and other clients) use as
 // the MCP server URL — i.e. the /mcp endpoint, not just the base domain.
 // ChatGPT validates resource metadata.resource === its configured connector URL.
-oauthRouter.get('/auslaw/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
+function protectedResourceMetadata(_req: Request, res: Response): void {
   const base = issuer();
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    resource: `${base}/mcp`,
+    resource: base,   // MCP server URL is the issuer base (no /mcp suffix)
     authorization_servers: [base],
   });
-});
+}
 
-// RFC 8414 — Authorization Server Metadata
-// Tells mcp-remote which endpoints to use and what features are supported.
-oauthRouter.get('/auslaw/.well-known/oauth-authorization-server', (_req: Request, res: Response) => {
+function authorizationServerMetadata(_req: Request, res: Response): void {
   const base = issuer();
   res.setHeader('Cache-Control', 'no-store');
   res.json({
@@ -147,13 +145,25 @@ oauthRouter.get('/auslaw/.well-known/oauth-authorization-server', (_req: Request
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
     scopes_supported: ['mcp'],
   });
-});
+}
+
+// RFC 9728 — Protected Resource Metadata
+// Served at both the /auslaw-prefixed path (via Worker routing) and at the
+// unprefixed RFC 8414 paths that some clients discover by convention.
+oauthRouter.get('/auslaw/.well-known/oauth-protected-resource', protectedResourceMetadata);
+oauthRouter.get('/.well-known/oauth-protected-resource', protectedResourceMetadata);
+oauthRouter.get('/.well-known/oauth-protected-resource/auslaw', protectedResourceMetadata);
+
+// RFC 8414 — Authorization Server Metadata
+oauthRouter.get('/auslaw/.well-known/oauth-authorization-server', authorizationServerMetadata);
+oauthRouter.get('/.well-known/oauth-authorization-server', authorizationServerMetadata);
+oauthRouter.get('/.well-known/oauth-authorization-server/auslaw', authorizationServerMetadata);
 
 // RFC 7591 — Dynamic Client Registration
 // Used by ChatGPT, mcp-remote, Cursor, Windsurf, and other MCP clients that
 // self-register before starting the OAuth flow. No client secret is issued —
 // PKCE S256 handles the security.
-oauthRouter.post('/auslaw/oauth/register', (req: Request, res: Response) => {
+function dynamicClientRegistration(req: Request, res: Response): void {
   const body = req.body as Record<string, unknown>;
   const { redirect_uris, client_name, scope } = body;
 
@@ -188,7 +198,11 @@ oauthRouter.post('/auslaw/oauth/register', (req: Request, res: Response) => {
     response_types: ['code'],
     code_challenge_methods_supported: ['S256'],
   });
-});
+}
+
+oauthRouter.post('/auslaw/oauth/register', dynamicClientRegistration);
+// Alias: some clients POST to /register (no service prefix) per RFC 7591
+oauthRouter.post('/register', dynamicClientRegistration);
 
 // GET /oauth/authorize — Serve login form
 // Parameters come from mcp-remote as query string.
