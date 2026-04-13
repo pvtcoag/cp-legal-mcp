@@ -278,7 +278,7 @@ function fmtTokens(n: number): string {
  * green ≥45% (clear answer), amber ≥20% (probable), red <20% (uncertain/not extractable).
  */
 function accuracyBadge(score: number | null | undefined): string {
-  if (score == null) return '<span style="color:#aaa">—</span>';
+  if (score == null) return '<span style="color:var(--txt-3)">—</span>';
   const pct = Math.round(score * 100);
   const cls = score >= 0.45 ? 'acc-high' : score >= 0.20 ? 'acc-mid' : 'acc-low';
   return `<span class="acc-badge ${cls} tip" data-tip="Extractive confidence: ${pct}%. Legal text typically scores 5–45% — reflects extractability, not correctness." tabindex="0">${pct}%</span>`;
@@ -510,228 +510,304 @@ function tsDateTime(iso: string): string {
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
 export const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap');
+
 :root {
-  --primary:   #0B1F33;
-  --secondary: #2E3A46;
-  --accent:    #B79A5B;
-  --light:     #F5F3EF;
-  --text:      #1A1A1A;
-  --border:    #E0DDD6;
-  --surface:   #FAFAF8;
+  --bg:#09090F;--surface:#111119;--surf-2:#17171F;--surf-3:#21212C;--surf-4:#2C2C3A;
+  --bdr:rgba(255,255,255,0.06);--bdr-2:rgba(255,255,255,0.10);--bdr-3:rgba(255,255,255,0.16);--bdr-4:rgba(255,255,255,0.24);
+  --accent:#7B6EF6;--accent-l:#9D93F8;--accent-xl:#BFB8FA;--accent-bg:rgba(123,110,246,0.10);--accent-bdr:rgba(123,110,246,0.30);
+  --gold:#C9973B;--gold-l:#DEB86E;--gold-bg:rgba(201,151,59,0.12);--gold-bdr:rgba(201,151,59,0.35);
+  --ok:#34D399;--ok-bg:rgba(52,211,153,0.10);--warn:#FBBF24;--warn-bg:rgba(251,191,36,0.10);
+  --err:#F87171;--err-bg:rgba(248,113,113,0.10);
+  --txt:#EDE9F8;--txt-2:#9794B0;--txt-3:#5A5770;
+  --r:8px;--r-lg:14px;--r-xl:20px;--sw:228px;
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-img { max-width: 100%; height: auto; }
-.nav-brand img { height: 26px; width: auto; max-width: none; }
-body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--light); color: var(--text); font-size: 14px; }
-h1 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.5rem; font-weight: 400; margin-bottom: .375rem; color: var(--primary); }
-h2 { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.0625rem; font-weight: 400; margin-bottom: .875rem; color: var(--primary); }
-nav { background: var(--primary); color: #fff; padding: .75rem 2rem; display: flex; align-items: center; gap: 1rem; }
-.nav-brand { display: flex; align-items: center; gap: .625rem; margin-right: auto; text-decoration: none; }
-.nav-brand-fallback { font-weight: 700; font-size: 1rem; letter-spacing: -.5px; color: #fff; display: none; }
-.nav-links { display: flex; gap: .5rem; }
-.nav-link { font-size: .8125rem; color: rgba(255,255,255,.7); text-decoration: none; padding: .25rem .625rem; border-radius: 4px; }
-.nav-link:hover, .nav-link.active { background: var(--secondary); color: #fff; }
-.nav-user { font-size: .8125rem; color: rgba(255,255,255,.6); }
-.nav-logout { font-size: .8125rem; color: rgba(255,255,255,.7); text-decoration: none; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; padding: .25rem .625rem; }
-.nav-logout:hover { background: var(--secondary); color: #fff; }
-main { width: 100%; max-width: 100%; margin: 0 auto; padding: 2rem 1.5rem; }
-.subtitle { color: #666; font-size: .875rem; margin-bottom: 1.75rem; }
-.actions { display: flex; gap: .75rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
-.btn { padding: .5rem 1rem; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; border: 1px solid; transition: background .15s; }
-.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn-primary:hover { background: var(--secondary); border-color: var(--secondary); }
-.btn-secondary { background: #fff; color: #333; border-color: var(--border); }
-.btn-secondary:hover { background: var(--light); }
-.btn-back { color: #555; text-decoration: none; font-size: .875rem; display: inline-flex; align-items: center; gap: .375rem; margin-bottom: 1.5rem; }
-.btn-back:hover { color: var(--primary); }
-.table-wrap { overflow-x: auto; border-radius: 8px; -webkit-overflow-scrolling: touch; min-width: 0; width: 100%; }
-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; border: 1px solid var(--border); font-size: .8125rem; table-layout: fixed; }
-.table-wrap table { border-radius: 0; border: none; }
-thead th { background: #F0EDE8; padding: .625rem 1rem; text-align: left; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid var(--border); }
-tbody tr + tr td { border-top: 1px solid #F0EDE8; }
-tbody tr:hover td { background: #FAFAF8; }
-tbody tr.row-error td { background: #FFF8F8 !important; }
-tbody tr.row-error:hover td { background: #FFF1F1 !important; }
-td { padding: .625rem 1rem; vertical-align: top; overflow: visible; }
-.td-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ua-cell { word-break: break-word; white-space: normal; max-width: 200px; }
-.matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: var(--primary); text-decoration: none; }
-.matter-ref:hover { text-decoration: underline; }
-.date-small { color: #555; font-size: .75rem; white-space: nowrap; }
-.count { font-weight: 600; }
-.mono { font-family: ui-monospace, "Cascadia Code", monospace; font-size: .8125rem; }
-.users-cell { color: #555; font-size: .8125rem; }
-.query-full { white-space: pre-wrap; word-break: break-word; color: #333; line-height: 1.4; }
-.top-results-stack { }
-.top-results-stack a { color: #1a6b8a; text-decoration: none; display: block; word-break: break-word; margin-bottom: .3rem; font-size: .75rem; line-height: 1.4; }
-.top-results-stack a:hover { text-decoration: underline; }
-.summary-grid { display: flex; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; width: 100%; }
-.card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.25rem; flex: 1 1 auto; min-width: 160px; max-width: 220px; }
-.card-label { font-size: .6875rem; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem; }
-.card-value { font-size: 1.375rem; font-weight: 700; line-height: 1.2; color: var(--primary); }
-.card-value.sm { font-size: .9375rem; margin-top: .125rem; }
-.card-sub { font-size: .75rem; color: #555; margin-top: .1875rem; }
-.tag { display: inline-block; background: #F0EDE8; color: #555; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; margin: .125rem .125rem 0 0; white-space: nowrap; }
-.empty { text-align: center; padding: 3rem; color: #888; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
-.admin-badge { display: inline-block; background: #e8f4e8; color: #2a6a2a; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; margin-left: .5rem; vertical-align: middle; }
-.est-badge { display: inline-block; background: #fef9e7; color: #7d6608; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 500; }
-.acc-badge { display: inline-block; padding: .125rem .4rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
-.acc-high { background: #d1fae5; color: #065f46; }
-.acc-mid  { background: #fef3c7; color: #92400e; }
-.acc-low  { background: #fee2e2; color: #991b1b; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+img{max-width:100%;height:auto;}
+html,body{height:100%;}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;line-height:1.5;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+a{color:inherit;}
 
-/* CSS tooltip — works on hover and tap (via :focus on tabindex elements) */
-.tip { position: relative; cursor: help; display: inline-block; }
-.tip::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1A1A1A;
-  color: #fff;
-  padding: .375rem .625rem;
-  border-radius: 5px;
-  font-size: .75rem;
-  font-weight: 400;
-  font-family: 'Inter', sans-serif;
-  white-space: normal;
-  width: 220px;
-  line-height: 1.45;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .15s .1s;
-  z-index: 200;
-  box-shadow: 0 2px 8px rgba(0,0,0,.25);
-  text-align: left;
+/* ── Layout ── */
+.app{display:flex;height:100vh;overflow:hidden;}
+.sidebar{width:var(--sw);flex-shrink:0;height:100vh;display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--bdr);position:fixed;left:0;top:0;z-index:100;overflow-y:auto;}
+.main{margin-left:var(--sw);flex:1;height:100vh;overflow-y:auto;min-width:0;}
+.content{padding:2.5rem 2rem;max-width:1200px;}
+
+/* ── Sidebar Logo ── */
+.sb-logo{padding:1.375rem 1.25rem 1rem;display:flex;align-items:center;gap:.625rem;border-bottom:1px solid var(--bdr);text-decoration:none;}
+.sb-logo img{height:26px;width:auto;display:block;}
+.sb-logo-mark{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--gold));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.875rem;color:#fff;font-weight:700;flex-shrink:0;}
+.sb-wordmark{display:flex;flex-direction:column;}
+.sb-logo-name{font-family:'DM Serif Display',Georgia,serif;font-size:1rem;color:var(--txt);letter-spacing:-.01em;line-height:1.2;}
+.sb-logo-sub{font-size:.5625rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3);}
+
+/* ── Sidebar Nav ── */
+.sb-nav{flex:1;padding:.75rem 0;}
+.sb-section{font-size:.5625rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--txt-3);padding:.875rem 1.25rem .3rem;}
+.sb-link{display:flex;align-items:center;gap:.625rem;padding:.5625rem 1.25rem;font-size:.875rem;font-weight:400;color:var(--txt-2);text-decoration:none;border-left:2px solid transparent;transition:all .15s;}
+.sb-link:hover{color:var(--txt);background:var(--surf-2);}
+.sb-link.active{color:var(--accent-l);background:var(--accent-bg);border-left-color:var(--accent);font-weight:500;}
+.sb-link svg{flex-shrink:0;opacity:.6;}
+.sb-link.active svg{opacity:1;}
+
+/* ── Sidebar Footer ── */
+.sb-footer{padding:.875rem 1rem;border-top:1px solid var(--bdr);margin-top:auto;}
+.sb-user{display:flex;align-items:center;gap:.625rem;}
+.sb-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--gold));display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;flex-shrink:0;text-transform:uppercase;}
+.sb-user-info{flex:1;min-width:0;}
+.sb-username{font-size:.8125rem;font-weight:500;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sb-role{font-size:.6875rem;color:var(--txt-3);}
+.sb-logout{color:var(--txt-3);text-decoration:none;padding:.375rem;border-radius:6px;transition:all .15s;display:flex;flex-shrink:0;}
+.sb-logout:hover{color:var(--err);background:var(--err-bg);}
+
+/* ── Page Header ── */
+.page-hd{margin-bottom:2rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;}
+.page-title{font-family:'DM Serif Display',Georgia,serif;font-size:1.625rem;font-weight:400;color:var(--txt);letter-spacing:-.02em;line-height:1.2;}
+.page-sub{font-size:.875rem;color:var(--txt-2);margin-top:.3rem;}
+.page-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;}
+h1{font-family:'DM Serif Display',Georgia,serif;font-size:1.5rem;font-weight:400;color:var(--txt);letter-spacing:-.02em;margin-bottom:.375rem;}
+h2{font-family:'DM Serif Display',Georgia,serif;font-size:1.0625rem;font-weight:400;color:var(--txt);letter-spacing:-.01em;margin-bottom:.875rem;}
+.subtitle{color:var(--txt-2);font-size:.875rem;margin-bottom:1.75rem;}
+
+/* ── Stat cards ── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:1rem;margin-bottom:2rem;}
+/* summary-grid is an alias used throughout the templates */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:1rem;margin-bottom:2rem;}
+.card,.stat-card{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:1.25rem 1.375rem;transition:border-color .2s,transform .2s,box-shadow .2s;animation:cardIn .35s ease both;}
+.card:hover,.stat-card:hover{border-color:var(--bdr-2);transform:translateY(-1px);box-shadow:0 8px 32px rgba(0,0,0,.3);}
+a.card,a.stat-card{text-decoration:none;color:inherit;cursor:pointer;display:block;}
+.card-label{font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);margin-bottom:.5rem;}
+.card-value{font-family:'DM Serif Display',Georgia,serif;font-size:1.75rem;font-weight:400;color:var(--txt);line-height:1;letter-spacing:-.02em;}
+.card-value.sm{font-size:1.0625rem;font-family:inherit;font-weight:600;}
+.card-sub{font-size:.75rem;color:var(--txt-2);margin-top:.375rem;}
+.card-link{text-decoration:none;color:inherit;}
+.card-link .card:hover{border-color:var(--bdr-2);}
+
+/* ── Section block ── */
+.section-block,.section{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:1.5rem;margin-bottom:1.25rem;}
+.section-block h2,.section h2{font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);margin-bottom:1rem;font-family:inherit;}
+.section-hd{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1.25rem;}
+.section-title{font-size:.6875rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-3);}
+
+/* ── Tables ── */
+.table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--bdr);-webkit-overflow-scrolling:touch;}
+.table-wrap table{border-radius:0;border:none;}
+table{width:100%;border-collapse:collapse;font-size:.8125rem;}
+thead th{background:var(--surf-2);padding:.625rem 1rem;text-align:left;font-size:.625rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--txt-3);border-bottom:1px solid var(--bdr);white-space:nowrap;}
+tbody tr{border-bottom:1px solid var(--bdr);}
+tbody tr:last-child{border-bottom:none;}
+tbody td{padding:.75rem 1rem;color:var(--txt);vertical-align:middle;}
+tbody tr:hover td{background:var(--surf-2);}
+tbody tr.row-error td{background:rgba(248,113,113,0.04)!important;}
+tbody tr.row-error:hover td{background:rgba(248,113,113,0.08)!important;}
+.td-clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;}
+.ua-cell{word-break:break-word;white-space:normal;max-width:200px;font-size:.75rem;color:var(--txt-2);}
+.date-small{color:var(--txt-2);font-size:.75rem;white-space:nowrap;}
+.mono{font-family:ui-monospace,'Cascadia Code',monospace;font-size:.8125rem;}
+.count{font-weight:600;}
+.users-cell{color:var(--txt-2);font-size:.8125rem;}
+.query-full{white-space:pre-wrap;word-break:break-word;color:var(--txt);line-height:1.5;}
+.top-results-stack a{color:var(--accent-l);text-decoration:none;display:block;word-break:break-word;margin-bottom:.25rem;font-size:.75rem;line-height:1.4;}
+.top-results-stack a:hover{text-decoration:underline;}
+.matter-ref{font-weight:600;font-family:ui-monospace,'Cascadia Code',monospace;font-size:.8125rem;color:var(--accent-l);text-decoration:none;}
+.matter-ref:hover{text-decoration:underline;}
+
+/* ── Badges ── */
+.badge,.tag{display:inline-flex;align-items:center;gap:.2rem;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;white-space:nowrap;}
+.badge-ok,.badge-active{background:var(--ok-bg);color:var(--ok);}
+.badge-warn{background:var(--warn-bg);color:var(--warn);}
+.badge-err,.badge-inactive{background:var(--err-bg);color:var(--err);}
+.badge-accent,.badge-admin{background:var(--accent-bg);color:var(--accent-l);}
+.badge-gold{background:var(--gold-bg);color:var(--gold-l);}
+.badge-neutral,.tag{background:var(--surf-3);color:var(--txt-2);}
+.admin-badge{display:inline-flex;align-items:center;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;background:var(--accent-bg);color:var(--accent-l);margin-left:.375rem;vertical-align:middle;}
+.est-badge{display:inline-flex;align-items:center;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:500;background:var(--gold-bg);color:var(--gold-l);}
+.acc-badge{display:inline-block;padding:.175rem .4rem;border-radius:100px;font-size:.6875rem;font-weight:600;}
+.acc-high{background:var(--ok-bg);color:var(--ok);}
+.acc-mid{background:var(--warn-bg);color:var(--warn);}
+.acc-low{background:var(--err-bg);color:var(--err);}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:.375rem;padding:.5625rem 1.125rem;border-radius:var(--r);font-size:.875rem;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;border:1px solid transparent;transition:all .15s;white-space:nowrap;line-height:1;}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent-l);border-color:var(--accent-l);box-shadow:0 0 0 3px var(--accent-bg);}
+.btn-secondary{background:transparent;color:var(--txt-2);border-color:var(--bdr-2);}
+.btn-secondary:hover{background:var(--surf-2);color:var(--txt);border-color:var(--bdr-3);}
+.btn-danger{background:transparent;color:var(--err);border-color:var(--err-bg);}
+.btn-danger:hover{background:var(--err-bg);border-color:var(--err);}
+.btn-sm{padding:.3125rem .75rem;font-size:.8125rem;}
+.btn-xs{padding:.2rem .5rem;font-size:.75rem;}
+.btn-back{display:inline-flex;align-items:center;gap:.375rem;font-size:.8125rem;color:var(--txt-2);text-decoration:none;margin-bottom:1.5rem;transition:color .15s;}
+.btn-back:hover{color:var(--txt);}
+.actions{display:flex;gap:.75rem;margin-bottom:1.5rem;align-items:center;flex-wrap:wrap;}
+
+/* ── Forms ── */
+.form-group{margin-bottom:1.125rem;}
+.form-group label,label{display:block;font-size:.8125rem;font-weight:500;margin-bottom:.375rem;color:var(--txt-2);}
+input[type="text"],input[type="password"],input[type="number"],input[type="email"],select,textarea{width:100%;padding:.625rem .875rem;background:var(--surf-2);border:1px solid var(--bdr-2);border-radius:var(--r);color:var(--txt);font-size:.9375rem;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;-webkit-appearance:none;appearance:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);}
+input::placeholder{color:var(--txt-3);}
+select{cursor:pointer;padding-right:2.25rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235A5770' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .75rem center;}
+select option{background:var(--surf-3);color:var(--txt);}
+.form-hint{font-size:.75rem;color:var(--txt-3);margin-top:.3rem;}
+.error-box{background:var(--err-bg);border:1px solid var(--err);border-radius:var(--r);color:var(--err);font-size:.875rem;padding:.625rem .875rem;margin-bottom:1rem;}
+
+/* ── Filter bar ── */
+.filter-bar{background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:1rem 1.25rem;margin-bottom:1.25rem;display:flex;gap:.875rem;flex-wrap:wrap;align-items:flex-end;}
+.filter-group{display:flex;flex-direction:column;gap:.3rem;}
+.filter-group label{font-size:.5625rem;font-weight:700;color:var(--txt-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:0;}
+.filter-input{padding:.4rem .75rem;border:1px solid var(--bdr-2);border-radius:var(--r);background:var(--surf-2);color:var(--txt);font-size:.875rem;height:34px;outline:none;transition:border-color .15s,box-shadow .15s;font-family:inherit;-webkit-appearance:none;appearance:none;}
+.filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);}
+select.filter-input{cursor:pointer;min-width:130px;}
+.filter-btn{padding:0 1rem;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:.875rem;font-weight:500;cursor:pointer;height:34px;font-family:inherit;transition:background .15s;}
+.filter-btn:hover{background:var(--accent-l);}
+.filter-clear{font-size:.8125rem;color:var(--txt-3);text-decoration:none;align-self:flex-end;padding-bottom:.25rem;transition:color .15s;}
+.filter-clear:hover{color:var(--txt);}
+
+/* ── Segmented tabs ── */
+.seg-tabs{display:flex;gap:.25rem;background:var(--surf-3);border-radius:var(--r);padding:.25rem;margin-bottom:1.25rem;width:fit-content;flex-wrap:wrap;}
+.seg-tab{padding:.3125rem .875rem;border-radius:6px;font-size:.8125rem;font-weight:500;text-decoration:none;color:var(--txt-2);transition:all .15s;}
+.seg-tab.active{background:var(--surf-4);color:var(--txt);box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.seg-tab:hover:not(.active){color:var(--txt);}
+
+/* ── Tool bar chart ── */
+.tool-bar-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.625rem;}
+.tool-bar-label{width:155px;font-size:.8125rem;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;}
+.tool-bar-track{flex:1;height:6px;background:var(--surf-3);border-radius:3px;overflow:hidden;}
+.tool-bar-fill{height:100%;background:var(--accent);border-radius:3px;}
+.tool-bar-meta{font-size:.75rem;color:var(--txt-3);white-space:nowrap;min-width:200px;text-align:left;flex-shrink:0;}
+
+/* ── Volume chart ── */
+.vol-chart,.vol-chart-inner{display:flex;align-items:flex-end;gap:3px;height:72px;padding-top:8px;}
+.vol-col{display:flex;flex-direction:column;align-items:center;flex:1;height:100%;justify-content:flex-end;}
+.vol-bar{width:100%;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;opacity:.7;transition:opacity .15s;}
+.vol-col:hover .vol-bar{opacity:1;}
+.vol-label{font-size:.5rem;color:var(--txt-3);margin-top:3px;white-space:nowrap;}
+
+/* ── Popular cases / researcher ── */
+.researcher-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem;}
+.researcher-card{background:var(--surf-2);border:1px solid var(--bdr);border-radius:var(--r);padding:.875rem 1rem;}
+.researcher-name{font-weight:600;font-size:.9375rem;margin-bottom:.375rem;color:var(--txt);}
+.researcher-stats{font-size:.8125rem;color:var(--txt-2);display:flex;flex-direction:column;gap:.2rem;}
+.popular-case-row{display:flex;gap:.75rem;align-items:baseline;padding:.5rem 0;border-bottom:1px solid var(--bdr);font-size:.8125rem;}
+.popular-case-row:last-child{border-bottom:none;}
+.popular-case-rank{color:var(--txt-3);width:1.25rem;flex-shrink:0;text-align:right;font-size:.75rem;}
+.popular-case-title{flex:1;}
+.popular-case-title a{color:var(--accent-l);text-decoration:none;}
+.popular-case-title a:hover{text-decoration:underline;}
+.popular-case-citation{color:var(--txt-2);font-size:.75rem;white-space:nowrap;}
+.popular-case-count{font-weight:600;color:var(--txt);font-size:.75rem;white-space:nowrap;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:4rem 2rem;color:var(--txt-2);background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r-lg);}
+
+/* ── Tooltip ── */
+.tip{position:relative;cursor:help;display:inline-block;}
+.tip::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--surf-4);color:var(--txt);border:1px solid var(--bdr-2);padding:.375rem .625rem;border-radius:var(--r);font-size:.75rem;font-weight:400;font-family:inherit;white-space:normal;width:220px;line-height:1.45;pointer-events:none;opacity:0;transition:opacity .15s .1s;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.3);text-align:left;}
+.tip::before{content:'';position:absolute;bottom:calc(100% + 1px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--surf-4);pointer-events:none;opacity:0;transition:opacity .15s .1s;z-index:200;}
+.tip:hover::after,.tip:focus::after{opacity:1;}
+.tip:hover::before,.tip:focus::before{opacity:1;}
+.tip-right::after{left:auto;right:0;transform:none;}
+.tip-right::before{left:auto;right:12px;transform:none;}
+.tip-below::after{bottom:auto;top:calc(100% + 6px);}
+.tip-below::before{bottom:auto;top:calc(100% + 1px);border-top-color:transparent;border-bottom-color:var(--surf-4);}
+
+/* ── Login ── */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);padding:1rem;background-image:radial-gradient(ellipse 80% 80% at 50% -20%,rgba(123,110,246,0.15),transparent);}
+.login-card{background:var(--surface);border:1px solid var(--bdr-2);border-radius:var(--r-xl);padding:2.5rem 2.25rem;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,.4);animation:loginIn .4s ease both;}
+.login-logo{margin-bottom:1.75rem;display:flex;align-items:center;gap:.75rem;}
+.login-logo img{height:32px;width:auto;}
+.login-logo-mark{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--gold));border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:1.125rem;color:#fff;font-weight:700;}
+.login-title{font-family:'DM Serif Display',Georgia,serif;font-size:1.5rem;font-weight:400;color:var(--txt);margin-bottom:.25rem;letter-spacing:-.02em;}
+.login-sub{font-size:.875rem;color:var(--txt-2);margin-bottom:2rem;}
+.login-btn{width:100%;padding:.75rem;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:1rem;font-weight:500;cursor:pointer;transition:all .15s;font-family:inherit;}
+.login-btn:hover{background:var(--accent-l);box-shadow:0 0 0 3px var(--accent-bg);}
+
+/* ── Spend bar ── */
+.spend-bar{height:6px;background:var(--surf-3);border-radius:3px;margin-top:.5rem;overflow:hidden;}
+.spend-fill{height:100%;border-radius:3px;}
+.spend-ok{background:var(--ok);}
+.spend-warn{background:var(--warn);}
+.spend-err{background:var(--err);}
+
+/* ── Animations ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+@keyframes cardIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes loginIn{from{opacity:0;transform:translateY(20px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+.content{animation:fadeUp .3s ease both;}
+.stat-card:nth-child(1),.card:nth-child(1){animation-delay:0ms;}
+.stat-card:nth-child(2),.card:nth-child(2){animation-delay:50ms;}
+.stat-card:nth-child(3),.card:nth-child(3){animation-delay:100ms;}
+.stat-card:nth-child(4),.card:nth-child(4){animation-delay:150ms;}
+.stat-card:nth-child(5),.card:nth-child(5){animation-delay:200ms;}
+
+/* ── Print ── */
+@media print{
+  body{background:#fff;color:#000;font-size:9pt;}
+  .sidebar,.page-actions,.filter-bar,.seg-tabs,.btn-back,.no-print,.actions{display:none!important;}
+  .main{margin-left:0!important;}
+  .content{padding:0;animation:none;}
+  table{font-size:8pt;}
+  .section-block,.section{background:#fff;border:1px solid #ccc;border-radius:0;}
+  a{color:#000;}
+  h1,h2{color:#000;}
 }
-.tip::before {
-  content: '';
-  position: absolute;
-  bottom: calc(100% + 1px);
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: #1A1A1A;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .15s .1s;
-  z-index: 200;
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .app{flex-direction:column;height:auto;}
+  .sidebar{position:relative;width:100%;height:auto;flex-direction:row;flex-wrap:wrap;border-right:none;border-bottom:1px solid var(--bdr);overflow:visible;}
+  .sb-logo{padding:.75rem 1rem;border-bottom:none;}
+  .sb-wordmark{display:none;}
+  .sb-nav{display:flex;flex-direction:row;flex-wrap:wrap;padding:.25rem .5rem;}
+  .sb-section{display:none;}
+  .sb-link{padding:.375rem .625rem;border-left:none;border-bottom:2px solid transparent;font-size:.8125rem;}
+  .sb-link.active{border-left:none;border-bottom-color:var(--accent);}
+  .sb-footer{padding:.5rem .875rem;border-top:none;border-left:1px solid var(--bdr);margin-left:auto;align-self:center;}
+  .sb-role{display:none;}
+  .main{margin-left:0;height:auto;}
+  .content{padding:1.25rem 1rem;}
+  .summary-grid,.stat-grid{grid-template-columns:repeat(2,1fr);}
 }
-.tip:hover::after, .tip:focus::after { opacity: 1; }
-.tip:hover::before, .tip:focus::before { opacity: 1; }
-.tip-right::after { left: auto; right: 0; transform: none; }
-.tip-right::before { left: auto; right: 12px; transform: none; }
-/* Render tooltip below the element (use when the element is near the top of the viewport) */
-.tip-below::after { bottom: auto; top: calc(100% + 6px); }
-.tip-below::before { bottom: auto; top: calc(100% + 1px); border-top-color: transparent; border-bottom-color: #1A1A1A; }
-
-/* Search / filter bar */
-.filter-bar { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
-.filter-group { display: flex; flex-direction: column; gap: .3rem; }
-.filter-group label { font-size: .6875rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .04em; }
-.filter-input { padding: .4rem .625rem; border: 1px solid #d0cdc6; border-radius: 5px; font-size: .875rem; background: #fff; height: 32px; }
-select.filter-input { cursor: pointer; min-width: 120px; }
-.filter-btn { padding: 0 .875rem; background: var(--primary); color: #fff; border: none; border-radius: 5px; font-size: .875rem; font-weight: 500; cursor: pointer; height: 32px; }
-.filter-btn:hover { background: var(--secondary); }
-.filter-clear { font-size: .8125rem; color: #888; text-decoration: none; padding-bottom: .125rem; align-self: flex-end; }
-.filter-clear:hover { color: #333; }
-
-/* Segmented user tabs (admin) */
-.seg-tabs { display: flex; gap: .25rem; background: #F0EDE8; border-radius: 6px; padding: .25rem; margin-bottom: 1.5rem; width: fit-content; flex-wrap: wrap; }
-.seg-tab { padding: .3125rem .875rem; border-radius: 4px; font-size: .8125rem; font-weight: 500; text-decoration: none; color: #555; transition: all .15s; }
-.seg-tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-.seg-tab:hover:not(.active) { color: var(--primary); }
-
-/* Tool usage bar chart */
-.section-block { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; width: 100%; overflow: hidden; }
-.section-block h2 { font-family: inherit; font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #555; margin-bottom: 1rem; }
-.tool-bar-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; }
-.tool-bar-label { width: 150px; font-size: .8125rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
-.tool-bar-track { flex: 1; height: 8px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
-.tool-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
-.tool-bar-meta { font-size: .75rem; color: #888; white-space: nowrap; min-width: 200px; text-align: left; flex-shrink: 0; }
-
-/* Daily query volume chart */
-.vol-chart { display: flex; align-items: flex-end; gap: 4px; height: 80px; padding-top: 8px; }
-.vol-col { display: flex; flex-direction: column; align-items: center; flex: 1; height: 100%; justify-content: flex-end; }
-.vol-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; transition: background .15s; }
-.vol-col:hover .vol-bar { background: var(--primary); }
-.vol-label { font-size: .5625rem; color: #aaa; margin-top: 3px; white-space: nowrap; }
-
-/* Researcher cards */
-.researcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem; }
-.researcher-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .875rem 1rem; }
-.researcher-name { font-weight: 600; font-size: .9375rem; margin-bottom: .5rem; color: var(--primary); }
-.researcher-stats { font-size: .8125rem; color: #555; display: flex; flex-direction: column; gap: .2rem; }
-
-/* Popular cases */
-.popular-case-row { display: flex; gap: .75rem; align-items: baseline; padding: .4375rem 0; border-bottom: 1px solid #F0EDE8; font-size: .8125rem; }
-.popular-case-row:last-child { border-bottom: none; }
-.popular-case-rank { color: #aaa; font-size: .75rem; width: 1.25rem; flex-shrink: 0; text-align: right; }
-.popular-case-title { flex: 1; }
-.popular-case-title a { color: #1a6b8a; text-decoration: none; }
-.popular-case-title a:hover { text-decoration: underline; }
-.popular-case-citation { color: #555; font-size: .75rem; white-space: nowrap; }
-.popular-case-count { font-weight: 600; color: var(--primary); white-space: nowrap; font-size: .75rem; }
-
-/* Login */
-.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; background: var(--light); }
-.login-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 2.5rem 2rem; width: 100%; max-width: 380px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-.login-logo { margin-bottom: 1.5rem; }
-.login-title { font-family: 'Canela', Georgia, 'Times New Roman', serif; font-size: 1.375rem; font-weight: 400; margin-bottom: .25rem; color: var(--primary); }
-.login-sub { font-size: .875rem; color: #666; margin-bottom: 2rem; }
-label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
-input[type="text"], input[type="password"] { width: 100%; padding: .625rem .75rem; border: 1px solid #d0cdc6; border-radius: 6px; font-size: .9375rem; outline: none; transition: border-color .15s; margin-bottom: 1.25rem; }
-input:focus { border-color: var(--primary); }
-.login-btn { width: 100%; padding: .75rem; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background .15s; }
-.login-btn:hover { background: var(--secondary); }
-.error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #dc2626; font-size: .875rem; padding: .625rem .75rem; margin-bottom: 1.25rem; }
-
-/* Print */
-@media print {
-  body { background: #fff; font-size: 8.5pt; font-family: Georgia, serif; }
-  nav, .actions, .btn-back, .no-print, .filter-bar, .seg-tabs, .section-block { display: none !important; }
-  main { max-width: none; padding: 0; }
-  h1 { font-size: 13pt; font-family: Georgia, serif; margin-bottom: .2rem; color: #000; }
-  .subtitle { margin-bottom: .5rem; }
-  .summary-grid { display: none; }
-  .print-header { display: block !important; margin-bottom: 1rem; }
-  .print-header-firm { font-family: Georgia, serif; font-size: 11pt; font-weight: bold; color: #0B1F33; }
-  .print-header-sub { font-size: 7.5pt; color: #555; margin-top: .125rem; }
-  /* Hide heavy columns in print — links don't work on paper */
-  .no-print-col { display: none !important; }
-  table { font-size: 7pt; border: 1px solid #aaa; table-layout: fixed; }
-  thead th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: .15rem .3rem !important; font-size: 6.5pt; }
-  td { padding: .15rem .3rem !important; vertical-align: top; word-break: break-word; }
-  .query-full { white-space: pre-wrap; word-break: break-word; }
-  .top-results-stack a { color: #333; text-decoration: none; }
-  .acc-badge { border: 1px solid #999; background: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  tr { page-break-inside: avoid; }
-  @page { size: A4 landscape; margin: 1.5cm; }
-  table { width: 100%; }
-  td { word-wrap: break-word; overflow-wrap: break-word; }
-}
-.print-header { display: none; }
 
 /* Matter ref copy button */
-.copy-ref-btn { background: none; border: none; cursor: pointer; color: #aaa; font-size: .875rem; padding: 0 .25rem; vertical-align: middle; }
-.copy-ref-btn:hover { color: var(--accent); }
+.copy-ref-btn{background:none;border:none;cursor:pointer;color:var(--txt-3);font-size:.875rem;padding:0 .25rem;vertical-align:middle;}
+.copy-ref-btn:hover{color:var(--accent-l);}
 
 /* Sort links in table headers */
-.sort-link { color: inherit; text-decoration: none; }
-.sort-link:hover { color: var(--accent); }
-.sort-link.active { color: var(--accent); font-weight: 700; }
+.sort-link{color:inherit;text-decoration:none;}
+.sort-link:hover{color:var(--accent-l);}
+.sort-link.active{color:var(--accent-l);font-weight:700;}
 
 /* Export dropdown */
-details.export-dd { position: relative; display: inline-block; }
-details.export-dd summary { list-style: none; cursor: pointer; }
-details.export-dd summary::-webkit-details-marker { display: none; }
-details.export-dd[open] summary { background: var(--secondary); color: #fff; border-color: var(--secondary); }
-details.export-dd .dd-menu { position: absolute; top: calc(100% + 4px); left: 0; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); min-width: 180px; z-index: 200; padding: .25rem 0; }
-details.export-dd .dd-menu a { display: block; padding: .45rem 1rem; font-size: .8125rem; color: #333; text-decoration: none; white-space: nowrap; }
-details.export-dd .dd-menu a:hover { background: var(--light); color: var(--primary); }
-details.export-dd .dd-menu .dd-sep { border: none; border-top: 1px solid var(--border); margin: .25rem 0; }
+details.export-dd{position:relative;display:inline-block;}
+details.export-dd summary{list-style:none;cursor:pointer;}
+details.export-dd summary::-webkit-details-marker{display:none;}
+details.export-dd[open] summary{background:var(--surf-3);color:var(--txt);border-color:var(--bdr-3);}
+details.export-dd .dd-menu{position:absolute;top:calc(100% + 4px);left:0;background:var(--surf-3);border:1px solid var(--bdr-2);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.3);min-width:180px;z-index:200;padding:.25rem 0;}
+details.export-dd .dd-menu a{display:block;padding:.45rem 1rem;font-size:.8125rem;color:var(--txt-2);text-decoration:none;white-space:nowrap;}
+details.export-dd .dd-menu a:hover{background:var(--surf-4);color:var(--txt);}
+details.export-dd .dd-menu .dd-sep{border:none;border-top:1px solid var(--bdr);margin:.25rem 0;}
+
+/* Print header (shown only in print) */
+.print-header{display:none;}
+@media print{
+  .print-header{display:block!important;margin-bottom:1rem;}
+  .print-header-firm{font-family:Georgia,serif;font-size:11pt;font-weight:bold;color:#000;}
+  .print-header-sub{font-size:7.5pt;color:#555;margin-top:.125rem;}
+  .no-print-col{display:none!important;}
+  table{font-size:7pt;border:1px solid #aaa;table-layout:fixed;}
+  thead th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:.15rem .3rem!important;font-size:6.5pt;}
+  td{padding:.15rem .3rem!important;vertical-align:top;word-break:break-word;}
+  .query-full{white-space:pre-wrap;word-break:break-word;}
+  .top-results-stack a{color:#333;text-decoration:none;}
+  .acc-badge{border:1px solid #999;background:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  tr{page-break-inside:avoid;}
+  @page{size:A4 landscape;margin:1.5cm;}
+  td{word-wrap:break-word;overflow-wrap:break-word;}
+  .summary-grid{display:none;}
+}
 `;
 
 export const LOGO_SRC = '';
@@ -743,62 +819,107 @@ function noCache(_req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-function page(title: string, body: string, user?: string, activePath?: string, autoRefreshSecs?: number, isAdminUser?: boolean): string {
-  const nav = user
-    ? `<nav>
-        <a href="/matters" class="nav-brand">
-          <img src="${LOGO_SRC}" alt="CP Legal" height="26" style="display:block"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
-          <span class="nav-brand-fallback">CP Legal</span>
-        </a>
-        <div class="nav-links">
-          <a href="/matters" class="nav-link${activePath === '/matters' ? ' active' : ''}">Matters</a>
-          <a href="/matters/dashboard" class="nav-link${activePath === '/matters/dashboard' ? ' active' : ''}">Dashboard</a>
-          ${isAdminUser ? `<a href="/admin" class="nav-link${activePath?.startsWith('/admin') ? ' active' : ''}">Admin</a>` : ''}
-        </div>
-        <form method="GET" action="/matters/search" style="display:flex;gap:.375rem;align-items:center" class="no-print">
-          <input type="text" name="q" placeholder="Search…" style="padding:.25rem .625rem;border:1px solid rgba(255,255,255,.3);border-radius:4px;background:rgba(255,255,255,.1);color:#fff;font-size:.8125rem;width:160px;outline:none" onfocus="this.style.width='220px'" onblur="this.style.width='160px'">
-        </form>
-        <span class="nav-user">${esc(user)}</span>
-        <a href="/matters/logout" class="nav-logout no-print">Sign out</a>
-      </nav>`
-    : '';
-  return `<!DOCTYPE html>
+export function page(
+  title: string,
+  body: string,
+  user: string | null,
+  activePath?: string,
+  _printButton?: string,
+  isAdminUser?: boolean,
+): string {
+  // Login page — no sidebar
+  if (!user) {
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${esc(title)} — CP Legal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  ${autoRefreshSecs ? `<meta http-equiv="refresh" content="${autoRefreshSecs}">` : ''}
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
-<body>
-${nav}
-<main>${body}</main>
-<script>
+<body>${body}</body>
+</html>`;
+  }
+
+  const avatar = (user.slice(0, 1) || '?').toUpperCase();
+  const role = isAdminUser ? 'Admin' : 'Researcher';
+
+  const navLink = (href: string, label: string, icon: string) =>
+    `<a href="${href}" class="sb-link${activePath === href || (href !== '/matters' && activePath?.startsWith(href)) ? ' active' : ''}">${icon}${label}</a>`;
+
+  const iconMatters = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+  const iconDash = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>`;
+  const iconAdmin = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`;
+  const iconLogout = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`;
+
+  const sidebar = `<aside class="sidebar">
+    <a href="/matters" class="sb-logo">
+      <img src="${LOGO_SRC}" alt="CP Legal" onerror="this.style.display='none'">
+      <div class="sb-logo-mark" style="display:flex">C</div>
+      <div class="sb-wordmark">
+        <span class="sb-logo-name">CP Legal</span>
+        <span class="sb-logo-sub">Legal Research</span>
+      </div>
+    </a>
+    <nav class="sb-nav">
+      <div class="sb-section">Research</div>
+      ${navLink('/matters/dashboard', 'Dashboard', iconDash)}
+      ${navLink('/matters', 'Matters', iconMatters)}
+      ${isAdminUser ? `<div class="sb-section">Administration</div>${navLink('/admin', 'Admin Panel', iconAdmin)}` : ''}
+    </nav>
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-avatar">${esc(avatar)}</div>
+        <div class="sb-user-info">
+          <div class="sb-username">${esc(user)}</div>
+          <div class="sb-role">${role}</div>
+        </div>
+        <a href="/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
+      </div>
+    </div>
+  </aside>`;
+
+  const timeScript = `<script>
 (function(){
   var tz='Australia/Sydney';
   try{var det=Intl.DateTimeFormat().resolvedOptions().timeZone;if(det)tz=det;}catch(e){}
   if(tz==='Australia/Sydney')return;
-  var els=document.querySelectorAll('time[data-utc]');
-  for(var i=0;i<els.length;i++){
-    var el=els[i];var iso=el.getAttribute('data-utc');var fmt=el.getAttribute('data-fmt');
+  document.querySelectorAll('time[data-utc]').forEach(function(el){
+    var iso=el.getAttribute('data-utc');var fmt=el.getAttribute('data-fmt');
     try{
-      var d=new Date(iso);
       var opts=fmt==='datetime'
         ?{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:tz}
         :{day:'2-digit',month:'short',year:'numeric',timeZone:tz};
-      el.textContent=d.toLocaleString('en-AU',opts);
+      el.textContent=new Date(iso).toLocaleString('en-AU',opts);
     }catch(e){}
-  }
+  });
 })();
-document.querySelectorAll('details.export-dd .dd-menu a').forEach(function(a){
-  a.addEventListener('click',function(){var d=a.closest('details');if(d)d.removeAttribute('open');});
-});
-</script>
+</script>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${esc(title)} — CP Legal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap" rel="stylesheet">
+  <style>${CSS}</style>
+</head>
+<body>
+<div class="app">
+  ${sidebar}
+  <div class="main">
+    <div class="content">
+      ${body}
+    </div>
+  </div>
+</div>
+${timeScript}
 </body>
 </html>`;
 }
@@ -851,7 +972,7 @@ function renderPopularCases(cases: PopularCaseRow[]): string {
 function renderErrorStats(stats: ErrorStatRow[]): string {
   if (stats.length === 0) {
     return `<div class="section-block no-print"><h2>Error Rates by Tool</h2>
-      <p style="color:#888;font-size:.8125rem;padding:.25rem 0">No errors recorded.</p>
+      <p style="color:var(--txt-3);font-size:.8125rem;padding:.25rem 0">No errors recorded.</p>
     </div>`;
   }
   const rows = stats.map((s) => `<tr>
@@ -898,7 +1019,7 @@ function renderDashboardCards(
   const accuracyHtml = avgAccuracy != null
     ? `<div class="card">
         <div class="card-label">Avg Extraction Accuracy
-          <span class="tip tip-below" data-tip="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not whether the answer is correct." tabindex="0" style="color:#aaa;margin-left:.25rem">ⓘ</span>
+          <span class="tip tip-below" data-tip="Isaacus Kanon Answer Extractor confidence. Legal text typically scores 5–45% — this reflects extractability, not whether the answer is correct." tabindex="0" style="color:var(--txt-3);margin-left:.25rem">ⓘ</span>
         </div>
         <div class="card-value sm">${accuracyBadge(avgAccuracy)}</div>
         <div class="card-sub">across QA-capable tools</div>
@@ -920,7 +1041,7 @@ function renderDashboardCards(
     </div>
     <div class="card">
       <div class="card-label">Est. Isaacus Cost <span class="est-badge tip tip-below" data-tip="Per-tool rates: Enricher $3.50/1M, Answer Extractor $1.50/1M, Classifier $1.00/1M (USD). Excludes Railway infrastructure." tabindex="0">est</span></div>
-      ${(() => { const c = computeDashboardCost(costByTool); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
+      ${(() => { const c = computeDashboardCost(costByTool); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:var(--txt-3)">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
     </div>
     ${accuracyHtml}
   </div>`;
@@ -971,29 +1092,37 @@ mattersRouter.get('/matters/login', (req: Request, res: Response) => {
   if (getSessionUser(req)) { res.redirect('/matters'); return; }
   const hasError = !!req.query['error'];
   const next = typeof req.query['next'] === 'string' ? req.query['next'] : '/matters';
+  const error = hasError ? 'Incorrect username or token. Please try again.' : '';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Sign in', `
     <div class="login-wrap">
       <div class="login-card">
         <div class="login-logo">
-          <img src="${LOGO_SRC}" alt="CP Legal" height="28" style="display:block"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-          <span style="display:none;font-weight:700;font-size:1.1rem;color:#0B1F33">CP Legal</span>
+          <img src="${LOGO_SRC}" alt="CP Legal" height="32" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="login-logo-mark" style="display:none">C</div>
+          <div>
+            <div class="login-title" style="margin-bottom:0">CP Legal</div>
+            <div style="font-size:.625rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--txt-3)">Legal Research</div>
+          </div>
         </div>
-        <h1 class="login-title">Matter Research</h1>
-        <p class="login-sub">Sign in to view research history.</p>
-        ${hasError ? '<div class="error-box">Incorrect username or token. Please try again.</div>' : ''}
-        <form method="POST" action="/matters/login">
+        <div class="login-title">Welcome back</div>
+        <div class="login-sub">Sign in to your research workspace</div>
+        ${error ? `<div class="error-box">${esc(error)}</div>` : ''}
+        <form method="post" action="/matters/login">
           <input type="hidden" name="next" value="${esc(next)}">
-          <label for="u">Username</label>
-          <input type="text" id="u" name="username" autocomplete="username" required autofocus>
-          <label for="p">Token</label>
-          <input type="password" id="p" name="password" autocomplete="current-password" required>
-          <button class="login-btn" type="submit">Sign in</button>
+          <div class="form-group">
+            <label for="u">Username</label>
+            <input type="text" id="u" name="username" autocomplete="username" autofocus required placeholder="your username">
+          </div>
+          <div class="form-group">
+            <label for="p">Token</label>
+            <input type="password" id="p" name="password" autocomplete="current-password" required placeholder="your API token">
+          </div>
+          <button type="submit" class="login-btn">Sign in</button>
         </form>
       </div>
     </div>
-  `));
+  `, null));
 });
 
 // Rate limiter: 10 login attempts per IP per 15 minutes.
@@ -1112,18 +1241,19 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
 
   const spendCap = spendCapStr?.trim() ? parseFloat(spendCapStr) : null;
   const spendPct = spendCap && spendCap > 0 ? Math.min(100, (monthlySpend / spendCap) * 100) : null;
-  const spendColor = spendPct === null ? '#555' : spendPct >= 100 ? '#dc2626' : spendPct >= 80 ? '#d97706' : '#16a34a';
+  const spendColorVar = spendPct === null ? 'var(--txt-2)' : spendPct >= 100 ? 'var(--err)' : spendPct >= 80 ? 'var(--warn)' : 'var(--ok)';
+  const spendFillClass = spendPct === null ? '' : spendPct >= 100 ? 'spend-err' : spendPct >= 80 ? 'spend-warn' : 'spend-ok';
   const spendBar = spendPct !== null
-    ? `<div style="background:#e5e7eb;border-radius:3px;height:5px;width:100%;margin-top:.375rem"><div style="background:${spendColor};border-radius:3px;height:5px;width:${spendPct}%"></div></div>`
+    ? `<div class="spend-bar"><div class="spend-fill ${spendFillClass}" style="width:${spendPct}%"></div></div>`
     : '';
   const spendWidget = monthlySpend > 0 || spendCap
-    ? `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.875rem 1.125rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+    ? `<div style="background:var(--surface);border:1px solid var(--bdr);border-radius:var(--r-lg);padding:.875rem 1.125rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
         <div style="min-width:160px">
-          <div style="font-size:.75rem;color:#888;margin-bottom:.125rem">This month's spend</div>
-          <div style="font-weight:600;color:${spendColor}">$${monthlySpend.toFixed(4)} USD${spendCap ? ` <span style="font-weight:400;color:#888;font-size:.875rem">/ $${spendCap.toFixed(2)} cap</span>` : ''}</div>
+          <div style="font-size:.75rem;color:var(--txt-3);margin-bottom:.125rem">This month's spend</div>
+          <div style="font-weight:600;color:${spendColorVar}">$${monthlySpend.toFixed(4)} USD${spendCap ? ` <span style="font-weight:400;color:var(--txt-3);font-size:.875rem">/ $${spendCap.toFixed(2)} cap</span>` : ''}</div>
           ${spendBar}
         </div>
-        ${spendPct !== null ? `<div style="font-size:.8125rem;color:${spendColor}">${spendPct.toFixed(1)}% of monthly cap used</div>` : ''}
+        ${spendPct !== null ? `<div style="font-size:.8125rem;color:${spendColorVar}">${spendPct.toFixed(1)}% of monthly cap used</div>` : ''}
       </div>`
     : '';
 
@@ -1146,7 +1276,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
               <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
-              <td style="white-space:pre-wrap;word-break:break-word;color:#555;max-width:380px">${esc(r.query_text)}</td>
+              <td style="white-space:pre-wrap;word-break:break-word;color:var(--txt-2);max-width:380px">${esc(r.query_text)}</td>
               <td style="text-align:center;overflow:visible">${accuracyBadge(r.accuracy_score)}</td>
             </tr>`).join('')}
         </tbody>
@@ -1159,7 +1289,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
   });
 
   const errorAlertBanner = userIsAdmin && errorStats.some((e) => e.error_rate_pct > 10)
-    ? `<div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:#713f12">⚠️ Some tools have elevated error rates. <a href="/admin" style="color:#713f12;font-weight:600">View in Admin →</a></div>`
+    ? `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r);padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:var(--warn)">⚠️ Some tools have elevated error rates. <a href="/admin" style="color:var(--warn);font-weight:600">View in Admin →</a></div>`
     : '';
 
   res.send(page('Dashboard', `
@@ -1167,7 +1297,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     ${spendWidget}
     <h1>Dashboard ${adminBadge}</h1>
     <p class="subtitle">Aggregated research analytics${userIsAdmin ? ' across all matters and researchers' : ' for your matters'}
-      <span style="float:right;font-size:.75rem;color:#aaa">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time></span>
+      <span style="float:right;font-size:.75rem;color:var(--txt-3)">Updated <time data-utc="${nowIso}" data-fmt="datetime">${esc(lastUpdated)}</time></span>
     </p>
     ${renderDashboardCards(stats, costByTool, avgAccuracy)}
     ${renderQueryVolumeChart(queryVolume)}
@@ -1176,7 +1306,7 @@ mattersRouter.get('/matters/dashboard', requireSession, async (req: Request, res
     ${userIsAdmin ? renderPopularCases(popularCases) : ''}
     ${renderErrorStats(errorStats)}
     ${recentHtml}
-  `, user, '/matters/dashboard', 300, userIsAdmin));
+  `, user, '/matters/dashboard', undefined, userIsAdmin));
 });
 
 // GET /matters — matter list
@@ -1241,9 +1371,9 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
       const researchers = (m.users ?? []).join(', ') || '—';
       const tools = (m.tools_used ?? []).map((t) => `<span class="tag">${esc(toolLabel(t))}</span>`).join('');
       const isClosed = m.status === 'closed';
-      const statusBadge = isClosed ? ' <span class="tag" style="background:#fee2e2;color:#991b1b">Closed</span>' : '';
+      const statusBadge = isClosed ? ' <span class="tag" style="background:var(--err-bg);color:var(--err)">Closed</span>' : '';
       const displayLabel = m.display_name
-        ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:#888;font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
+        ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:var(--txt-3);font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
         : esc(m.matter_ref);
       const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
       return `<tr>
@@ -1255,7 +1385,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
         <td><a href="/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
       </tr>`;
     }).join('');
-    const sortIcon = (col: string) => sort === col ? ' ↓' : ' <span style="color:#ccc;font-weight:400">↕</span>';
+    const sortIcon = (col: string) => sort === col ? ' ↓' : ' <span style="color:var(--txt-3);font-weight:400">↕</span>';
     tableHtml = `<div class="table-wrap"><table>
       <thead><tr>
         <th><a href="${esc(buildSortUrl('matter_ref'))}" class="sort-link${sort === 'matter_ref' ? ' active' : ''}">Matter Ref${sortIcon('matter_ref')}</a></th>
@@ -1284,7 +1414,7 @@ mattersRouter.get('/matters', requireSession, async (req: Request, res: Response
     ${statusTabs}
     ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/matters' })}
     ${tableHtml}
-  `, user, '/matters', 300, userIsAdmin));
+  `, user, '/matters', undefined, userIsAdmin));
 });
 
 // GET /matters/search — global query search (MUST be before /matters/:ref)
@@ -1301,13 +1431,13 @@ mattersRouter.get('/matters/search', requireSession, async (req: Request, res: R
     <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
     <td class="date-small">${tsDateTime(r.created_at)}</td>
     ${userIsAdmin ? `<td class="users-cell">${esc(r.user_id ?? '—')}</td>` : ''}
-    <td style="max-width:400px;white-space:pre-wrap;word-break:break-word;color:#555">${esc(r.query_text.slice(0, 300))}</td>
+    <td style="max-width:400px;white-space:pre-wrap;word-break:break-word;color:var(--txt-2)">${esc(r.query_text.slice(0, 300))}</td>
   </tr>`).join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Search Results', `
     <form method="GET" action="/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
-      <input type="text" name="q" value="${esc(q)}" style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.9375rem;flex:1;max-width:400px">
+      <input type="text" name="q" value="${esc(q)}" style="flex:1;max-width:400px">
       <button type="submit" class="btn btn-primary">Search</button>
     </form>
     <h1>Search: &ldquo;${esc(q)}&rdquo;</h1>
@@ -1711,32 +1841,32 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
 
   const paginationHtml = totalPages > 1 ? `<div class="pagination no-print" style="display:flex;gap:.5rem;align-items:center;margin-top:1rem">
     ${safePage > 1 ? `<a href="?page=${safePage - 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">← Prev</a>` : ''}
-    <span style="font-size:.8125rem;color:#888">Page ${safePage} of ${totalPages}</span>
+    <span style="font-size:.8125rem;color:var(--txt-3)">Page ${safePage} of ${totalPages}</span>
     ${safePage < totalPages ? `<a href="?page=${safePage + 1}${toolFilter ? '&tool=' + encodeURIComponent(toolFilter) : ''}" class="btn btn-secondary btn-sm">Next →</a>` : ''}
   </div>` : '';
 
   const closedBanner = isClosed
-    ? `<div style="background:#fee2e2;border:1px solid #fca5a5;padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem">This matter is <strong>closed</strong>. New queries with this matter reference will be appended with a new identifier.</div>`
+    ? `<div style="background:var(--err-bg);border:1px solid var(--err);padding:.75rem 1rem;border-radius:var(--r);margin-bottom:1rem;color:var(--err)">This matter is <strong>closed</strong>. New queries with this matter reference will be appended with a new identifier.</div>`
     : '';
 
   const renameForm = `<details class="no-print" style="margin-bottom:.75rem">
-    <summary style="font-size:.8125rem;color:#555;cursor:pointer">Rename matter…</summary>
+    <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Rename matter…</summary>
     <form method="POST" action="/matters/${encodeURIComponent(ref)}/rename" style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-      <input type="text" name="display_name" value="${esc(displayName ?? '')}" placeholder="Display name (optional)" maxlength="200" style="padding:.4rem .625rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.875rem;min-width:200px">
-      <button type="submit" class="btn btn-secondary" style="padding:.375rem .75rem;font-size:.8125rem">Save</button>
-      ${displayName ? `<button type="submit" name="display_name" value="" class="btn btn-secondary" style="padding:.375rem .75rem;font-size:.8125rem">Clear</button>` : ''}
+      <input type="text" name="display_name" value="${esc(displayName ?? '')}" placeholder="Display name (optional)" maxlength="200" style="min-width:200px;width:auto">
+      <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+      ${displayName ? `<button type="submit" name="display_name" value="" class="btn btn-secondary btn-sm">Clear</button>` : ''}
     </form>
   </details>`;
 
   const notesForm = `<details class="no-print" style="margin-bottom:.75rem">
-    <summary style="font-size:.8125rem;color:#555;cursor:pointer">Matter notes…</summary>
+    <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Matter notes…</summary>
     <form method="POST" action="/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
-      <textarea name="notes" rows="4" maxlength="2000" style="width:100%;max-width:600px;padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.875rem;font-family:inherit;resize:vertical">${esc(matter?.notes ?? '')}</textarea>
+      <textarea name="notes" rows="4" maxlength="2000" style="max-width:600px;resize:vertical">${esc(matter?.notes ?? '')}</textarea>
       <div style="margin-top:.375rem">
-        <button type="submit" class="btn btn-secondary" style="padding:.375rem .75rem;font-size:.8125rem">Save Notes</button>
+        <button type="submit" class="btn btn-secondary btn-sm">Save Notes</button>
       </div>
     </form>
-    ${matter?.notes ? `<div style="margin-top:.5rem;padding:.625rem .75rem;background:#fafaf8;border:1px solid var(--border);border-radius:5px;font-size:.8125rem;white-space:pre-wrap;color:#333">${esc(matter.notes)}</div>` : ''}
+    ${matter?.notes ? `<div style="margin-top:.5rem;padding:.625rem .75rem;background:var(--surf-2);border:1px solid var(--bdr);border-radius:var(--r);font-size:.8125rem;white-space:pre-wrap;color:var(--txt)">${esc(matter.notes)}</div>` : ''}
   </details>`;
 
   const notesPrint = matter?.notes
@@ -1746,7 +1876,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
   const closeButton = userIsAdmin
     ? `<form method="POST" action="/matters/${encodeURIComponent(ref)}/set-status" class="no-print" style="display:inline">
         <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
-        <button type="submit" class="btn btn-secondary" style="padding:.375rem .75rem;font-size:.8125rem">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
+        <button type="submit" class="btn btn-secondary btn-sm">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
       </form>`
     : '';
 
@@ -1759,7 +1889,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
     </div>
     ${closedBanner}
     ${displayName
-      ? `<h1>${esc(displayName)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1><p style="font-size:.8125rem;color:#888;font-family:ui-monospace,monospace;margin-bottom:.375rem">${esc(ref)}</p>`
+      ? `<h1>${esc(displayName)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1><p style="font-size:.8125rem;color:var(--txt-3);font-family:ui-monospace,monospace;margin-bottom:.375rem">${esc(ref)}</p>`
       : `<h1>${esc(ref)} <button class="copy-ref-btn" data-ref="${esc(ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button></h1>`}
     ${renameForm}
     ${notesForm}
@@ -1786,7 +1916,7 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
       </div>
       <div class="card">
         <div class="card-label">Est. API Cost <span class="est-badge">est</span></div>
-        ${(() => { const c = computeMatterCost(allRows); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:#888">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
+        ${(() => { const c = computeMatterCost(allRows); return `<div class="card-value sm">${c.usd} <span style="font-size:.75rem;color:var(--txt-3)">USD</span></div><div class="card-sub">≈ ${c.aud} AUD · per-tool rates</div>`; })()}
       </div>
       <div class="card">
         <div class="card-label">Researchers</div>
@@ -1834,11 +1964,11 @@ mattersRouter.get('/matters/:ref', requireSession, async (req: Request, res: Res
         <th class="no-print-col" style="text-align:right">Tokens</th>
         <th style="text-align:right">Cost (USD)</th>
         <th style="text-align:center">Accuracy
-          <span class="tip tip-below tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:#aaa;margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
+          <span class="tip tip-below tip-right no-print-col" data-tip="Isaacus Kanon extractive confidence. Legal text typically scores 5–45% — reflects how extractable the answer is, not whether it's correct." tabindex="0" style="color:var(--txt-3);margin-left:.2rem;font-weight:400;cursor:help">ⓘ</span>
         </th>
         <th>Top Results</th>
       </tr></thead>
-      <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:#888;padding:2rem">No queries match this filter.</td></tr>'}</tbody>
+      <tbody>${queryRows.length > 0 ? queryRows : '<tr><td colspan="10" style="text-align:center;color:var(--txt-3);padding:2rem">No queries match this filter.</td></tr>'}</tbody>
     </table>
     </div>
     ${paginationHtml}

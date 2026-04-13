@@ -136,7 +136,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
       page('Access Denied', `
         <div style="text-align:center;padding:4rem 2rem">
           <h1 style="font-size:1.5rem;margin-bottom:.5rem">403 — Access Denied</h1>
-          <p style="color:#666;margin-bottom:1.5rem">Your account does not have admin privileges.</p>
+          <p style="color:var(--txt-2);margin-bottom:1.5rem">Your account does not have admin privileges.</p>
           <a href="/matters" class="btn btn-secondary">← Back to Matters</a>
         </div>
       `, session.user, undefined),
@@ -179,123 +179,142 @@ function tsDateTime(iso: string): string {
 
 const ADMIN_CSS = `
 ${CSS}
-.btn-danger { background: #991b1b; color: #fff; border-color: #991b1b; }
-.btn-danger:hover { background: #7f1d1d; border-color: #7f1d1d; }
-.btn-sm { padding: .3rem .625rem; font-size: .8125rem; }
-.token-display { background: #f0fdf4; border: 2px solid #16a34a; border-radius: 8px; padding: 1rem 1.25rem; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 1rem; word-break: break-all; margin: 1rem 0; }
-.token-warning { background: #fef9c3; border: 1px solid #ca8a04; border-radius: 6px; padding: .75rem 1rem; font-size: .875rem; color: #713f12; margin-bottom: .5rem; }
-.token-explain { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: .75rem 1rem; font-size: .875rem; color: #075985; margin-bottom: .5rem; }
-.badge-admin { display: inline-block; background: #dbeafe; color: #1e40af; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
-.badge-inactive { display: inline-block; background: #fee2e2; color: #991b1b; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
-.badge-active { display: inline-block; background: #d1fae5; color: #065f46; padding: .125rem .5rem; border-radius: 10px; font-size: .6875rem; font-weight: 600; }
-.status-ok { color: #16a34a; font-weight: 600; }
-.status-err { color: #dc2626; font-weight: 600; }
-.card-link { text-decoration: none; }
-.card-link .card:hover { border-color: var(--accent); }
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
-.form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; max-width: 400px; padding: .5rem .75rem; border: 1px solid #d0cdc6; border-radius: 6px; font-size: .9375rem; }
-.form-group input[type="checkbox"] { width: auto; }
-.form-hint { font-size: .8125rem; color: #888; margin-top: .25rem; }
-.section-title { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #888; margin: 2rem 0 .75rem; }
-.confirm-box { border: 1px solid #fca5a5; background: #fff5f5; border-radius: 8px; padding: 1.25rem; margin-top: 1.5rem; }
-.confirm-box h3 { color: #991b1b; font-size: .9375rem; margin-bottom: .75rem; }
-/* Admin layout: sidebar + content */
-.admin-layout { display: flex; min-height: calc(100vh - 52px); }
-.admin-sidebar { width: 220px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--border); padding: 1.5rem 0; }
-.admin-sidebar-section { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #aaa; padding: 0 1rem; margin: 1rem 0 .375rem; }
-.admin-sidebar-link { display: block; padding: .5rem 1rem; font-size: .875rem; color: #444; text-decoration: none; border-left: 3px solid transparent; }
-.admin-sidebar-link:hover { background: var(--light); color: var(--primary); }
-.admin-sidebar-link.active { background: #EEF2FF; color: var(--primary); border-left-color: var(--accent); font-weight: 600; }
-.admin-content { flex: 1; padding: 2rem 1.5rem; min-width: 0; overflow: hidden; }
-/* Period toggle tabs */
-.period-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; margin-bottom: 1.25rem; }
-.period-tab { padding: .3rem .75rem; font-size: .8125rem; color: #555; text-decoration: none; border-right: 1px solid var(--border); background: #fff; }
-.period-tab:last-child { border-right: none; }
-.period-tab.active { background: var(--primary); color: #fff; }
-.copy-btn { padding: .3rem .75rem; font-size: .8125rem; background: #fff; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; margin-left: .5rem; }
-.copy-btn:hover { background: var(--light); }
-@media (max-width: 768px) {
-  .admin-layout { flex-direction: column; }
-  .admin-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: .75rem 0; display: flex; flex-wrap: wrap; gap: 0; }
-  .admin-sidebar-section { display: none; }
-  .admin-sidebar-link { border-left: none; border-bottom: 3px solid transparent; padding: .5rem .75rem; font-size: .8125rem; }
-  .admin-sidebar-link.active { border-bottom-color: var(--accent); border-left: none; }
-  main { padding: 0; }
-  .admin-content { padding: 1.25rem 1rem; }
+.btn-danger { background:transparent;color:var(--err);border:1px solid var(--err-bg); }
+.btn-danger:hover { background:var(--err-bg);border-color:var(--err); }
+.btn-sm { padding:.3125rem .75rem;font-size:.8125rem; }
+.token-display { background:var(--surf-2);border:1px solid var(--bdr-2);border-radius:var(--r);padding:1rem 1.25rem;font-family:ui-monospace,'Cascadia Code',monospace;font-size:.9375rem;word-break:break-all;color:var(--ok);margin:1rem 0;letter-spacing:.02em; }
+.token-warning { background:var(--warn-bg);border:1px solid rgba(251,191,36,.3);border-radius:var(--r);padding:.75rem 1rem;font-size:.875rem;color:var(--warn);margin-bottom:.5rem; }
+.token-explain { background:var(--accent-bg);border:1px solid var(--accent-bdr);border-radius:var(--r);padding:.75rem 1rem;font-size:.875rem;color:var(--accent-l);margin-bottom:.5rem; }
+.badge-admin { display:inline-flex;align-items:center;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;background:var(--accent-bg);color:var(--accent-l); }
+.badge-inactive { display:inline-flex;align-items:center;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;background:var(--err-bg);color:var(--err); }
+.badge-active { display:inline-flex;align-items:center;padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;background:var(--ok-bg);color:var(--ok); }
+.status-ok { color:var(--ok);font-weight:600; }
+.status-err { color:var(--err);font-weight:600; }
+.card-link { text-decoration:none;color:inherit; }
+.card-link .card:hover { border-color:var(--bdr-2); }
+.form-group { margin-bottom:1rem; }
+.form-group label { display:block;font-size:.875rem;font-weight:500;margin-bottom:.375rem;color:var(--txt-2); }
+.form-group input[type="text"],.form-group input[type="number"],.form-group select { width:100%;max-width:400px;padding:.5rem .75rem;border:1px solid var(--bdr-2);border-radius:6px;font-size:.9375rem;background:var(--surf-2);color:var(--txt);outline:none;transition:border-color .15s,box-shadow .15s; }
+.form-group input:focus,.form-group select:focus { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg); }
+.form-group input[type="checkbox"] { width:auto; }
+.form-hint { font-size:.8125rem;color:var(--txt-3);margin-top:.25rem; }
+.section-title { font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--txt-3);margin:2rem 0 .75rem; }
+.confirm-box { border:1px solid rgba(248,113,113,.3);background:var(--err-bg);border-radius:var(--r-lg);padding:1.25rem;margin-top:1.5rem; }
+.confirm-box h3 { color:var(--err);font-size:.9375rem;margin-bottom:.75rem;font-family:inherit;font-weight:600; }
+/* Admin sidebar layout */
+.admin-layout { display:flex;min-height:calc(100vh - 52px); }
+.admin-sidebar { width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--bdr);padding:1.5rem 0; }
+.admin-sidebar-section { font-size:.5625rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--txt-3);padding:0 1rem;margin:1rem 0 .375rem; }
+.admin-sidebar-link { display:block;padding:.5rem 1rem;font-size:.875rem;color:var(--txt-2);text-decoration:none;border-left:2px solid transparent;transition:all .15s; }
+.admin-sidebar-link:hover { background:var(--surf-2);color:var(--txt); }
+.admin-sidebar-link.active { background:var(--accent-bg);color:var(--accent-l);border-left-color:var(--accent);font-weight:500; }
+.admin-content { flex:1;padding:2rem 1.5rem;min-width:0;overflow:hidden; }
+/* Period tabs */
+.period-tabs { display:inline-flex;border:1px solid var(--bdr-2);border-radius:var(--r);overflow:hidden;margin-bottom:1.25rem; }
+.period-tab { padding:.3rem .875rem;font-size:.8125rem;color:var(--txt-2);text-decoration:none;border-right:1px solid var(--bdr-2);background:transparent;transition:all .15s; }
+.period-tab:last-child { border-right:none; }
+.period-tab.active { background:var(--accent);color:#fff; }
+.period-tab:hover:not(.active) { background:var(--surf-2);color:var(--txt); }
+.copy-btn { padding:.3rem .75rem;font-size:.8125rem;background:var(--surf-3);border:1px solid var(--bdr-2);border-radius:var(--r);cursor:pointer;color:var(--txt-2);font-family:inherit;transition:all .15s; }
+.copy-btn:hover { background:var(--surf-4);color:var(--txt); }
+@media(max-width:768px){
+  .admin-layout{flex-direction:column;}
+  .admin-sidebar{width:100%;border-right:none;border-bottom:1px solid var(--bdr);padding:.75rem 0;display:flex;flex-wrap:wrap;gap:0;}
+  .admin-sidebar-section{display:none;}
+  .admin-sidebar-link{border-left:none;border-bottom:2px solid transparent;padding:.5rem .75rem;font-size:.8125rem;}
+  .admin-sidebar-link.active{border-bottom-color:var(--accent);border-left:none;}
+  .admin-content{padding:1.25rem 1rem;}
 }
 `;
 
-function sidebar(activePath?: string): string {
-  const link = (href: string, label: string) =>
-    `<a href="${href}" class="admin-sidebar-link${activePath === href ? ' active' : ''}">${label}</a>`;
-  return `<div class="admin-sidebar">
-    <div class="admin-sidebar-section">Overview</div>
-    ${link('/admin', 'Dashboard')}
-    <div class="admin-sidebar-section">Management</div>
-    ${link('/admin/users', 'Users')}
-    ${link('/admin/matters', 'Matters')}
-    <div class="admin-sidebar-section">Research</div>
-    ${link('/admin/watchlist', 'Watchlist')}
-    <div class="admin-sidebar-section">System</div>
-    ${link('/admin/config', 'Config')}
-    ${link('/admin/data', 'Data')}
-  </div>`;
-}
-
 function page(title: string, body: string, user?: string, activePath?: string): string {
-  const nav = user
-    ? `<nav>
-        <a href="/matters" class="nav-brand">
-          <img src="${LOGO_SRC}" alt="CP Legal" height="26" style="display:block"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
-          <span class="nav-brand-fallback">CP Legal</span>
-        </a>
-        <div class="nav-links">
-          <a href="/matters" class="nav-link">Matters</a>
-          <a href="/matters/dashboard" class="nav-link">Dashboard</a>
-          <a href="/admin" class="nav-link${activePath?.startsWith('/admin') ? ' active' : ''}">Admin</a>
+  const avatar = (user?.slice(0, 1) || '?').toUpperCase();
+
+  const iconDash = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>`;
+  const iconUsers = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>`;
+  const iconMatters = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+  const iconWatch = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`;
+  const iconConfig = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`;
+  const iconData = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>`;
+  const iconMattersRes = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>`;
+  const iconLogout = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`;
+
+  const lnk = (href: string, label: string, icon: string) =>
+    `<a href="${href}" class="sb-link${activePath === href ? ' active' : ''}">${icon}<span>${label}</span></a>`;
+
+  const sidebarHtml = user ? `<aside class="sidebar">
+    <a href="/admin" class="sb-logo">
+      <img src="${LOGO_SRC}" alt="CP Legal" onerror="this.style.display='none'">
+      <div class="sb-logo-mark" style="display:flex">C</div>
+      <div class="sb-wordmark">
+        <span class="sb-logo-name">CP Legal</span>
+        <span class="sb-logo-sub">Admin</span>
+      </div>
+    </a>
+    <nav class="sb-nav">
+      <div class="sb-section">Overview</div>
+      ${lnk('/admin', 'Dashboard', iconDash)}
+      <div class="sb-section">Management</div>
+      ${lnk('/admin/users', 'Users', iconUsers)}
+      ${lnk('/admin/matters', 'Matters', iconMatters)}
+      <div class="sb-section">Research</div>
+      ${lnk('/admin/watchlist', 'Watchlist', iconWatch)}
+      <div class="sb-section">System</div>
+      ${lnk('/admin/config', 'Config', iconConfig)}
+      ${lnk('/admin/data', 'Data', iconData)}
+      <div class="sb-section">Navigation</div>
+      ${lnk('/matters', 'Research Portal', iconMattersRes)}
+    </nav>
+    <div class="sb-footer">
+      <div class="sb-user">
+        <div class="sb-avatar">${esc(avatar)}</div>
+        <div class="sb-user-info">
+          <div class="sb-username">${esc(user)}</div>
+          <div class="sb-role">Admin</div>
         </div>
-        <span class="nav-user">${esc(user)} <span class="badge-admin" style="margin-left:.25rem">admin</span></span>
-        <a href="/matters/logout" class="nav-logout no-print">Sign out</a>
-      </nav>`
-    : '';
-  const useSidebar = !!user && activePath?.startsWith('/admin');
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${esc(title)} — CP Legal Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>${ADMIN_CSS}</style>
-</head>
-<body>
-${nav}
-${useSidebar
-  ? `<div class="admin-layout">${sidebar(activePath)}<div class="admin-content">${body}</div></div>`
-  : `<main>${body}</main>`
-}
-<script>
+        <a href="/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
+      </div>
+    </div>
+  </aside>` : '';
+
+  const timeScript = `<script>
 (function(){
   var tz='Australia/Sydney';
   try{var det=Intl.DateTimeFormat().resolvedOptions().timeZone;if(det)tz=det;}catch(e){}
   if(tz==='Australia/Sydney')return;
-  var els=document.querySelectorAll('time[data-utc]');
-  for(var i=0;i<els.length;i++){
-    var el=els[i];var iso=el.getAttribute('data-utc');var fmt=el.getAttribute('data-fmt');
+  document.querySelectorAll('time[data-utc]').forEach(function(el){
+    var iso=el.getAttribute('data-utc');var fmt=el.getAttribute('data-fmt');
     try{
-      var d=new Date(iso);
       var opts=fmt==='datetime'
         ?{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:tz}
         :{day:'2-digit',month:'short',year:'numeric',timeZone:tz};
-      el.textContent=d.toLocaleString('en-AU',opts);
+      el.textContent=new Date(iso).toLocaleString('en-AU',opts);
     }catch(e){}
-  }
+  });
 })();
-</script>
+</script>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${esc(title)} — CP Legal Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap" rel="stylesheet">
+  <style>${ADMIN_CSS}</style>
+</head>
+<body>
+<div class="app">
+  ${sidebarHtml}
+  <div class="main">
+    <div class="content">
+      ${body}
+    </div>
+  </div>
+</div>
+${timeScript}
 </body>
 </html>`;
 }
@@ -355,11 +374,11 @@ function renderAdminVolumeChart(data: DailyQueryCount[]): string {
     const dayNum = label.split(' ')[0]!;
     return `<div class="vol-col" title="${label}: ${d.count} quer${d.count === 1 ? 'y' : 'ies'}">
       <div class="vol-bar" style="height:${pct}%;background:var(--accent);width:100%;border-radius:2px 2px 0 0;min-height:2px"></div>
-      <div style="font-size:.5625rem;color:#aaa;margin-top:3px;white-space:nowrap">${dayNum}</div>
+      <div style="font-size:.5625rem;color:var(--txt-3);margin-top:3px;white-space:nowrap">${dayNum}</div>
     </div>`;
   }).join('');
-  return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-    <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#555;margin-bottom:.75rem">Query Volume — Last ${data.length} Days</div>
+  return `<div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--txt-2);margin-bottom:.75rem">Query Volume — Last ${data.length} Days</div>
     <div style="display:flex;align-items:flex-end;gap:4px;height:80px;padding-top:8px">${bars}</div>
   </div>`;
 }
@@ -367,7 +386,7 @@ function renderAdminVolumeChart(data: DailyQueryCount[]): string {
 // ── Reusable table renderers ──────────────────────────────────────────────────
 
 function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showUsername = false): string {
-  if (events.length === 0) return `<p style="color:#888;font-size:.875rem;padding:.5rem 0">${caption ?? 'No events recorded.'}</p>`;
+  if (events.length === 0) return `<p style="color:var(--txt-2);font-size:.875rem;padding:.5rem 0">${caption ?? 'No events recorded.'}</p>`;
   const rows = events.map((e) => {
     const meta = (e.meta ?? {}) as Record<string, string>;
     const location = [meta['city'], meta['country']].filter(Boolean).join(', ') || '—';
@@ -377,7 +396,7 @@ function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showU
     <td><span class="tag">${esc(e.event_type)}</span></td>
     <td>${esc(e.client_name ?? '—')}</td>
     <td class="mono" style="font-size:.75rem">${esc(e.ip ?? '—')}</td>
-    <td style="font-size:.75rem;color:#555">${esc(location)}</td>
+    <td style="font-size:.75rem;color:var(--txt-2)">${esc(location)}</td>
     <td style="word-break:break-word;white-space:normal" title="${esc(e.user_agent ?? '')}">${esc((e.user_agent ?? '').slice(0, 120))}</td>
   </tr>`;
   }).join('');
@@ -403,8 +422,8 @@ function renderUserRow(u: UserRow): string {
   const statusBadge = u.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
   const lastActive = u.last_active ? fmtDate(u.last_active) : '—';
   return `<tr>
-    <td><a href="/admin/users/${encodeURIComponent(u.username)}" style="font-weight:600;color:var(--primary);text-decoration:none">${esc(u.username)}</a></td>
-    <td>${adminBadge || '<span style="color:#aaa;font-size:.8125rem">User</span>'}</td>
+    <td><a href="/admin/users/${encodeURIComponent(u.username)}" style="font-weight:600;color:var(--txt);text-decoration:none">${esc(u.username)}</a></td>
+    <td>${adminBadge || '<span style="color:var(--txt-3);font-size:.8125rem">User</span>'}</td>
     <td>${statusBadge}</td>
     <td class="date-small">${lastActive}</td>
     <td style="text-align:right">
@@ -455,7 +474,7 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
   const uptimeSecs = Math.round(process.uptime());
   const uptimeStr = uptimeSecs < 60 ? `${uptimeSecs}s` : uptimeSecs < 3600 ? `${Math.floor(uptimeSecs/60)}m ${uptimeSecs%60}s` : `${Math.floor(uptimeSecs/3600)}h ${Math.floor((uptimeSecs%3600)/60)}m`;
 
-  const errCountColor = stats.error_count_24h > 0 ? 'color:#dc2626' : '';
+  const errCountColor = stats.error_count_24h > 0 ? 'color:var(--err)' : '';
 
   const errorTableHtml = recentErrors.length > 0
     ? `<div class="table-wrap"><table>
@@ -465,25 +484,25 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
           <td>${esc(r.user_id ?? '—')}</td>
           <td>${esc(r.matter_ref)}</td>
           <td><span class="tag">${esc(r.tool_name)}</span></td>
-          <td style="color:#dc2626;max-width:300px">${esc(r.error_message ?? '—')}</td>
+          <td style="color:var(--err);max-width:300px">${esc(r.error_message ?? '—')}</td>
         </tr>`).join('')}</tbody>
       </table></div>`
-    : '<p style="color:#888;font-size:.875rem;padding:.5rem 0">No errors in the last 24 hours.</p>';
+    : '<p style="color:var(--txt-2);font-size:.875rem;padding:.5rem 0">No errors in the last 24 hours.</p>';
 
   const errorAlertBanner = stats.error_count_24h >= 3
-    ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:flex-start;gap:.75rem">
+    ? `<div style="background:var(--err-bg);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:flex;align-items:flex-start;gap:.75rem">
         <span style="font-size:1.25rem">⚠️</span>
         <div>
-          <div style="font-weight:600;color:#991b1b;margin-bottom:.25rem">${stats.error_count_24h} tool errors in the last 24 hours</div>
-          <div style="font-size:.875rem;color:#7f1d1d">Review the Recent Errors section below. Users may be experiencing failed tool calls.</div>
+          <div style="font-weight:600;color:var(--err);margin-bottom:.25rem">${stats.error_count_24h} tool errors in the last 24 hours</div>
+          <div style="font-size:.875rem;color:var(--err)">Review the Recent Errors section below. Users may be experiencing failed tool calls.</div>
         </div>
       </div>`
     : '';
 
   const userTodayHtml = `<div class="section-title">Today's Activity by User</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       ${userToday.length === 0
-        ? '<p style="color:#888;font-size:.875rem">No queries today.</p>'
+        ? '<p style="color:var(--txt-2);font-size:.875rem">No queries today.</p>'
         : `<div class="table-wrap"><table><thead><tr><th>User</th><th style="text-align:right">Queries Today</th></tr></thead><tbody>
             ${(userToday as UserQueryToday[]).map((u) => `<tr><td>${esc(u.user_id)}</td><td style="text-align:right;font-weight:600">${u.count}</td></tr>`).join('')}
            </tbody></table></div>`}
@@ -555,12 +574,12 @@ adminRouter.get('/admin', async (req: Request, res: Response) => {
     ${userTodayHtml}
 
     <div class="section-title">Recent Errors</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       ${errorTableHtml}
     </div>
 
     <div class="section-title">Recent Logins</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       ${renderLoginEventsTable(recentLogins, undefined, true)}
     </div>
   `, session.user, '/admin'));
@@ -600,7 +619,7 @@ adminRouter.get('/admin/users/new', (req: Request, res: Response) => {
     <a href="/admin/users" class="btn-back">← Users</a>
     <h1>New User</h1>
     <p class="subtitle">Create a new user account. A token will be generated — show it to the user once.</p>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.5rem;max-width:480px">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.5rem;max-width:480px">
       <form method="POST" action="/admin/users/new">
         <div class="form-group">
           <label for="username">Username</label>
@@ -701,14 +720,14 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
         <td class="date-small">${tsDateTime(a.last_auth)}</td>
         <td style="text-align:right">${a.auth_count}</td>
       </tr>`).join('')
-    : '<tr><td colspan="4" style="text-align:center;color:#888;padding:1.5rem">No OAuth connections.</td></tr>';
+    : '<tr><td colspan="4" style="text-align:center;color:var(--txt-2);padding:1.5rem">No OAuth connections.</td></tr>';
 
   const queryRows = recentQueries.map((r) => `<tr${r.is_error ? ' class="row-error"' : ''}>
     <td class="date-small">${tsDateTime(r.created_at)}</td>
-    <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" style="color:var(--primary);font-weight:600;text-decoration:none">${esc(r.matter_ref)}</a></td>
+    <td><a href="/matters/${encodeURIComponent(r.matter_ref)}" style="color:var(--txt);font-weight:600;text-decoration:none">${esc(r.matter_ref)}</a></td>
     <td><span class="tag">${esc(r.tool_name)}</span></td>
-    <td style="max-width:300px;white-space:pre-wrap;word-break:break-word;color:#555">${esc(r.query_text.slice(0, 200))}</td>
-    ${r.is_error ? `<td style="color:#dc2626">${esc(r.error_message ?? 'Error')}</td>` : '<td>—</td>'}
+    <td style="max-width:300px;white-space:pre-wrap;word-break:break-word;color:var(--txt-2)">${esc(r.query_text.slice(0, 200))}</td>
+    ${r.is_error ? `<td style="color:var(--err)">${esc(r.error_message ?? 'Error')}</td>` : '<td>—</td>'}
   </tr>`).join('');
 
   const periodTabHtml = `<div class="period-tabs">
@@ -727,7 +746,7 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
           ${user.is_admin ? '<span class="badge-admin">Admin</span> ' : ''}
           ${user.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>'}
         </p>
-        <p style="font-size:.8125rem;color:#888;margin-top:.5rem">
+        <p style="font-size:.8125rem;color:var(--txt-2);margin-top:.5rem">
           Created ${fmtDate(user.created_at)}${user.created_by ? ` by ${esc(user.created_by)}` : ''}
           ${user.last_active ? ` · Last active ${fmtDate(user.last_active)}` : ''}
         </p>
@@ -751,13 +770,13 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
       </div>
       <div class="card">
         <div class="card-label">Est. Cost</div>
-        <div class="card-value sm">${usd} <span style="font-size:.75rem;color:#888">USD</span></div>
+        <div class="card-value sm">${usd} <span style="font-size:.75rem;color:var(--txt-2)">USD</span></div>
         <div class="card-sub">≈ ${aud} AUD</div>
       </div>
     </div>
 
     <div class="section-title">OAuth Connections</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <div class="table-wrap"><table>
         <thead><tr><th>Client</th><th>First Connected</th><th>Last Used</th><th style="text-align:right">Auth Count</th></tr></thead>
         <tbody>${oauthRows}</tbody>
@@ -765,45 +784,45 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
     </div>
 
     <div class="section-title">Login History (Last 20)</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       ${renderLoginEventsTable(loginHistory)}
     </div>
 
     <div class="section-title">Recent Queries (Last 20)</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <div class="table-wrap"><table>
         <thead><tr><th>Date</th><th>Matter</th><th>Tool</th><th>Query</th><th>Status</th></tr></thead>
-        <tbody>${queryRows || '<tr><td colspan="5" style="text-align:center;color:#888;padding:1.5rem">No queries yet.</td></tr>'}</tbody>
+        <tbody>${queryRows || '<tr><td colspan="5" style="text-align:center;color:var(--txt-2);padding:1.5rem">No queries yet.</td></tr>'}</tbody>
       </table></div>
     </div>
 
     <div class="section-title">Spend Cap</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">
         Per-user monthly spend cap (USD). Overrides the global <code>spend_cap_monthly_per_user_usd</code> setting for this user.
         ${user.spend_cap_monthly_usd != null ? `<strong>Current cap: $${user.spend_cap_monthly_usd.toFixed(2)} USD/month.</strong>` : 'No per-user cap set (global setting applies).'}
       </p>
       <form method="POST" action="/admin/users/${encodeURIComponent(username)}/set-spend-cap" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="cap_usd" min="0" step="0.01" placeholder="e.g. 50.00"
           value="${user.spend_cap_monthly_usd != null ? user.spend_cap_monthly_usd : ''}"
-          style="padding:.5rem .75rem;border:1px solid var(--border);border-radius:6px;font-size:.875rem;width:150px">
+          style="padding:.5rem .75rem;border:1px solid var(--bdr);border-radius:6px;font-size:.875rem;width:150px;background:var(--surf-2);color:var(--txt)">
         <button type="submit" class="btn btn-secondary">Set Cap</button>
-        <button type="submit" name="cap_usd" value="" class="btn btn-secondary" style="color:#dc2626;border-color:#fca5a5">Clear Cap</button>
+        <button type="submit" name="cap_usd" value="" class="btn btn-secondary" style="color:var(--err);border-color:var(--err-bg)">Clear Cap</button>
       </form>
       <div class="form-hint" style="margin-top:.5rem">Leave blank and click "Clear Cap" to remove the per-user cap (reverts to global setting).</div>
     </div>
 
     <div class="section-title">Token</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">Reveal the current encrypted token for this user. Requires <code>ENCRYPTION_KEY</code> to be set.</p>
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">Reveal the current encrypted token for this user. Requires <code>ENCRYPTION_KEY</code> to be set.</p>
       <form method="POST" action="/admin/users/${encodeURIComponent(username)}/reveal-token">
         <button type="submit" class="btn btn-secondary">Reveal Token</button>
       </form>
     </div>
 
     <div class="section-title">Sessions</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">Active sessions are cookie-based. Use Force Logout to invalidate all current sessions for this user.</p>
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">Active sessions are cookie-based. Use Force Logout to invalidate all current sessions for this user.</p>
       <form method="POST" action="/admin/users/${encodeURIComponent(username)}/force-logout">
         <button type="submit" class="btn btn-secondary">Force Logout All Sessions</button>
       </form>
@@ -824,12 +843,12 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
 
     <div class="confirm-box">
       <h3>Delete User</h3>
-      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">
+      <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">
         This permanently deletes the user account. To confirm, type the username below.
       </p>
       <form method="POST" action="/admin/users/${encodeURIComponent(username)}/delete" onsubmit="return document.getElementById('du').value==='${esc(username)}'||alert('Username does not match.')&&false">
         <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
-          <input type="text" id="du" name="confirm_username" placeholder="${esc(username)}" style="max-width:200px;padding:.5rem .75rem;border:1px solid #fca5a5;border-radius:6px;font-size:.875rem">
+          <input type="text" id="du" name="confirm_username" placeholder="${esc(username)}" style="max-width:200px;padding:.5rem .75rem;border:1px solid var(--err-bg);border-radius:6px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
           <button type="submit" class="btn btn-danger btn-sm">Delete User</button>
         </div>
       </form>
@@ -865,7 +884,7 @@ adminRouter.post('/admin/users/:username/rotate-token', requireCsrf, async (req:
     <h1>Token Rotated</h1>
     <p class="subtitle">New token for <strong>${esc(username)}</strong>. Share via a secure channel.</p>
     ${renderTokenDisplay(token)}
-    <p style="font-size:.875rem;color:#555;margin:.5rem 0 1.25rem">The previous token is now invalid.</p>
+    <p style="font-size:.875rem;color:var(--txt-2);margin:.5rem 0 1.25rem">The previous token is now invalid.</p>
     <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-primary">Back to User →</a>
   `, session.user, '/admin/users'));
 });
@@ -1055,25 +1074,25 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
   const spendRows = userSpends.map(({ username, spend_usd }) => {
     const pct = perUserCap && perUserCap > 0 ? Math.min(100, (spend_usd / perUserCap) * 100) : null;
     const bar = pct !== null
-      ? `<div style="background:#e5e7eb;border-radius:3px;height:6px;width:120px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${pct >= 100 ? '#dc2626' : pct >= 80 ? '#f59e0b' : '#16a34a'};border-radius:3px;height:6px;width:${pct}%"></div></div>`
+      ? `<div style="background:var(--surf-3);border-radius:3px;height:6px;width:120px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${pct >= 100 ? 'var(--err)' : pct >= 80 ? 'var(--warn)' : 'var(--ok)'};border-radius:3px;height:6px;width:${pct}%"></div></div>`
       : '';
     return `<tr>
       <td style="font-weight:500">${esc(username)}</td>
       <td>$${spend_usd.toFixed(4)}</td>
-      <td>${perUserCap ? `$${perUserCap.toFixed(2)} ${bar}` : '<span style="color:#aaa">—</span>'}</td>
-      <td>${pct !== null ? `${pct.toFixed(1)}%` : '<span style="color:#aaa">—</span>'}</td>
+      <td>${perUserCap ? `$${perUserCap.toFixed(2)} ${bar}` : '<span style="color:var(--txt-3)">—</span>'}</td>
+      <td>${pct !== null ? `${pct.toFixed(1)}%` : '<span style="color:var(--txt-3)">—</span>'}</td>
     </tr>`;
   }).join('');
 
   const globalPct = globalCap && globalCap > 0 ? Math.min(100, (globalSpend / globalCap) * 100) : null;
   const globalBar = globalPct !== null
-    ? `<div style="background:#e5e7eb;border-radius:3px;height:6px;width:160px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${globalPct >= 100 ? '#dc2626' : globalPct >= 80 ? '#f59e0b' : '#16a34a'};border-radius:3px;height:6px;width:${globalPct}%"></div></div>`
+    ? `<div style="background:var(--surf-3);border-radius:3px;height:6px;width:160px;display:inline-block;vertical-align:middle;margin-left:.5rem"><div style="background:${globalPct >= 100 ? 'var(--err)' : globalPct >= 80 ? 'var(--warn)' : 'var(--ok)'};border-radius:3px;height:6px;width:${globalPct}%"></div></div>`
     : '';
 
   const tableRows = rows.map((r) => `<tr>
     <td><code style="font-size:.875rem">${esc(r.key)}</code></td>
     <td id="val-${esc(r.key)}">${esc(r.value || '—')}</td>
-    <td style="color:#888;font-size:.8125rem">${esc(r.description ?? '')}</td>
+    <td style="color:var(--txt-2);font-size:.8125rem">${esc(r.description ?? '')}</td>
     <td class="date-small">${r.updated_at ? tsDateTime(r.updated_at) : '—'}</td>
     <td>${esc(r.updated_by ?? '—')}</td>
     <td>
@@ -1085,14 +1104,14 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
     <h1>Configuration</h1>
     <p class="subtitle">DB-backed settings. Changes take effect immediately.</p>
 
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-bottom:1.5rem">
       <div class="table-wrap"><table>
         <thead><tr><th>Key</th><th>Value</th><th>Description</th><th>Updated</th><th>By</th><th></th></tr></thead>
-        <tbody>${tableRows || '<tr><td colspan="6" style="text-align:center;color:#888;padding:2rem">No config entries.</td></tr>'}</tbody>
+        <tbody>${tableRows || '<tr><td colspan="6" style="text-align:center;color:var(--txt-2);padding:2rem">No config entries.</td></tr>'}</tbody>
       </table></div>
     </div>
 
-    <div id="edit-panel" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem;max-width:480px">
+    <div id="edit-panel" style="display:none;background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem;max-width:480px">
       <h2 style="font-size:.9375rem;margin-bottom:.875rem">Edit Config</h2>
       <form method="POST" action="/admin/config">
         <input type="hidden" id="edit-key" name="key">
@@ -1118,30 +1137,30 @@ adminRouter.get('/admin/config', async (req: Request, res: Response) => {
     </script>
 
     <div class="section-title">This Month's Spend</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <div style="display:flex;align-items:baseline;gap:1.5rem;margin-bottom:1rem;flex-wrap:wrap">
         <div>
-          <span style="font-size:.8125rem;color:#888">Global spend</span><br>
+          <span style="font-size:.8125rem;color:var(--txt-2)">Global spend</span><br>
           <strong>$${globalSpend.toFixed(4)} USD</strong>
-          ${globalCap ? `<span style="color:#888;font-size:.8125rem"> / $${globalCap.toFixed(2)} cap ${globalBar}</span>` : '<span style="color:#aaa;font-size:.8125rem"> (no cap set)</span>'}
+          ${globalCap ? `<span style="color:var(--txt-2);font-size:.8125rem"> / $${globalCap.toFixed(2)} cap ${globalBar}</span>` : '<span style="color:var(--txt-3);font-size:.8125rem"> (no cap set)</span>'}
         </div>
-        ${perUserCap ? `<div><span style="font-size:.8125rem;color:#888">Per-user cap</span><br><strong>$${perUserCap.toFixed(2)} USD / month</strong></div>` : ''}
+        ${perUserCap ? `<div><span style="font-size:.8125rem;color:var(--txt-2)">Per-user cap</span><br><strong>$${perUserCap.toFixed(2)} USD / month</strong></div>` : ''}
       </div>
       ${userSpends.length > 0 ? `
       <table style="font-size:.875rem">
-        <thead><tr><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">User</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Spend (USD)</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Cap</th><th style="text-align:left;padding:.375rem .625rem;color:#888;font-weight:500">Used</th></tr></thead>
+        <thead><tr><th style="text-align:left;padding:.375rem .625rem;color:var(--txt-2);font-weight:500">User</th><th style="text-align:left;padding:.375rem .625rem;color:var(--txt-2);font-weight:500">Spend (USD)</th><th style="text-align:left;padding:.375rem .625rem;color:var(--txt-2);font-weight:500">Cap</th><th style="text-align:left;padding:.375rem .625rem;color:var(--txt-2);font-weight:500">Used</th></tr></thead>
         <tbody>${spendRows}</tbody>
-      </table>` : '<p style="color:#888;font-size:.875rem">No active users.</p>'}
-      <p style="font-size:.75rem;color:#aaa;margin-top:.75rem">Set caps above via <code>spend_cap_monthly_per_user_usd</code> and <code>spend_cap_monthly_global_usd</code>. When a cap is hit, further tool calls return 429 until the next calendar month.</p>
+      </table>` : '<p style="color:var(--txt-2);font-size:.875rem">No active users.</p>'}
+      <p style="font-size:.75rem;color:var(--txt-3);margin-top:.75rem">Set caps above via <code>spend_cap_monthly_per_user_usd</code> and <code>spend_cap_monthly_global_usd</code>. When a cap is hit, further tool calls return 429 until the next calendar month.</p>
     </div>
 
     <div class="section-title">Security</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
-      <p style="font-size:.875rem;color:#555">
+    <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:var(--txt-2)">
         Recovery access: Set <code>RECOVERY_TOKEN</code> in Railway env vars.
         This token can be used as the password at the login page (with any username) to gain temporary admin access.
         Remove it after recovering access.
-        ${config.RECOVERY_TOKEN ? '<span style="color:#16a34a;font-weight:600">&#x2713; Recovery token is configured</span>' : '<span style="color:#888">Not configured — add RECOVERY_TOKEN env var to enable</span>'}
+        ${config.RECOVERY_TOKEN ? '<span style="color:var(--ok);font-weight:600">&#x2713; Recovery token is configured</span>' : '<span style="color:var(--txt-2)">Not configured — add RECOVERY_TOKEN env var to enable</span>'}
       </p>
     </div>
   `, session.user, '/admin/config'));
@@ -1175,7 +1194,7 @@ adminRouter.get('/admin/data', async (req: Request, res: Response) => {
     getAppConfig('matter_retention_days'),
   ]);
 
-  const flashMsg = req.query['msg'] ? `<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:.75rem 1rem;margin-bottom:1.5rem;font-size:.875rem;color:#065f46">${esc(String(req.query['msg']))}</div>` : '';
+  const flashMsg = req.query['msg'] ? `<div style="background:var(--ok-bg);border:1px solid rgba(74,222,128,.25);border-radius:6px;padding:.75rem 1rem;margin-bottom:1.5rem;font-size:.875rem;color:var(--ok)">${esc(String(req.query['msg']))}</div>` : '';
 
   res.send(page('Data Management', `
     <h1>Data Management</h1>
@@ -1200,7 +1219,7 @@ adminRouter.get('/admin/data', async (req: Request, res: Response) => {
     </div>
 
     <div class="section-title">Retention Settings</div>
-    <p style="font-size:.875rem;color:#555;margin-bottom:1rem">
+    <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:1rem">
       Adjust in <a href="/admin/config">Configuration</a>:
       <code>judgment_cache_ttl_days</code> (current: ${esc(cacheRetention ?? '30')}),
       <code>matter_retention_days</code> (current: ${esc(matterRetention ?? '365')}).
@@ -1209,33 +1228,33 @@ adminRouter.get('/admin/data', async (req: Request, res: Response) => {
     <div class="section-title">Purge Operations</div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem">
+      <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Purge Matter Queries</h2>
-        <p style="font-size:.8125rem;color:#555;margin-bottom:1rem">Delete matter queries older than N days.</p>
+        <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Delete matter queries older than N days.</p>
         <form method="POST" action="/admin/data/purge-queries">
           <div style="display:flex;gap:.75rem;align-items:center">
-            <input type="number" name="days" value="${esc(matterRetention ?? '365')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.875rem">
-            <span style="font-size:.875rem;color:#555">days old</span>
+            <input type="number" name="days" value="${esc(matterRetention ?? '365')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid var(--bdr);border-radius:5px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
+            <span style="font-size:.875rem;color:var(--txt-2)">days old</span>
             <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Purge matter queries older than '+this.form.days.value+' days?')">Purge</button>
           </div>
         </form>
       </div>
 
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem">
+      <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Purge Judgment Cache</h2>
-        <p style="font-size:.8125rem;color:#555;margin-bottom:1rem">Delete judgment cache entries older than N days.</p>
+        <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Delete judgment cache entries older than N days.</p>
         <form method="POST" action="/admin/data/purge-cache">
           <div style="display:flex;gap:.75rem;align-items:center">
-            <input type="number" name="days" value="${esc(cacheRetention ?? '30')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid #d0cdc6;border-radius:5px;font-size:.875rem">
-            <span style="font-size:.875rem;color:#555">days old</span>
+            <input type="number" name="days" value="${esc(cacheRetention ?? '30')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid var(--bdr);border-radius:5px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
+            <span style="font-size:.875rem;color:var(--txt-2)">days old</span>
             <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Purge cache entries older than '+this.form.days.value+' days?')">Purge</button>
           </div>
         </form>
       </div>
 
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem">
+      <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Clear All Judgment Cache</h2>
-        <p style="font-size:.8125rem;color:#555;margin-bottom:1rem">Remove all ${stats.judgment_cache_count} cached judgments. They will be re-fetched on demand.</p>
+        <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Remove all ${stats.judgment_cache_count} cached judgments. They will be re-fetched on demand.</p>
         <form method="POST" action="/admin/data/purge-cache-all">
           <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Clear ALL ${stats.judgment_cache_count} judgment cache entries?')">Clear All Cache</button>
         </form>
@@ -1308,22 +1327,22 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
     const { usd } = fmtCost(costUsd);
     const isClosed = m.status === 'closed';
     const statusBadge = isClosed
-      ? '<span style="display:inline-block;background:#fee2e2;color:#991b1b;padding:.125rem .5rem;border-radius:10px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Closed</span>'
-      : '<span style="display:inline-block;background:#d1fae5;color:#065f46;padding:.125rem .5rem;border-radius:10px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Open</span>';
+      ? '<span style="display:inline-flex;align-items:center;background:var(--err-bg);color:var(--err);padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Closed</span>'
+      : '<span style="display:inline-flex;align-items:center;background:var(--ok-bg);color:var(--ok);padding:.2rem .5rem;border-radius:100px;font-size:.6875rem;font-weight:600;margin-left:.25rem">Open</span>';
     const displayLabel = m.display_name
-      ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:#888;font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
+      ? `${esc(m.display_name)}<br><span style="font-size:.75rem;color:var(--txt-2);font-family:ui-monospace,monospace">${esc(m.matter_ref)}</span>`
       : esc(m.matter_ref);
     const activeUsers = (m.active_users ?? []).join(', ') || '—';
     const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
     return `<tr>
       <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
-        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--primary);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
+        <a href="/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--txt);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
       </td>
       <td class="date-small">${m.creator ? esc(m.creator) : '—'}</td>
       <td class="date-small">${tsDateTime(m.first_seen)}</td>
       <td class="date-small">${tsDateTime(m.last_seen)}</td>
       <td style="text-align:right;font-weight:600">${m.query_count.toLocaleString('en-AU')}</td>
-      <td style="font-size:.8125rem;color:#555">${esc(activeUsers)}</td>
+      <td style="font-size:.8125rem;color:var(--txt-2)">${esc(activeUsers)}</td>
       <td style="text-align:right">${fmtTokens(m.total_tokens)}</td>
       <td style="text-align:right">${usd}</td>
     </tr>`;
@@ -1368,26 +1387,26 @@ adminRouter.get('/admin/watchlist', requireAdmin, async (req, res) => {
         <form method="POST" action="/admin/watchlist/add" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
           <div>
             <label style="display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem">Neutral Citation</label>
-            <input type="text" name="citation" placeholder="[2024] HCA 12" required style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:6px;font-size:.875rem;width:240px">
+            <input type="text" name="citation" placeholder="[2024] HCA 12" required style="padding:.5rem .75rem;border:1px solid var(--bdr);border-radius:6px;font-size:.875rem;width:240px;background:var(--surf-2);color:var(--txt)">
           </div>
           <div>
             <label style="display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem">Label (optional)</label>
-            <input type="text" name="label" placeholder="Short case description" style="padding:.5rem .75rem;border:1px solid #d0cdc6;border-radius:6px;font-size:.875rem;width:300px">
+            <input type="text" name="label" placeholder="Short case description" style="padding:.5rem .75rem;border:1px solid var(--bdr);border-radius:6px;font-size:.875rem;width:300px;background:var(--surf-2);color:var(--txt)">
           </div>
           <button type="submit" class="btn btn-primary">Add</button>
         </form>
       </div>
       <div class="card">
         <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Watched Citations (${entries.length})</h2>
-        ${entries.length === 0 ? '<p style="color:#666;font-size:.875rem">No cases on watchlist yet.</p>' : `
+        ${entries.length === 0 ? '<p style="color:var(--txt-2);font-size:.875rem">No cases on watchlist yet.</p>' : `
         <div class="table-wrap"><table>
           <thead><tr><th>Citation</th><th>Label</th><th>Last Checked</th><th>Citing Cases</th><th></th></tr></thead>
           <tbody>
             ${entries.map((e) => `
               <tr>
                 <td><code style="font-size:.8125rem">${esc(e.citation)}</code></td>
-                <td style="color:#444;font-size:.875rem">${esc(e.label ?? '—')}</td>
-                <td style="font-size:.8125rem;color:#666">${e.last_checked ? fmtDateTime(e.last_checked) : '—'}</td>
+                <td style="color:var(--txt-2);font-size:.875rem">${esc(e.label ?? '—')}</td>
+                <td style="font-size:.8125rem;color:var(--txt-2)">${e.last_checked ? fmtDateTime(e.last_checked) : '—'}</td>
                 <td style="text-align:center">${e.last_count > 0 ? `<span class="badge-active" style="font-size:.75rem">${e.last_count}</span>` : '—'}</td>
                 <td>
                   <form method="POST" action="/admin/watchlist/remove" style="display:inline">
