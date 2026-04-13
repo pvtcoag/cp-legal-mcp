@@ -144,6 +144,7 @@ export async function initDb(): Promise<void> {
     );
     ALTER TABLE matters ADD COLUMN IF NOT EXISTS notes TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS spend_cap_monthly_usd FLOAT4;
 
     -- Trigram GIN indexes for fuzzy / similarity search (require pg_trgm).
     -- Partial index on display_name skips NULLs to keep index compact.
@@ -708,6 +709,7 @@ export interface UserRow {
   created_by: string | null;
   last_active: string | null;
   session_version: number;
+  spend_cap_monthly_usd: number | null;
 }
 
 export async function createUser(params: {
@@ -1485,16 +1487,20 @@ export async function checkSpendCap(userId: string): Promise<SpendCapStatus> {
     return { allowed: true, current_usd: 0, cap_usd: null, pct_used: null, alert_threshold_pct: 80, at_alert: false };
   }
 
-  const [perUserCapStr, globalCapStr, thresholdStr, currentUser, currentGlobal] = await Promise.all([
+  const [perUserCapStr, globalCapStr, thresholdStr, currentUser, currentGlobal, userRow] = await Promise.all([
     getAppConfig('spend_cap_monthly_per_user_usd'),
     getAppConfig('spend_cap_monthly_global_usd'),
     getAppConfig('spend_alert_threshold_pct'),
     getMonthlySpendUsd(userId),
     getMonthlySpendUsd(),
+    getUserByUsername(userId),
   ]);
 
   const threshold = Math.max(1, Math.min(100, parseInt(thresholdStr ?? '80', 10) || 80));
-  const perUserCap = perUserCapStr?.trim() ? parseFloat(perUserCapStr) : null;
+  // Per-user cap: user-level row takes precedence over global app_config setting
+  const perUserCap = (userRow?.spend_cap_monthly_usd != null)
+    ? userRow.spend_cap_monthly_usd
+    : (perUserCapStr?.trim() ? parseFloat(perUserCapStr) : null);
   const globalCap  = globalCapStr?.trim()  ? parseFloat(globalCapStr)  : null;
 
   if (perUserCap !== null && perUserCap > 0 && currentUser >= perUserCap) {
@@ -1511,6 +1517,11 @@ export async function checkSpendCap(userId: string): Promise<SpendCapStatus> {
   const atAlert  = pct !== null && pct >= threshold;
 
   return { allowed: true, current_usd: currentUser, cap_usd: perUserCap, pct_used: pct, alert_threshold_pct: threshold, at_alert: atAlert };
+}
+
+export async function setUserSpendCap(username: string, cap: number | null): Promise<void> {
+  if (!pool) return;
+  await pool.query('UPDATE users SET spend_cap_monthly_usd = $2 WHERE username = $1', [username, cap]);
 }
 
 // ── Global billing export ─────────────────────────────────────────────────────

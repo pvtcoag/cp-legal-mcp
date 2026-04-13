@@ -62,6 +62,7 @@ import {
   listWatchlist,
   addWatchlistEntry,
   removeWatchlistEntry,
+  setUserSpendCap,
   type WatchlistEntry,
   type UserRow,
   type LoginEventRow,
@@ -78,6 +79,8 @@ import {
   parseCookies,
   verifySession,
   buildSessionVersionCache,
+  clientIp,
+  parseClientName,
 } from './matters-ui.js';
 import { decryptToken, encryptToken, generateToken, hashToken } from './token-utils.js';
 import { refreshAuthCache } from './auth.js';
@@ -375,7 +378,7 @@ function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showU
     <td>${esc(e.client_name ?? '—')}</td>
     <td class="mono" style="font-size:.75rem">${esc(e.ip ?? '—')}</td>
     <td style="font-size:.75rem;color:#555">${esc(location)}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.user_agent ?? '')}">${esc((e.user_agent ?? '').slice(0, 60))}</td>
+    <td style="word-break:break-word;white-space:normal" title="${esc(e.user_agent ?? '')}">${esc((e.user_agent ?? '').slice(0, 120))}</td>
   </tr>`;
   }).join('');
   return `<div class="table-wrap"><table>
@@ -774,6 +777,22 @@ adminRouter.get('/admin/users/:username', async (req: Request, res: Response) =>
       </table></div>
     </div>
 
+    <div class="section-title">Spend Cap</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
+      <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">
+        Per-user monthly spend cap (USD). Overrides the global <code>spend_cap_monthly_per_user_usd</code> setting for this user.
+        ${user.spend_cap_monthly_usd != null ? `<strong>Current cap: $${user.spend_cap_monthly_usd.toFixed(2)} USD/month.</strong>` : 'No per-user cap set (global setting applies).'}
+      </p>
+      <form method="POST" action="/admin/users/${encodeURIComponent(username)}/set-spend-cap" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <input type="number" name="cap_usd" min="0" step="0.01" placeholder="e.g. 50.00"
+          value="${user.spend_cap_monthly_usd != null ? user.spend_cap_monthly_usd : ''}"
+          style="padding:.5rem .75rem;border:1px solid var(--border);border-radius:6px;font-size:.875rem;width:150px">
+        <button type="submit" class="btn btn-secondary">Set Cap</button>
+        <button type="submit" name="cap_usd" value="" class="btn btn-secondary" style="color:#dc2626;border-color:#fca5a5">Clear Cap</button>
+      </form>
+      <div class="form-hint" style="margin-top:.5rem">Leave blank and click "Clear Cap" to remove the per-user cap (reverts to global setting).</div>
+    </div>
+
     <div class="section-title">Token</div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <p style="font-size:.875rem;color:#555;margin-bottom:.75rem">Reveal the current encrypted token for this user. Requires <code>ENCRYPTION_KEY</code> to be set.</p>
@@ -838,7 +857,7 @@ adminRouter.post('/admin/users/:username/rotate-token', requireCsrf, async (req:
   await rotateUserToken(username, salt, hash, tokenEncrypted);
   await refreshAuthCache();
 
-  logLoginEvent({ username, eventType: 'token_rotated', meta: { rotated_by: session.user } }).catch(() => {/* ignore */});
+  logLoginEvent({ username, eventType: 'token_rotated', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { rotated_by: session.user, target_user: username } }).catch(() => {/* ignore */});
   logger.info({ rotatedBy: session.user, username }, 'admin: token rotated');
 
   res.send(page('Token Rotated', `
@@ -889,6 +908,7 @@ adminRouter.post('/admin/users/:username/reveal-token', requireCsrf, async (req:
     return;
   }
 
+  logLoginEvent({ username: session.user, eventType: 'token_viewed', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { target_user: username } }).catch(() => {/* ignore */});
   logger.info({ revealedBy: session.user, username }, 'admin: token revealed');
 
   res.send(page('Token Revealed', `
@@ -908,8 +928,10 @@ adminRouter.post('/admin/users/:username/toggle-admin', requireCsrf, async (req:
   const user = isDbEnabled() ? await getUserByUsername(username) : null;
   if (!user) { res.status(404).send('Not found'); return; }
 
-  await updateUserAdmin(username, !user.is_admin);
-  logger.info({ changedBy: session.user, username, isAdmin: !user.is_admin }, 'admin: toggled admin');
+  const newAdminState = !user.is_admin;
+  await updateUserAdmin(username, newAdminState);
+  logLoginEvent({ username: session.user, eventType: 'admin_action', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { action: 'toggle_admin', target_user: username, new_value: newAdminState } }).catch(() => {/* ignore */});
+  logger.info({ changedBy: session.user, username, isAdmin: newAdminState }, 'admin: toggled admin');
   res.redirect(`/admin/users/${encodeURIComponent(username)}`);
 });
 
@@ -922,9 +944,11 @@ adminRouter.post('/admin/users/:username/toggle-active', requireCsrf, async (req
   const user = isDbEnabled() ? await getUserByUsername(username) : null;
   if (!user) { res.status(404).send('Not found'); return; }
 
-  await updateUserActive(username, !user.is_active);
+  const newActiveState = !user.is_active;
+  await updateUserActive(username, newActiveState);
   await refreshAuthCache(); // refresh cache so deactivated users lose access immediately
-  logger.info({ changedBy: session.user, username, isActive: !user.is_active }, 'admin: toggled active');
+  logLoginEvent({ username: session.user, eventType: 'admin_action', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { action: 'toggle_active', target_user: username, new_value: newActiveState } }).catch(() => {/* ignore */});
+  logger.info({ changedBy: session.user, username, isActive: newActiveState }, 'admin: toggled active');
   res.redirect(`/admin/users/${encodeURIComponent(username)}`);
 });
 
@@ -960,8 +984,23 @@ adminRouter.post('/admin/users/:username/force-logout', requireCsrf, async (req:
   const updatedUsers = isDbEnabled() ? await listUsers() : [];
   buildSessionVersionCache(updatedUsers);
 
-  logLoginEvent({ username, eventType: 'force_logout', meta: { forced_by: session.user } }).catch(() => {/* ignore */});
+  logLoginEvent({ username, eventType: 'force_logout', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { forced_by: session.user, target_user: username } }).catch(() => {/* ignore */});
   logger.info({ forcedBy: session.user, username }, 'admin: force-logged-out all sessions');
+  res.redirect(`/admin/users/${encodeURIComponent(username)}`);
+});
+
+// ── POST /admin/users/:username/set-spend-cap ─────────────────────────────────
+
+adminRouter.post('/admin/users/:username/set-spend-cap', requireCsrf, async (req: Request, res: Response) => {
+  const session = getAdminSession(req)!;
+  const username = decodeURIComponent(req.params['username'] as string ?? '');
+  const { cap_usd } = req.body as Record<string, string | undefined>;
+
+  const cap = cap_usd?.trim() ? parseFloat(cap_usd.trim()) : null;
+  if (isDbEnabled()) {
+    await setUserSpendCap(username, cap !== null && !isNaN(cap) ? cap : null);
+  }
+  logger.info({ changedBy: session.user, username, cap }, 'admin: set per-user spend cap');
   res.redirect(`/admin/users/${encodeURIComponent(username)}`);
 });
 
@@ -1309,7 +1348,7 @@ adminRouter.get('/admin/matters', async (req: Request, res: Response) => {
   res.send(page('Matters', `
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
       <h1 style="margin-bottom:0">Matters</h1>
-      <a href="/matters/export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>
+      <a href="/admin/billing-export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>
     </div>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''} on record, sorted by last activity</p>
     ${periodTabHtml}
@@ -1341,7 +1380,7 @@ adminRouter.get('/admin/watchlist', requireAdmin, async (req, res) => {
       <div class="card">
         <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Watched Citations (${entries.length})</h2>
         ${entries.length === 0 ? '<p style="color:#666;font-size:.875rem">No cases on watchlist yet.</p>' : `
-        <table class="table">
+        <div class="table-wrap"><table>
           <thead><tr><th>Citation</th><th>Label</th><th>Last Checked</th><th>Citing Cases</th><th></th></tr></thead>
           <tbody>
             ${entries.map((e) => `
@@ -1359,7 +1398,7 @@ adminRouter.get('/admin/watchlist', requireAdmin, async (req, res) => {
               </tr>
             `).join('')}
           </tbody>
-        </table>`}
+        </table></div>`}
       </div>
     `, session.user, '/admin/watchlist')
   );

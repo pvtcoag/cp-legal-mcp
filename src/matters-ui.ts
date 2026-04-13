@@ -59,6 +59,17 @@ import { getGeoForIp } from './geo.js';
 
 export const mattersRouter = Router();
 
+/** Extract the real client IP from X-Forwarded-For (leftmost = client).
+ *  Falls back to req.ip if the header is absent (local dev). */
+export function clientIp(req: Request): string {
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) {
+    const first = (Array.isArray(xff) ? xff[0] : xff).split(',')[0].trim();
+    if (first) return first;
+  }
+  return req.ip ?? '';
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const COOKIE = 'cvn_matters';
@@ -399,7 +410,7 @@ function isAdmin(user: string, req?: Request): boolean {
 }
 
 /** Parse client name from User-Agent string. */
-function parseClientName(ua?: string): string {
+export function parseClientName(ua?: string): string {
   if (!ua) return 'Unknown';
   if (/ClaudeDesktop/i.test(ua)) return 'Claude Desktop';
   if (/claude\.ai/i.test(ua)) return 'Claude Web';
@@ -543,6 +554,7 @@ tbody tr.row-error td { background: #FFF8F8 !important; }
 tbody tr.row-error:hover td { background: #FFF1F1 !important; }
 td { padding: .625rem 1rem; vertical-align: top; overflow: visible; }
 .td-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ua-cell { word-break: break-word; white-space: normal; max-width: 200px; }
 .matter-ref { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .875rem; color: var(--primary); text-decoration: none; }
 .matter-ref:hover { text-decoration: underline; }
 .date-small { color: #555; font-size: .75rem; white-space: nowrap; }
@@ -1021,7 +1033,7 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
     logLoginEvent({
       username: recoveryUser,
       eventType: 'recovery_login',
-      ip: req.ip,
+      ip: clientIp(req),
       userAgent: req.headers['user-agent'],
       clientName: parseClientName(req.headers['user-agent']),
     }).catch(() => {/* ignore */});
@@ -1031,11 +1043,11 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
 
   if (!validResult) {
     logger.warn({ user }, 'matters-ui: failed login attempt');
-    getGeoForIp(req.ip).then((geo) => {
+    getGeoForIp(clientIp(req)).then((geo) => {
       logLoginEvent({
         username: user,
         eventType: 'login_failed',
-        ip: req.ip,
+        ip: clientIp(req),
         userAgent: req.headers['user-agent'],
         clientName: parseClientName(req.headers['user-agent']),
         meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
@@ -1047,11 +1059,11 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
   setSessionCookie(res, user, validResult.isAdmin);
   updateUserLastActive(user).catch(() => {/* ignore */});
   logger.info({ user, isAdmin: validResult.isAdmin }, 'matters-ui: login');
-  getGeoForIp(req.ip).then((geo) => {
+  getGeoForIp(clientIp(req)).then((geo) => {
     logLoginEvent({
       username: user,
       eventType: 'login',
-      ip: req.ip,
+      ip: clientIp(req),
       userAgent: req.headers['user-agent'],
       clientName: parseClientName(req.headers['user-agent']),
       meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
@@ -1064,7 +1076,7 @@ mattersRouter.post('/matters/login', loginRateLimiter, async (req: Request, res:
 mattersRouter.get('/matters/logout', (req: Request, res: Response) => {
   const user = getSessionUser(req);
   if (user) {
-    logLoginEvent({ username: user, eventType: 'logout', ip: req.ip }).catch(() => {/* ignore */});
+    logLoginEvent({ username: user, eventType: 'logout', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']) }).catch(() => {/* ignore */});
   }
   clearSessionCookie(res);
   res.redirect('/matters/login');
@@ -1877,8 +1889,8 @@ mattersRouter.get('/matters/:ref/export.csv', requireSession, async (req: Reques
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /matters/export.csv — global billing export (admin only)
-mattersRouter.get('/matters/export.csv', requireSession, async (req: Request, res: Response) => {
+// GET /admin/billing-export.csv — global billing export (admin only)
+mattersRouter.get('/admin/billing-export.csv', requireSession, async (req: Request, res: Response) => {
   if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
   if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
 
