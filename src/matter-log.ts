@@ -52,33 +52,38 @@ interface SessionMatter {
 
 const sessionMatterCache = new Map<string, SessionMatter>();
 
-/** Extract a human-readable matter name from tool call context. */
-function inferMatterRef(
-  queryText: string,
-  topResults: Array<{ title: string; citation?: string; url: string }>,
-): string {
-  // 1. Neutral citation embedded in the query itself (e.g. "[2023] NSWSC 1")
-  const queryCite = queryText.match(/^(.{0,70}\[\d{4}\]\s*[A-Z]+\s*\d+)/);
+/** Extract a human-readable matter name from user input (query text only — not results). */
+function inferMatterRef(queryText: string): string {
+  const text = queryText.trim();
+
+  // 1. Neutral citation embedded in the query (e.g. "Smith v Jones [2023] NSWSC 1")
+  const queryCite = text.match(/^(.{0,70}\[\d{4}\]\s*[A-Z]+\s*\d+)/);
   if (queryCite) return queryCite[1].trim().slice(0, 80);
 
-  // 2. Case-name pattern in the query ("X v Y" or "X v. Y")
-  const queryCase = queryText.match(/^([A-Z][a-zA-Z'\-]+(?:\s+[A-Za-z'\-]+)*\s+v\.?\s+[A-Z][a-zA-Z'\-]+(?:\s+[A-Za-z'\-]+)*)/);
+  // 2. Case-name "X v Y" pattern
+  const queryCase = text.match(/^([A-Z][a-zA-Z'\-]+(?:\s+[A-Za-z'\-]+)*\s+v\.?\s+[A-Z][a-zA-Z'\-]+(?:\s+[A-Za-z'\-]+)*)/);
   if (queryCase) return queryCase[1].trim().slice(0, 80);
 
-  // 3. AustLII URL in the query — extract court/year/number
-  const urlMatch = queryText.match(/\/([a-z]+)\/(\d{4})\/(\d+)\.html?/i);
+  // 3. AustLII URL — extract court/year/number
+  const urlMatch = text.match(/\/([a-z]+)\/(\d{4})\/(\d+)\.html?/i);
   if (urlMatch) return `${urlMatch[1].toUpperCase()} ${urlMatch[2]}/${urlMatch[3]}`;
 
-  // 4. Top result title — prefer the first result with a citation embedded
-  for (const r of topResults.slice(0, 3)) {
-    const titleCite = r.title.match(/^(.{0,70}\[\d{4}\]\s*[A-Z]+\s*\d+)/);
-    if (titleCite) return titleCite[1].trim().slice(0, 80);
-    // Case name without neutral citation
-    const titleCase = r.title.match(/^([A-Z][a-zA-Z'\-]+(?:\s+[A-Za-z'\-]+)*\s+v\.?\s+[A-Z][a-zA-Z'\-]+)/);
-    if (titleCase) return titleCase[1].trim().slice(0, 80);
+  // 4. Proper-noun phrase — consecutive capitalised words (e.g. "Aussie Wool", "Johnson Industries")
+  //    Captures up to 3 consecutive capitalised tokens, skipping common sentence-start words.
+  const GENERIC_CAPS = new Set(['The','A','An','In','On','At','For','Of','With','By','From','Our','Re','And']);
+  const capTokens = text.split(/\s+/);
+  const properNounRun: string[] = [];
+  for (const tok of capTokens) {
+    if (/^[A-Z][a-zA-Z'\-]{1,}$/.test(tok) && !GENERIC_CAPS.has(tok)) {
+      properNounRun.push(tok);
+      if (properNounRun.length === 3) break;
+    } else if (properNounRun.length > 0) {
+      break; // run ended
+    }
   }
+  if (properNounRun.length >= 2) return properNounRun.join(' ');
 
-  // 5. Key-term extraction from general query — strip URLs and stop words
+  // 5. Key-term extraction — first 2 non-stop words from the query
   const STOP = new Set([
     'the','a','an','and','or','but','in','on','at','to','for','of','with','by',
     'from','is','was','are','were','be','been','have','had','do','does','did',
@@ -87,65 +92,60 @@ function inferMatterRef(
     'if','as','into','about','under','over','between','against','during','after',
     'before','law','court','case','act','section','regarding','concerning',
   ]);
-  const words = queryText
+  const words = text
     .replace(/https?:\/\/[^\s]+/g, '')
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOP.has(w.toLowerCase()))
-    .slice(0, 6);
+    .slice(0, 3);
 
   if (words.length > 0) return words.join(' ').slice(0, 80);
 
-  return 'general-research';
+  return 'untagged';
 }
 
 /**
  * Resolve the effective matter_ref for a query:
  *  1. Explicit matter_ref from tool input → use as-is
- *  2. DEFAULT_MATTER_REF config → use as-is
- *  3. Session cache (same Mcp-Session-Id) → reuse inferred name from first call
- *  4. Infer from query_text / top_results → cache for session duration
+ *  2. Session cache (same Mcp-Session-Id) → reuse inferred name from first call in session
+ *  3. Infer from query_text (user input only, not results) → cache for session duration
+ *  4. DEFAULT_MATTER_REF config → last-resort fallback only
  */
 function resolveEffectiveMatterRef(
   providedRef: string | undefined,
   queryText: string,
-  topResults: Array<{ title: string; citation?: string; url: string }>,
 ): string | undefined {
   // Explicit always wins
   const trimmed = providedRef?.trim();
   if (trimmed && validateMatterRef(trimmed)) return trimmed;
 
-  // Configured default
-  if (config.DEFAULT_MATTER_REF) return config.DEFAULT_MATTER_REF;
-
-  // Session-scoped inference
+  // Session-scoped inference — keeps all untagged calls in a conversation grouped together
   const sessionId = getSessionId();
   if (sessionId) {
     const cached = sessionMatterCache.get(sessionId);
     if (cached && cached.expiresAt > Date.now()) {
-      // Refresh TTL on each use so active sessions don't expire mid-research
-      cached.expiresAt = Date.now() + SESSION_MATTER_TTL_MS;
+      cached.expiresAt = Date.now() + SESSION_MATTER_TTL_MS; // refresh TTL on use
       return cached.ref;
     }
 
-    // First untagged call in this session — infer and cache
-    const inferred = inferMatterRef(queryText, topResults);
+    // First untagged call in this session — infer from user input and cache
+    const inferred = inferMatterRef(queryText);
     sessionMatterCache.set(sessionId, { ref: inferred, expiresAt: Date.now() + SESSION_MATTER_TTL_MS });
     logger.info({ sessionId, inferred }, 'matter-log: inferred matter ref for session');
     return inferred;
   }
 
-  // No session ID (e.g. direct API call without MCP session) — infer without caching
-  return inferMatterRef(queryText, topResults);
+  // No session ID (direct API call) — infer without caching
+  const inferred = inferMatterRef(queryText);
+  if (inferred !== 'untagged') return inferred;
+
+  // Last resort: configured default (e.g. "general-research" for a shared test environment)
+  return config.DEFAULT_MATTER_REF;
 }
 
 // Fire-and-forget: DB failures must never affect tool responses
 export function recordMatterQuery(params: MatterLogParams): void {
-  const effectiveMatterRef = resolveEffectiveMatterRef(
-    params.matter_ref,
-    params.query_text,
-    params.top_results,
-  );
+  const effectiveMatterRef = resolveEffectiveMatterRef(params.matter_ref, params.query_text);
   if (!effectiveMatterRef || !validateMatterRef(effectiveMatterRef)) return;
 
   logMatterQuery({

@@ -107,14 +107,18 @@ function getAdminSession(req: Request): { user: string; isAdmin: boolean } | nul
 function checkCsrf(req: Request): boolean {
   const origin = req.headers['origin'] ?? '';
   const referer = req.headers['referer'] ?? '';
-  // Prefer X-Forwarded-Host when behind a reverse proxy (Cloudflare Worker sets this).
-  // Raw Host will be the Railway-internal hostname, not the public domain.
-  const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers['host'] ?? '';
   const check = origin || referer;
   if (!check) return false; // require either origin or referer
   try {
-    const url = new URL(check);
-    return url.host === host;
+    const checkHost = new URL(check).host;
+    // Accept either:
+    //   (a) X-Forwarded-Host set by the Cloudflare Worker (when Worker is updated), or
+    //   (b) the configured public hostname from OAUTH_ISSUER — handles the case where
+    //       the Worker hasn't set X-Forwarded-Host yet (raw Host is the Railway-internal name).
+    const forwardedHost = req.headers['x-forwarded-host'] as string | undefined;
+    const issuerHost = new URL(config.OAUTH_ISSUER).host;   // e.g. mcp.example.com
+    const rawHost = req.headers['host'] ?? '';
+    return checkHost === (forwardedHost ?? rawHost) || checkHost === issuerHost;
   } catch { return false; }
 }
 
