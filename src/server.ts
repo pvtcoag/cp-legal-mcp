@@ -2,6 +2,42 @@ import type { Request, Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { logger } from './logger.js';
+
+// ── Stateful session store ────────────────────────────────────────────────────
+//
+// Each MCP conversation gets a persistent transport+server pair keyed by the
+// Mcp-Session-Id the client sends on every subsequent request. This allows:
+//  - Server-sent events (SSE) to stream back to the same client connection
+//  - Session-scoped matter inference in matter-log.ts to group untagged tool
+//    calls from the same conversation under a single inferred matter ref
+//
+// Sessions expire after IDLE_TTL_MS of inactivity. Explicit matter_ref values
+// (weeks-long matters) are unaffected — those bypass session inference entirely.
+
+const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000; // 8 h — full work day
+const SESSION_CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // scan every 15 min
+
+interface ManagedSession {
+  transport: StreamableHTTPServerTransport;
+  server: McpServer;
+  lastActivity: number;
+}
+
+const sessionStore = new Map<string, ManagedSession>();
+
+// Background cleanup — purge sessions idle past TTL.
+// .unref() lets Node exit cleanly without waiting for the interval.
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessionStore) {
+    if (now - session.lastActivity > SESSION_IDLE_TTL_MS) {
+      session.transport.close();
+      session.server.close();
+      sessionStore.delete(id);
+      logger.info({ sessionId: id }, 'MCP session expired (idle TTL)');
+    }
+  }
+}, SESSION_CLEANUP_INTERVAL_MS).unref();
 import { registerResearchCases } from './tools/research-cases.js';
 import { registerResearchLegislation } from './tools/research-legislation.js';
 import { registerGetJudgment } from './tools/get-judgment.js';
@@ -124,9 +160,52 @@ export function createMcpHandler() {
     const log = logger.child({ requestId, method: req.method });
     log.debug({ path: req.path }, 'MCP request received');
 
-    // Stateless: no sessionId — fresh server+transport per request
+    const incomingSessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    // ── Route to existing session ──────────────────────────────────────────
+    if (incomingSessionId) {
+      const existing = sessionStore.get(incomingSessionId);
+
+      if (!existing) {
+        // Session not found: server restarted or TTL expired.
+        // Client must send a new initialize request (no session ID header).
+        log.info({ sessionId: incomingSessionId }, 'MCP session not found — client must reinitialise');
+        res.status(404).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Session not found. Please reinitialise your MCP connection.' },
+          id: null,
+        });
+        return;
+      }
+
+      existing.lastActivity = Date.now();
+
+      try {
+        await existing.transport.handleRequest(req, res, req.body);
+
+        // DELETE = explicit session termination (MCP spec §4.2)
+        if (req.method === 'DELETE') {
+          existing.transport.close();
+          existing.server.close();
+          sessionStore.delete(incomingSessionId);
+          log.info({ sessionId: incomingSessionId }, 'MCP session terminated by client');
+        }
+      } catch (err) {
+        log.error({ err, sessionId: incomingSessionId }, 'MCP handler error (existing session)');
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: '2.0',
+            error: { code: -32603, message: 'Internal server error' },
+            id: null,
+          });
+        }
+      }
+      return;
+    }
+
+    // ── New session (no Mcp-Session-Id header) ─────────────────────────────
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => crypto.randomUUID(),
     });
 
     const server = buildServer();
@@ -135,13 +214,18 @@ export function createMcpHandler() {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
 
-      res.on('close', () => {
-        log.debug('MCP request closed, tearing down');
+      // sessionId is populated after handleRequest processes the initialize request.
+      const sessionId = transport.sessionId;
+      if (sessionId) {
+        sessionStore.set(sessionId, { transport, server, lastActivity: Date.now() });
+        log.info({ sessionId, activeSessions: sessionStore.size }, 'MCP session created');
+      } else {
+        // No session ID generated (e.g. non-initialize POST) — tear down immediately.
         transport.close();
         server.close();
-      });
+      }
     } catch (err) {
-      log.error({ err }, 'MCP handler error');
+      log.error({ err }, 'MCP handler error (new session)');
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
