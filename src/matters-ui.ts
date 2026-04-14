@@ -1884,10 +1884,16 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
     : '';
 
   const closeButton = userIsAdmin
-    ? `<form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/set-status" class="no-print" style="display:inline">
-        <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
-        <button type="submit" class="btn btn-secondary btn-sm">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
-      </form>`
+    ? `<div class="no-print" style="display:inline-flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/set-status" style="display:inline">
+          <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
+          <button type="submit" class="btn btn-secondary btn-sm">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
+        </form>
+        <form method="POST" action="/auslaw/admin/matters/${encodeURIComponent(ref)}/delete" style="display:inline"
+              onsubmit="return confirm('Permanently delete matter \\'${esc(ref)}\\' and all ${totalCount} queries? This cannot be undone.')">
+          <button type="submit" class="btn btn-danger btn-sm">Delete Matter</button>
+        </form>
+      </div>`
     : '';
 
   res.send(page(`${ref} — Research History`, `

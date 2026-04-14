@@ -42,6 +42,7 @@ import {
   updateUserActive,
   rotateUserToken,
   deleteUser,
+  deleteMatter,
   logLoginEvent,
   getLoginEvents,
   getRecentLoginEvents,
@@ -1305,6 +1306,24 @@ adminRouter.post('/auslaw/admin/data/purge-cache-all', requireCsrf, async (req: 
   res.redirect(`/auslaw/admin/data?msg=Cleared+all+judgment+cache+(${deleted}+entries)`);
 });
 
+// ── POST /admin/matters/:ref/delete ──────────────────────────────────────────
+
+adminRouter.post('/auslaw/admin/matters/:ref/delete', requireCsrf, async (req: Request, res: Response) => {
+  const session = getAdminSession(req)!;
+  const ref = decodeURIComponent(req.params['ref'] as string ?? '');
+
+  if (!ref) {
+    res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+      page('Error', '<div class="empty">Invalid matter reference.</div>', session.user, '/auslaw/admin/matters'),
+    );
+    return;
+  }
+
+  const deleted = await deleteMatter(ref);
+  logger.info({ deletedBy: session.user, ref, queriesDeleted: deleted }, 'admin: matter deleted');
+  res.redirect(`/auslaw/admin/matters?msg=${encodeURIComponent(`Deleted matter "${ref}" (${deleted} queries removed)`)}`);
+});
+
 // ── GET /admin/matters — Matter list ──────────────────────────────────────────
 
 function estMatterCostUsd(tokens: number): number {
@@ -1345,6 +1364,9 @@ adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => 
       : esc(m.matter_ref);
     const activeUsers = (m.active_users ?? []).join(', ') || '—';
     const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
+    const deleteBtn = `<form method="POST" action="/auslaw/admin/matters/${encodeURIComponent(m.matter_ref)}/delete" style="display:inline" onsubmit="return confirm('Permanently delete matter \\'${esc(m.matter_ref)}\\' and all ${m.query_count} queries? This cannot be undone.')">
+      <button type="submit" class="btn btn-danger btn-sm" style="padding:.2rem .5rem;font-size:.75rem">Delete</button>
+    </form>`;
     return `<tr>
       <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
         <a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--txt);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
@@ -1356,6 +1378,7 @@ adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => 
       <td style="font-size:.8125rem;color:var(--txt-2)">${esc(activeUsers)}</td>
       <td style="text-align:right">${fmtTokens(m.total_tokens)}</td>
       <td style="text-align:right">${usd}</td>
+      <td>${deleteBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1371,11 +1394,15 @@ adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => 
           <th>Active Users</th>
           <th style="text-align:right">Tokens</th>
           <th style="text-align:right">Est. Cost (USD)</th>
+          <th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
 
+  const flashMsg = req.query['msg'] ? `<div style="background:var(--ok-bg);border:1px solid rgba(74,222,128,.25);border-radius:6px;padding:.75rem 1rem;margin-bottom:1.5rem;font-size:.875rem;color:var(--ok)">${esc(String(req.query['msg']))}</div>` : '';
+
   res.send(page('Matters', `
+    ${flashMsg}
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
       <h1 style="margin-bottom:0">Matters</h1>
       <a href="/auslaw/admin/billing-export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>

@@ -781,6 +781,17 @@ export async function deleteUser(username: string): Promise<void> {
   await pool.query('DELETE FROM users WHERE username = $1', [username]);
 }
 
+export async function deleteMatter(ref: string): Promise<number> {
+  if (!pool) return 0;
+  const r = await pool.query<{ id: number }>(
+    'DELETE FROM matter_queries WHERE matter_ref = $1 RETURNING id',
+    [ref],
+  );
+  await pool.query('DELETE FROM matters WHERE matter_ref = $1', [ref]);
+  _matterStatusCache.delete(ref);
+  return r.rowCount ?? 0;
+}
+
 export async function updateUserLastActive(username: string): Promise<void> {
   if (!pool) return;
   await pool.query(
