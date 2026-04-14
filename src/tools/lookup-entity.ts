@@ -15,6 +15,17 @@ const TYPE_MAP: Record<string, string> = {
   all:     'OrgAndBus',
 };
 
+// ── ABR response parser ────────────────────────────────────────────────────────
+// The ABR JSON endpoints (/json/AbnDetails.aspx etc.) return JSONP by default,
+// wrapping the payload as `callback({...})` even though the path says "json".
+// We fetch as text and strip the wrapper before parsing.
+async function parseAbrJsonp(res: Response): Promise<unknown> {
+  const text = await res.text();
+  // Strip JSONP wrapper: `callback({...})` or `jQuery123({...})` or similar
+  const stripped = text.replace(/^\s*\w[\w.]*\s*\(/, '').replace(/\)\s*;?\s*$/, '').trim();
+  return JSON.parse(stripped);
+}
+
 // ── ABR bulk lookup helper (used by identifiers batch mode) ───────────────────
 
 type SingleResult =
@@ -41,7 +52,7 @@ async function lookupOne(identifier: string, guid: string): Promise<SingleResult
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await res.json() as any;
+    const data = await parseAbrJsonp(res) as any;
     const payload = data?.ABRPayloadSearchResults?.response;
 
     if (!payload || payload.exception) {
@@ -435,7 +446,7 @@ export function registerLookupEntity(server: McpServer): void {
           try {
             const res = await externalFetch(url);
             if (!res.ok) throw new ExternalApiError('ABR', `ABR API returned status ${res.status}`, res.status);
-            data = await res.json();
+            data = await parseAbrJsonp(res);
           } catch (err) {
             // Catch all errors (network failures, ExternalApiError, etc.) and fall through to ASIC Connect
             log.warn({ err }, 'ABR lookup failed — falling back to ASIC Connect');
@@ -553,7 +564,7 @@ export function registerLookupEntity(server: McpServer): void {
           const res = await externalFetch(url);
           if (!res.ok) return [];
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const data = await res.json() as any;
+          const data = await parseAbrJsonp(res) as any;
           const payload = data?.ABRPayloadSearchResults?.response;
           if (!payload || payload.exception) return [];
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
