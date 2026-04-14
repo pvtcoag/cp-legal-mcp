@@ -162,13 +162,14 @@ const mcpHandler = createMcpHandler();
 
 function mcpRoute(req: express.Request, res: express.Response): void {
   const user = res.locals['user'] as string | undefined;
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
   const requestId = crypto.randomUUID();
 
   // Log every MCP request with user identity — appears in Railway logs as audit trail.
   // Intentionally excludes query content (privacy). Tool name not available at HTTP layer.
   logger.info({ user: user ?? 'unauthenticated', requestId, method: req.method }, 'MCP request');
 
-  requestContext.run({ user }, () => {
+  requestContext.run({ user, sessionId }, () => {
     mcpHandler(req, res);
   });
 }
