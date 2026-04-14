@@ -21,8 +21,7 @@ This file is read by Claude Code. For Claude Desktop / Claude.ai project instruc
 
 ### Researching legislation
 1. `research_legislation` — find the Act or regulation by topic
-2. `ask_legislation` — extract answers to specific questions (definitions, offence elements, penalties)
-3. `get_legislation` — only when you need the full text for verbatim citation
+2. `get_legislation` — only when you need the full text for verbatim citation
 
 ### Comparing how courts have treated an issue
 1. `classify_legal_issue` — confirm practice area and courts
@@ -34,6 +33,17 @@ This file is read by Claude Code. For Claude Desktop / Claude.ai project instruc
 1. `search_by_citation` — resolve the seed case
 2. `find_citing_cases` — subsequent cases that have cited it
 3. `enrich_judgment` on citing cases — see how each one received the seed case (positive/negative/distinguished)
+
+### Compiling a matter file
+1. `get_matter_history` — review all research logged against this matter
+2. `build_chronology` — extract a timeline from key documents or judgments
+3. `draft_research_memo` — compile all matter research into a structured brief
+4. `check_deadlines` — verify limitation periods or filing deadlines before finalising
+
+### Researching an entity (corporate / regulatory)
+1. `lookup_entity` — resolve the entity's ABN, ACN, and registered details
+2. `search_regulatory_decisions` — check ASIC/ACCC enforcement history for the entity
+3. `search_asx_announcements` — if listed, review recent ASX disclosures
 
 ---
 
@@ -51,11 +61,17 @@ This file is read by Claude Code. For Claude Desktop / Claude.ai project instruc
 | Cases on similar issues | `find_related_cases` |
 | Head-to-head comparison of two cases | `compare_cases` |
 | Find an Act or regulation | `research_legislation` |
-| Extract answers from legislation | `ask_legislation` |
 | Full text of an Act | `get_legislation` |
 | Classify a new issue before researching | `classify_legal_issue` |
 | Format a citation for a document | `format_citation` |
-| Generate a pinpoint reference | `generate_pinpoint` |
+| Look up a business entity (ABN/ACN/name) | `lookup_entity` |
+| ASIC or ACCC enforcement decisions | `search_regulatory_decisions` |
+| ASX company announcements | `search_asx_announcements` |
+| Build a timeline from documents | `build_chronology` |
+| Check limitation periods or filing deadlines | `check_deadlines` |
+| Compile matter research into a brief | `draft_research_memo` |
+| Monitor a key case for new citations | `monitor_precedents` |
+| Review all queries logged against a matter | `get_matter_history` |
 
 ---
 
@@ -77,11 +93,11 @@ Use `search_by_citation` — it resolves faster and returns exact matches.
 
 ## Matter References
 
-Always include `matter_ref` in every tool call if one has been established for the current research session. This enables the matter history at `https://mcp.example.com/auslaw/matters` to track all queries against the same matter.
+Include `matter_ref` in every tool call if one has been established for the current research session. This enables the matter history at `https://mcp.example.com/auslaw/matters` to track all queries against the same matter.
 
 - Format: alphanumeric, hyphens, underscores, spaces — e.g. `"Smith-2024"`, `"ABC v DEF"`, `"negligence-research"`
-- If no matter ref was given, omit the field — do not invent one
-- The server will apply a default matter ref if `DEFAULT_MATTER_REF` is configured
+- If no matter ref has been given for this session, omit the field entirely — do not invent one
+- The server will infer a contextual matter name from the first query in a session and group all subsequent untagged calls under it; explicit `matter_ref` values always take precedence
 
 ---
 
