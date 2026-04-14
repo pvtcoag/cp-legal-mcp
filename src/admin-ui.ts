@@ -107,7 +107,9 @@ function getAdminSession(req: Request): { user: string; isAdmin: boolean } | nul
 function checkCsrf(req: Request): boolean {
   const origin = req.headers['origin'] ?? '';
   const referer = req.headers['referer'] ?? '';
-  const host = req.headers['host'] ?? '';
+  // Prefer X-Forwarded-Host when behind a reverse proxy (Cloudflare Worker sets this).
+  // Raw Host will be the Railway-internal hostname, not the public domain.
+  const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers['host'] ?? '';
   const check = origin || referer;
   if (!check) return false; // require either origin or referer
   try {
