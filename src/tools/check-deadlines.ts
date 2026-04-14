@@ -537,9 +537,17 @@ export function registerCheckDeadlines(server: McpServer): void {
         let expiry: { expiry_date: string; days_remaining: number; urgent: boolean; long_stop_date?: string } | null = null;
 
         if (input.date_of_accrual) {
+          const accrual = parseEventDate(input.date_of_accrual);
+          if (!accrual) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({
+                error: 'invalid_date',
+                message: `Could not parse date_of_accrual "${input.date_of_accrual}". Use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY format.`,
+              }) }],
+            };
+          }
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const accrual = new Date(input.date_of_accrual);
 
           let expiryDate: Date;
           if (rule.days != null) {

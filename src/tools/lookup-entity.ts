@@ -437,13 +437,9 @@ export function registerLookupEntity(server: McpServer): void {
             if (!res.ok) throw new ExternalApiError('ABR', `ABR API returned status ${res.status}`, res.status);
             data = await res.json();
           } catch (err) {
-            if (err instanceof ExternalApiError) {
-              log.warn({ err }, 'ABR lookup failed — falling back to ASIC Connect');
-              // Fall through to ASIC Connect below
-              data = null;
-            } else {
-              throw err;
-            }
+            // Catch all errors (network failures, ExternalApiError, etc.) and fall through to ASIC Connect
+            log.warn({ err }, 'ABR lookup failed — falling back to ASIC Connect');
+            data = null;
           }
 
           if (data) {
