@@ -163,47 +163,45 @@ export function createMcpHandler() {
     const incomingSessionId = req.headers['mcp-session-id'] as string | undefined;
 
     // ── Route to existing session ──────────────────────────────────────────
+    // If the session ID is known, reuse the existing transport.
+    // If it is unknown (server restart / TTL expiry), fall through to
+    // new-session creation rather than returning 404. MCP clients
+    // (including Claude) do not reliably re-initialise on 404 — they
+    // show a generic "tool execution failed" error instead. Falling
+    // through gives the request a fresh transport, behaving like the
+    // old stateless mode for that one call, which is better than a
+    // hard failure.
     if (incomingSessionId) {
       const existing = sessionStore.get(incomingSessionId);
 
-      if (!existing) {
-        // Session not found: server restarted or TTL expired.
-        // Client must send a new initialize request (no session ID header).
-        log.info({ sessionId: incomingSessionId }, 'MCP session not found — client must reinitialise');
-        res.status(404).json({
-          jsonrpc: '2.0',
-          error: { code: -32001, message: 'Session not found. Please reinitialise your MCP connection.' },
-          id: null,
-        });
+      if (existing) {
+        existing.lastActivity = Date.now();
+        try {
+          await existing.transport.handleRequest(req, res, req.body);
+          // DELETE = explicit session termination (MCP spec §4.2)
+          if (req.method === 'DELETE') {
+            existing.transport.close();
+            existing.server.close();
+            sessionStore.delete(incomingSessionId);
+            log.info({ sessionId: incomingSessionId }, 'MCP session terminated by client');
+          }
+        } catch (err) {
+          log.error({ err, sessionId: incomingSessionId }, 'MCP handler error (existing session)');
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            });
+          }
+        }
         return;
       }
 
-      existing.lastActivity = Date.now();
-
-      try {
-        await existing.transport.handleRequest(req, res, req.body);
-
-        // DELETE = explicit session termination (MCP spec §4.2)
-        if (req.method === 'DELETE') {
-          existing.transport.close();
-          existing.server.close();
-          sessionStore.delete(incomingSessionId);
-          log.info({ sessionId: incomingSessionId }, 'MCP session terminated by client');
-        }
-      } catch (err) {
-        log.error({ err, sessionId: incomingSessionId }, 'MCP handler error (existing session)');
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
-          });
-        }
-      }
-      return;
+      log.info({ sessionId: incomingSessionId }, 'MCP session not found — falling through to new session (server restart / TTL expiry)');
     }
 
-    // ── New session (no Mcp-Session-Id header) ─────────────────────────────
+    // ── New session (no Mcp-Session-Id or stale session ID) ───────────────
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
     });
@@ -220,7 +218,7 @@ export function createMcpHandler() {
         sessionStore.set(sessionId, { transport, server, lastActivity: Date.now() });
         log.info({ sessionId, activeSessions: sessionStore.size }, 'MCP session created');
       } else {
-        // No session ID generated (e.g. non-initialize POST) — tear down immediately.
+        // No session ID generated (e.g. non-initialize POST on stale session) — tear down.
         transport.close();
         server.close();
       }

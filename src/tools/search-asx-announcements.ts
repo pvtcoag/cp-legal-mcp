@@ -76,18 +76,15 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
         }
         data = await res.json();
       } catch (err) {
-        if (err instanceof ExternalApiError) {
-          log.warn({ err }, 'ASX API fetch failed');
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: 'The ASX announcements API is currently unavailable. Try again shortly.',
-              detail: err.message,
-            }) }],
-            isError: true,
-          };
-        }
-        throw err;
+        log.warn({ err }, 'ASX API fetch failed');
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'upstream_unavailable',
+            message: 'The ASX announcements API is currently unavailable. Try again shortly.',
+            detail: err instanceof Error ? err.message : String(err),
+          }) }],
+          isError: true,
+        };
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
