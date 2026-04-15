@@ -75,6 +75,31 @@ This file is read by Claude Code. For Claude Desktop / Claude.ai project instruc
 
 ---
 
+## Using the Tools Alongside Direct Web Access
+
+The CP Legal tools are a **first preference**, not a dependency. They provide structured, citation-ready results from authoritative Australian legal sources. But they are not a ceiling on what you can do — direct web search and web fetch remain available at all times and you should use them freely.
+
+**When a tool is unavailable or returns no results:**
+- Fall back to a direct web search or `WebFetch` to the primary source (e.g. AustLII, caselaw.nsw.gov.au, asic.gov.au, accc.gov.au, abr.business.gov.au)
+- Tell the user which tool failed and what you found through the fallback — transparency matters
+- If a tool returns an error with `manual_url` fields, use those URLs directly
+
+**When cross-referencing makes sense:**
+- It is entirely appropriate to use a tool for the initial search, then fetch the source document directly to get more detail
+- Using `WebFetch` on an AustLII judgment URL to verify or extend what `get_judgment` returned is encouraged
+- Checking an ASX announcement PDF directly after `search_asx_announcements` identifies it is a valid workflow
+
+**Tools that commonly benefit from web fallback:**
+- `lookup_entity` fails → search ABR directly at `https://abr.business.gov.au/` or ASIC Connect at `https://connectonline.asic.gov.au/`
+- `search_regulatory_decisions` returns nothing → search `site:asic.gov.au [entity name] enforcement` or browse the register directly
+- `search_asx_announcements` fails → visit `https://www.asx.com.au/asx/statistics/announcements.do?by=asxCode&asxCode=[CODE]` directly
+- `research_cases` / `search_by_citation` fails → search AustLII directly at `https://www.austlii.edu.au/`
+
+**Session errors:**
+If you see an MCP session error (e.g. "session not found" or "Error occurred during tool execution"), this usually means the server was restarted. Start a fresh conversation to re-establish the connection — the tools will work normally in a new session.
+
+---
+
 ## Avoid These Patterns
 
 **Don't call `ask_judgment` after `summarise_judgment` for the same questions.**

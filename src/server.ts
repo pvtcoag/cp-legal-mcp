@@ -198,6 +198,30 @@ export function createMcpHandler() {
         return;
       }
 
+      // ── Non-initialize POST on a stale session ─────────────────────────
+      // If the client sends a tool call (or any non-initialize method) with
+      // a session ID we don't recognise, falling through to an uninitialized
+      // transport produces a confusing protocol error that Claude shows as
+      // "Error occurred during tool execution". Return a proper JSON-RPC
+      // session-expired response with HTTP 200 instead (HTTP 404 is not used
+      // because Claude Desktop does not automatically reinitialise on 404).
+      // The client can retry after a fresh initialize.
+      if (req.method === 'POST') {
+        const body = req.body as { method?: string; id?: unknown } | undefined;
+        if (body?.method && body.method !== 'initialize') {
+          log.info({ sessionId: incomingSessionId, method: body.method }, 'MCP session not found for non-initialize POST — returning session-expired error');
+          res.status(200).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'MCP session not found. The server may have restarted — please start a new conversation to reinitialise the connection.',
+            },
+            id: body.id ?? null,
+          });
+          return;
+        }
+      }
+
       log.info({ sessionId: incomingSessionId }, 'MCP session not found — falling through to new session (server restart / TTL expiry)');
     }
 
