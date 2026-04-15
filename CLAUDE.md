@@ -41,7 +41,7 @@ This file is read by Claude Code. For Claude Desktop / Claude.ai project instruc
 4. `check_deadlines` — verify limitation periods or filing deadlines before finalising
 
 ### Researching an entity (corporate / regulatory)
-1. `lookup_entity` — resolve the entity's ABN, ACN, and registered details
+1. `lookup_entity` — resolve the entity's ABN, ACN, and registered details via ABR (requires ABR_GUID); returns `manual_url` and `asic_search_url` for follow-up on ASIC
 2. `search_regulatory_decisions` — check ASIC/ACCC enforcement history for the entity
 3. `search_asx_announcements` — if listed, review recent ASX disclosures
 
