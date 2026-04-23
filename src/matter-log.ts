@@ -52,8 +52,11 @@ interface SessionMatter {
 
 const sessionMatterCache = new Map<string, SessionMatter>();
 
-/** Extract a human-readable matter name from user input (query text only — not results). */
-function inferMatterRef(queryText: string): string {
+/**
+ * Extract a human-readable matter name from user input (query text only — not results).
+ * @internal Exported for unit tests only.
+ */
+export function inferMatterRef(queryText: string): string {
   const text = queryText.trim();
 
   // 1. Neutral citation embedded in the query (e.g. "Smith v Jones [2023] NSWSC 1")
