@@ -60,6 +60,8 @@ import { registerBuildChronology } from './tools/build-chronology.js';
 import { registerCheckDeadlines } from './tools/check-deadlines.js';
 import { registerDraftResearchMemo } from './tools/draft-research-memo.js';
 import { registerMonitorPrecedents } from './tools/monitor-precedents.js';
+import { registerResources } from './resources.js';
+import { registerPrompts } from './prompts.js';
 
 function buildServer(): McpServer {
   const server = new McpServer({
@@ -117,6 +119,12 @@ function buildServer(): McpServer {
 
   // Admin (restricted to ADMIN_USERS)
   registerInspectDatabase(server);
+
+  // Resources (static markdown guides)
+  registerResources(server);
+
+  // Prompts (canonical research workflows)
+  registerPrompts(server);
 
   return server;
 }
