@@ -303,6 +303,11 @@ export function registerFindRelatedCases(server: McpServer): void {
           seeds_count: seedsUsed.length,
           related_cases: finalResults,
           corpus_size: corpusSize,
+          pagination: {
+            returned: finalResults.length,
+            limit: input.limit,
+            has_more: allCandidates.length > input.limit,
+          },
           note: corpusResults.length === 0
             ? 'Corpus is empty or has only this judgment — results are from AustLII keyword search. The corpus grows as more judgments are researched with summarise_judgment, enrich_judgment, or ask_judgment.'
             : `${corpusResults.length} result(s) from the ${corpusSize}-judgment semantic corpus; remaining from AustLII.`,

@@ -349,6 +349,11 @@ export function registerSearchRegulatoryDecisions(server: McpServer): void {
           decision_type: input.decision_type,
           result_count: filtered.length,
           results: filtered,
+          pagination: {
+            returned: filtered.length,
+            limit: input.limit ?? 10,
+            has_more: allResults.length > (input.limit ?? 10),
+          },
           ...(errors.length > 0 ? { partial_failure: `Could not fetch: ${errors.join(', ')}` } : {}),
           manual_urls: {
             asic_enforcement: ASIC_ENFORCEMENT_URL,

@@ -275,6 +275,10 @@ export function registerLookupEntity(server: McpServer): void {
             errors,
             results,
             manual_url: ASIC_MANUAL_URL,
+            pagination: {
+              returned: results.length,
+              limit: input.identifiers.length,
+            },
           }) }],
         };
       }
@@ -432,6 +436,10 @@ export function registerLookupEntity(server: McpServer): void {
           result_count: abrResults.length,
           results: abrResults,
           manual_url: ASIC_MANUAL_URL,
+          pagination: {
+            returned: abrResults.length,
+            limit: input.limit ?? 10,
+          },
         }) }],
       };
     },

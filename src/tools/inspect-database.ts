@@ -7,6 +7,7 @@ import {
   getUserActivity,
   getRecentActivity,
   getMatterHistory,
+  getMatterHistoryCount,
   findConflicts,
 } from '../db.js';
 import { getUser } from '../request-context.js';
@@ -101,7 +102,17 @@ export function registerInspectDatabase(server: McpServer): void {
             return {
               content: [{
                 type: 'text' as const,
-                text: JSON.stringify({ command: 'list_matters', matter_count: rows.length, matters: rows }),
+                text: JSON.stringify({
+                  command: 'list_matters',
+                  matter_count: rows.length,
+                  matters: rows,
+                  pagination: {
+                    returned: rows.length,
+                    limit: input.limit ?? 100,
+                    total_count: rows.length,
+                    has_more: false,
+                  },
+                }),
               }],
             };
           }
@@ -117,6 +128,10 @@ export function registerInspectDatabase(server: McpServer): void {
                   date_to: input.date_to ?? 'now',
                   row_count: rows.length,
                   activity: rows,
+                  pagination: {
+                    returned: rows.length,
+                    limit: input.limit ?? 100,
+                  },
                 }),
               }],
             };
@@ -140,6 +155,11 @@ export function registerInspectDatabase(server: McpServer): void {
                     results: r.result_count,
                     at: r.created_at,
                   })),
+                  pagination: {
+                    returned: rows.length,
+                    limit: input.limit ?? 100,
+                    has_more: rows.length === (input.limit ?? 100),
+                  },
                 }),
               }],
             };
@@ -155,7 +175,11 @@ export function registerInspectDatabase(server: McpServer): void {
                 isError: true,
               };
             }
-            const rows = await getMatterHistory(input.matter_ref, input.limit ?? 100);
+            const effectiveLimit = input.limit ?? 100;
+            const [rows, totalCount] = await Promise.all([
+              getMatterHistory(input.matter_ref, effectiveLimit),
+              getMatterHistoryCount(input.matter_ref),
+            ]);
             return {
               content: [{
                 type: 'text' as const,
@@ -164,6 +188,12 @@ export function registerInspectDatabase(server: McpServer): void {
                   matter_ref: input.matter_ref,
                   record_count: rows.length,
                   records: rows,
+                  pagination: {
+                    returned: rows.length,
+                    limit: effectiveLimit,
+                    total_count: totalCount,
+                    has_more: totalCount > rows.length,
+                  },
                 }),
               }],
             };
@@ -193,6 +223,11 @@ export function registerInspectDatabase(server: McpServer): void {
                     matching_query_count: c.matching_queries.length,
                     matching_queries: c.matching_queries.slice(0, 5),
                   })),
+                  pagination: {
+                    returned: conflicts.length,
+                    limit: input.limit ?? 50,
+                    has_more: conflicts.length === (input.limit ?? 50),
+                  },
                   note: conflicts.length === 0
                     ? 'No prior matter queries match the provided search terms.'
                     : `Found ${conflicts.length} matter(s) with queries matching the provided terms. Review before accepting a retainer.`,

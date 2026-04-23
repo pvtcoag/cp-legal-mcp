@@ -109,6 +109,10 @@ export function registerSearchByCitation(server: McpServer): void {
             query: input.citation_or_name,
             result_count: results.length,
             results,
+            pagination: {
+              returned: results.length,
+              limit: input.limit ?? 5,
+            },
           }),
         }],
       };

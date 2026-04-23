@@ -170,6 +170,7 @@ export function registerResearchCases(server: McpServer): void {
         accuracy_score: ranked[0]?.score,
       });
 
+      const effectiveLimit = input.limit ?? 5;
       return {
         content: [{
           type: 'text' as const,
@@ -178,6 +179,11 @@ export function registerResearchCases(server: McpServer): void {
             jurisdiction: input.jurisdiction,
             result_count: results.length,
             results,
+            pagination: {
+              returned: results.length,
+              limit: effectiveLimit,
+              has_more: rawResults.length > effectiveLimit,
+            },
           }),
         }],
       };

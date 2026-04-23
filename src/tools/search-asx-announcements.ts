@@ -139,6 +139,12 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
           total_available: totalAvailable,
           ...(input.filter_text ? { filter_applied: input.filter_text } : {}),
           announcements,
+          pagination: {
+            returned: announcements.length,
+            limit: input.limit ?? 20,
+            total_count: totalAvailable,
+            has_more: totalAvailable > announcements.length,
+          },
         }) }],
       };
     },

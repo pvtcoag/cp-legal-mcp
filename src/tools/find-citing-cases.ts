@@ -102,6 +102,11 @@ export function registerFindCitingCases(server: McpServer): void {
             cited_case: input.citation,
             citing_case_count: cases.length,
             cases,
+            pagination: {
+              returned: cases.length,
+              limit: input.limit ?? 10,
+              has_more: results.length > (input.limit ?? 10),
+            },
           }),
         }],
       };

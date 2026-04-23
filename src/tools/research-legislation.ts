@@ -140,6 +140,11 @@ export function registerResearchLegislation(server: McpServer): void {
             ...(input.to_year !== undefined ? { to_year: input.to_year } : {}),
             result_count: results.length,
             results,
+            pagination: {
+              returned: results.length,
+              limit: input.limit ?? 5,
+              has_more: filteredResults.length > (input.limit ?? 5),
+            },
           }),
         }],
       };

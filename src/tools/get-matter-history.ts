@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerTool } from './_shared.js';
-import { getMatterHistory, isDbEnabled } from '../db.js';
+import { getMatterHistory, getMatterHistoryCount, isDbEnabled } from '../db.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
@@ -73,9 +73,14 @@ export function registerGetMatterHistory(server: McpServer): void {
       }
 
       let rows;
+      let totalCount: number | undefined;
       try {
-        rows = await getMatterHistory(input.matter_ref, input.limit ?? 50);
-        log.debug({ matter_ref: input.matter_ref, rowCount: rows.length }, 'Matter history retrieved');
+        const effectiveLimit = input.limit ?? 50;
+        [rows, totalCount] = await Promise.all([
+          getMatterHistory(input.matter_ref, effectiveLimit),
+          getMatterHistoryCount(input.matter_ref),
+        ]);
+        log.debug({ matter_ref: input.matter_ref, rowCount: rows.length, totalCount }, 'Matter history retrieved');
       } catch (err) {
         log.error({ err }, 'getMatterHistory failed');
         return {
@@ -172,6 +177,11 @@ export function registerGetMatterHistory(server: McpServer): void {
                 errors: errorCount,
               },
               ...(queryList ? { queries: queryList } : {}),
+              pagination: {
+                returned: rows.length,
+                limit: input.limit ?? 50,
+                ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > rows.length } : {}),
+              },
             }),
           }],
         };
@@ -196,6 +206,11 @@ export function registerGetMatterHistory(server: McpServer): void {
             matter_ref: input.matter_ref,
             record_count: records.length,
             records,
+            pagination: {
+              returned: records.length,
+              limit: input.limit ?? 50,
+              ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > records.length } : {}),
+            },
           }),
         }],
       };
