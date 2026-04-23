@@ -295,6 +295,8 @@ export function registerFindRelatedCases(server: McpServer): void {
         api_tokens_used: totalTokens,
       });
 
+      // Upstream AusLaw search_cases has no offset; candidate pool is one batch.
+      // No `cursor` input is accepted — agents cannot page beyond the over-fetched pool.
       const corpusSize = corpus.length;
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({

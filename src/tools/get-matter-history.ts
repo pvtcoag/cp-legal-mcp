@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerTool } from './_shared.js';
-import { getMatterHistory, getMatterHistoryCount, isDbEnabled } from '../db.js';
+import { getMatterHistory, getMatterHistoryKeyset, getMatterHistoryCount, isDbEnabled } from '../db.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
+import { encodeCursor, decodeCursor, type KeysetCursor } from '../pagination.js';
 
 const CASE_TOOLS = new Set([
   'research_cases', 'find_citing_cases', 'find_related_cases',
@@ -45,6 +46,13 @@ const inputSchema = z.object({
     .describe(
       'In summary mode, also include the full query list alongside the summary stats. Ignored in list mode.',
     ),
+  cursor: z
+    .string()
+    .optional()
+    .describe(
+      'Opaque pagination cursor from a previous response\'s pagination.next_cursor. ' +
+      'Pass to retrieve the next page in list view. Ignored in summary view.',
+    ),
 });
 
 // ── Output schema ─────────────────────────────────────────────────────────────
@@ -70,6 +78,7 @@ const outputSchemaShape = {
     limit: z.number(),
     total_count: z.number().optional(),
     has_more: z.boolean().optional(),
+    next_cursor: z.string().optional(),
   }).optional(),
 };
 
@@ -104,13 +113,20 @@ export function registerGetMatterHistory(server: McpServer): void {
 
       let rows;
       let totalCount: number | undefined;
+      // Keyset pagination only applies to list view; summary view aggregates
+      // across all rows and ignores cursor.
+      const decodedCursor = input.view === 'list'
+        ? decodeCursor<KeysetCursor>(input.cursor)
+        : undefined;
       try {
         const effectiveLimit = input.limit ?? 50;
         [rows, totalCount] = await Promise.all([
-          getMatterHistory(input.matter_ref, effectiveLimit),
+          input.view === 'list'
+            ? getMatterHistoryKeyset(input.matter_ref, effectiveLimit, decodedCursor)
+            : getMatterHistory(input.matter_ref, effectiveLimit),
           getMatterHistoryCount(input.matter_ref),
         ]);
-        log.debug({ matter_ref: input.matter_ref, rowCount: rows.length, totalCount }, 'Matter history retrieved');
+        log.debug({ matter_ref: input.matter_ref, rowCount: rows.length, totalCount, paged: !!decodedCursor }, 'Matter history retrieved');
       } catch (err) {
         log.error({ err }, 'getMatterHistory failed');
         const obj = {
@@ -272,14 +288,26 @@ export function registerGetMatterHistory(server: McpServer): void {
         top_results: r.top_results,
       }));
 
+      // next_cursor: keyset cursor built from the last row. We signal has_more
+      // either by (a) the DB count exceeding what we've returned on this page
+      // plus any rows already consumed by earlier cursored calls — but since
+      // we don't track consumption, we fall back to the cheaper heuristic:
+      // if the page is full (rows.length === limit) there's very likely more.
+      const effectiveLimit = input.limit ?? 50;
+      const pageLikelyFull = records.length === effectiveLimit;
+      const lastRow = rows[rows.length - 1];
+      const nextCursor = pageLikelyFull && lastRow
+        ? encodeCursor({ last_created_at: lastRow.created_at, last_id: lastRow.id } satisfies KeysetCursor)
+        : undefined;
       const obj = {
         matter_ref: input.matter_ref,
         record_count: records.length,
         records,
         pagination: {
           returned: records.length,
-          limit: input.limit ?? 50,
-          ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > records.length } : {}),
+          limit: effectiveLimit,
+          ...(totalCount !== undefined ? { total_count: totalCount, has_more: pageLikelyFull } : { has_more: pageLikelyFull }),
+          ...(nextCursor ? { next_cursor: nextCursor } : {}),
         },
       };
       if (input.format === 'markdown') {

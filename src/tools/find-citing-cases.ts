@@ -95,6 +95,8 @@ export function registerFindCitingCases(server: McpServer): void {
         api_tokens_used: rerankTokens,
       });
 
+      // Upstream does not expose a page token for search_citing_cases — over-fetch
+      // (3x) and client-side slice only. No `cursor` input is accepted.
       return {
         content: [{
           type: 'text' as const,

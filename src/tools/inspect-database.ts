@@ -5,11 +5,12 @@ import {
   isDbEnabled,
   listMatters,
   getUserActivity,
-  getRecentActivity,
-  getMatterHistory,
+  getRecentActivityKeyset,
+  getMatterHistoryKeyset,
   getMatterHistoryCount,
   findConflicts,
 } from '../db.js';
+import { encodeCursor, decodeCursor, type KeysetCursor } from '../pagination.js';
 import { getUser } from '../request-context.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
@@ -56,6 +57,13 @@ const inputSchema = z.object({
     .max(500)
     .default(100)
     .describe('Max rows to return'),
+  cursor: z
+    .string()
+    .optional()
+    .describe(
+      'Opaque pagination cursor from a previous response\'s pagination.next_cursor. ' +
+      'Supported by recent_activity and matter_detail commands; ignored by others.',
+    ),
 });
 
 export function registerInspectDatabase(server: McpServer): void {
@@ -138,7 +146,14 @@ export function registerInspectDatabase(server: McpServer): void {
           }
 
           case 'recent_activity': {
-            const rows = await getRecentActivity(input.limit ?? 100);
+            const effectiveLimit = input.limit ?? 100;
+            const cursor = decodeCursor<KeysetCursor>(input.cursor);
+            const rows = await getRecentActivityKeyset(effectiveLimit, cursor);
+            const pageLikelyFull = rows.length === effectiveLimit;
+            const lastRow = rows[rows.length - 1];
+            const nextCursor = pageLikelyFull && lastRow
+              ? encodeCursor({ last_created_at: lastRow.created_at, last_id: lastRow.id } satisfies KeysetCursor)
+              : undefined;
             return {
               content: [{
                 type: 'text' as const,
@@ -157,8 +172,9 @@ export function registerInspectDatabase(server: McpServer): void {
                   })),
                   pagination: {
                     returned: rows.length,
-                    limit: input.limit ?? 100,
-                    has_more: rows.length === (input.limit ?? 100),
+                    limit: effectiveLimit,
+                    has_more: pageLikelyFull,
+                    ...(nextCursor ? { next_cursor: nextCursor } : {}),
                   },
                 }),
               }],
@@ -176,10 +192,16 @@ export function registerInspectDatabase(server: McpServer): void {
               };
             }
             const effectiveLimit = input.limit ?? 100;
+            const cursor = decodeCursor<KeysetCursor>(input.cursor);
             const [rows, totalCount] = await Promise.all([
-              getMatterHistory(input.matter_ref, effectiveLimit),
+              getMatterHistoryKeyset(input.matter_ref, effectiveLimit, cursor),
               getMatterHistoryCount(input.matter_ref),
             ]);
+            const pageLikelyFull = rows.length === effectiveLimit;
+            const lastRow = rows[rows.length - 1];
+            const nextCursor = pageLikelyFull && lastRow
+              ? encodeCursor({ last_created_at: lastRow.created_at, last_id: lastRow.id } satisfies KeysetCursor)
+              : undefined;
             return {
               content: [{
                 type: 'text' as const,
@@ -192,7 +214,8 @@ export function registerInspectDatabase(server: McpServer): void {
                     returned: rows.length,
                     limit: effectiveLimit,
                     total_count: totalCount,
-                    has_more: totalCount > rows.length,
+                    has_more: pageLikelyFull,
+                    ...(nextCursor ? { next_cursor: nextCursor } : {}),
                   },
                 }),
               }],

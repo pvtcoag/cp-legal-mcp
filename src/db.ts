@@ -292,6 +292,38 @@ export async function getMatterHistory(
   return result.rows;
 }
 
+/**
+ * Keyset-paginated variant of getMatterHistory.
+ * Pass the last row's (created_at, id) from the previous page as the cursor.
+ * Ordering is (created_at DESC, id DESC) so ties on created_at break deterministically.
+ */
+export async function getMatterHistoryKeyset(
+  matter_ref: string,
+  limit: number,
+  cursor?: { last_created_at: string; last_id: number },
+): Promise<MatterHistoryRow[]> {
+  if (!pool) return [];
+  const params: unknown[] = [matter_ref, limit];
+  let cursorClause = '';
+  if (cursor) {
+    params.push(cursor.last_created_at);
+    params.push(cursor.last_id);
+    // (created_at, id) < (last_created_at, last_id) in DESC order
+    cursorClause = ` AND (created_at, id) < ($3::timestamptz, $4::int)`;
+  }
+  const result = await pool.query<MatterHistoryRow>(
+    `SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
+            result_count, top_results, api_tokens_used,
+            is_error, error_message, accuracy_score, created_at
+     FROM matter_queries
+     WHERE matter_ref = $1${cursorClause}
+     ORDER BY created_at DESC, id DESC
+     LIMIT $2`,
+    params,
+  );
+  return result.rows;
+}
+
 export async function getMatterHistoryCount(matter_ref: string, toolFilter?: string): Promise<number> {
   if (!pool) return 0;
   const params: unknown[] = [matter_ref];
@@ -542,6 +574,41 @@ export async function getRecentActivity(limit: number = 50, userId?: string): Pr
            is_error, error_message, accuracy_score, created_at
     FROM matter_queries ${where}
     ORDER BY created_at DESC
+    LIMIT $1
+  `, params);
+  return result.rows;
+}
+
+/**
+ * Keyset-paginated variant of getRecentActivity.
+ * Ordering is (created_at DESC, id DESC); pass the last row's pair as the cursor.
+ */
+export async function getRecentActivityKeyset(
+  limit: number,
+  cursor?: { last_created_at: string; last_id: number },
+  userId?: string,
+): Promise<RecentActivityRow[]> {
+  if (!pool) return [];
+  const params: unknown[] = [limit];
+  const conditions: string[] = [];
+  if (userId) {
+    params.push(userId);
+    conditions.push(`(user_id = $${params.length} OR user_id IS NULL)`);
+  }
+  if (cursor) {
+    params.push(cursor.last_created_at);
+    const tsIdx = params.length;
+    params.push(cursor.last_id);
+    const idIdx = params.length;
+    conditions.push(`(created_at, id) < ($${tsIdx}::timestamptz, $${idIdx}::int)`);
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const result = await pool.query<RecentActivityRow>(`
+    SELECT id, matter_ref, user_id, tool_name, query_text, jurisdiction,
+           result_count, top_results, api_tokens_used,
+           is_error, error_message, accuracy_score, created_at
+    FROM matter_queries ${where}
+    ORDER BY created_at DESC, id DESC
     LIMIT $1
   `, params);
   return result.rows;

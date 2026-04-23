@@ -342,6 +342,9 @@ export function registerSearchRegulatoryDecisions(server: McpServer): void {
         };
       }
 
+      // ASIC and ACCC registers are HTML-scraped from landing pages that do
+      // not expose a stable offset / page parameter. No `cursor` input is
+      // accepted — agents cannot page past the first batch.
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           query: input.query,

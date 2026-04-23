@@ -200,6 +200,10 @@ export function registerResearchCases(server: McpServer): void {
       });
 
       const effectiveLimit = input.limit ?? 5;
+      // Upstream AusLaw MCP's search_cases does not expose an offset or page
+      // token — only `limit`. We over-fetch (3x) and surface has_more when the
+      // raw pool exceeds the user's limit, but cannot page beyond that single
+      // batch. No `cursor` input is accepted because there is nothing to feed it.
       const obj = {
         query: input.query,
         jurisdiction: input.jurisdiction,

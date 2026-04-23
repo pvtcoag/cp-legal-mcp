@@ -130,6 +130,8 @@ export function registerResearchLegislation(server: McpServer): void {
         accuracy_score: ranked[0]?.score,
       });
 
+      // Upstream does not expose a page token; over-fetch + client-side slice only.
+      // No `cursor` input is accepted.
       return {
         content: [{
           type: 'text' as const,

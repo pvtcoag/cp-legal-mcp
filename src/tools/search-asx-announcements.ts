@@ -132,6 +132,10 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
           .map((a) => ({ title: `[${a.date}] ${a.headline}`, url: a.url })),
       });
 
+      // The ASX announcements endpoint accepts only `count` (and
+      // market_sensitive). No documented offset / page parameter, so we
+      // cannot page past the first `count` rows. Total_count is surfaced for
+      // context; no `cursor` input is accepted.
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           asx_code: code,
