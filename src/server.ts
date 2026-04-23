@@ -31,8 +31,8 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessionStore) {
     if (now - session.lastActivity > SESSION_IDLE_TTL_MS) {
-      session.transport.close();
-      session.server.close();
+      void session.transport.close();
+      void session.server.close();
       sessionStore.delete(id);
       logger.info({ sessionId: id }, 'MCP session expired (idle TTL)');
     }
@@ -147,8 +147,8 @@ export function createMcpHandler() {
           await existing.transport.handleRequest(req, res, req.body);
           // DELETE = explicit session termination (MCP spec §4.2)
           if (req.method === 'DELETE') {
-            existing.transport.close();
-            existing.server.close();
+            void existing.transport.close();
+            void existing.server.close();
             sessionStore.delete(incomingSessionId);
             log.info({ sessionId: incomingSessionId }, 'MCP session terminated by client');
           }
@@ -210,8 +210,8 @@ export function createMcpHandler() {
         log.info({ sessionId, activeSessions: sessionStore.size }, 'MCP session created');
       } else {
         // No session ID generated (e.g. non-initialize POST on stale session) — tear down.
-        transport.close();
-        server.close();
+        void transport.close();
+        void server.close();
       }
     } catch (err) {
       log.error({ err }, 'MCP handler error (new session)');

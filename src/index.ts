@@ -170,7 +170,7 @@ function mcpRoute(req: express.Request, res: express.Response): void {
   logger.info({ user: user ?? 'unauthenticated', requestId, method: req.method }, 'MCP request');
 
   requestContext.run({ user, sessionId }, () => {
-    mcpHandler(req, res);
+    void mcpHandler(req, res);
   });
 }
 

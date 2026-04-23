@@ -413,12 +413,6 @@ function adminUsersFromEnv(): Set<string> {
   return new Set(config.ADMIN_USERS.split(',').map((u) => u.trim().toLowerCase()).filter(Boolean));
 }
 
-/** Check if user is admin — reads from session cookie (no DB query per request). */
-function isAdmin(user: string, req?: Request): boolean {
-  if (req) return getSessionIsAdmin(req);
-  return adminUsersFromEnv().has(user.toLowerCase());
-}
-
 /** Parse client name from User-Agent string. */
 export function parseClientName(ua?: string): string {
   if (!ua) return 'Unknown';
@@ -444,11 +438,6 @@ function getEnvCredentials(): Map<string, string> {
     if (u && t) map.set(u, t);
   }
   return map;
-}
-
-/** Get list of known usernames from env var (for filter tabs). */
-function getCredentials(): Map<string, string> {
-  return getEnvCredentials();
 }
 
 /**
@@ -1153,7 +1142,7 @@ mattersRouter.post('/auslaw/matters/login', loginRateLimiter, async (req: Reques
   const token = (password ?? '').trim();
   const redirectTo = typeof next === 'string' && (next.startsWith('/auslaw/matters') || next.startsWith('/auslaw/admin')) ? next : '/auslaw/matters';
 
-  let validResult = await validateCredentials(user, token);
+  const validResult = await validateCredentials(user, token);
 
   // Recovery token override — allows admin access when other credentials are unavailable.
   // Uses timingSafeEqual to prevent timing-based token oracle attacks.

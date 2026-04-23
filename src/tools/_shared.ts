@@ -81,7 +81,7 @@ export function registerTool(
   },
   handler: Handler,
 ): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const wrapped: Handler = async (input: unknown, ctx: unknown) => {
     const result = (await handler(input, ctx)) as ToolResult;
     return decorateError(result);

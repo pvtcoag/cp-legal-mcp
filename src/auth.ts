@@ -9,7 +9,6 @@ import { verifyToken } from './token-utils.js';
 // Populated from the DB on startup; refreshed after user create/rotate/delete.
 // Falls back to env var if DB is unavailable.
 
-let tokenCache: Map<string, string> = new Map(); // token → username
 let cacheBuilt = false;
 
 /** Load all active users from DB into the in-memory token cache. */

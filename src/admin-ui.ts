@@ -27,7 +27,6 @@
  *   POST /admin/watchlist/remove        — Remove citation from watchlist
  */
 
-import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,8 +69,6 @@ import {
   type WatchlistEntry,
   type UserRow,
   type LoginEventRow,
-  type OAuthAuthRow,
-  type AppConfigRow,
   type AdminMatterRow,
   type DailyQueryCount,
   type UserQueryToday,

@@ -524,9 +524,7 @@ export async function getUserActivity(params: {
   return result.rows;
 }
 
-export interface RecentActivityRow extends MatterHistoryRow {
-  // same shape, no additional fields
-}
+export type RecentActivityRow = MatterHistoryRow;
 
 export async function getRecentActivity(limit: number = 50, userId?: string): Promise<RecentActivityRow[]> {
   if (!pool) return [];

@@ -30,11 +30,6 @@ const inputSchemaBase = z.object({
   matter_ref: matterRefSchema,
 });
 
-const inputSchema = inputSchemaBase.refine(
-  (d) => d.citation_or_url || (d.citations_or_urls && d.citations_or_urls.length > 0),
-  { message: 'Either citation_or_url or citations_or_urls must be provided' },
-);
-
 export function registerEnrichJudgment(server: McpServer): void {
   registerTool(
     server,
