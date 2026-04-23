@@ -17,6 +17,7 @@
 import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { logger } from './logger.js';
 import {
   registerClient,
@@ -101,9 +102,100 @@ function isRedirectUriAllowed(
   return false;
 }
 
+// ── Login form rendering ──────────────────────────────────────────────────────
+
+interface LoginFormParams {
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+  state?: string;
+  clientName?: string;
+  error?: string;
+}
+
+function renderLoginForm(params: LoginFormParams): string {
+  const { clientId, redirectUri, codeChallenge, codeChallengeMethod, state, clientName, error } = params;
+  const stateField = state ? `<input type="hidden" name="state" value="${escHtml(state)}">` : '';
+  const errorBlock = error ? `<div class="error">${escHtml(error)}</div>` : '';
+
+  // Show the requesting client and redirect host so users can spot a phishing
+  // attempt (rogue DCR client with an unfamiliar redirect URI).
+  let redirectHost = '';
+  try { redirectHost = new URL(redirectUri).host; } catch { redirectHost = redirectUri; }
+  const clientLabel = clientName ? escHtml(clientName) : 'An OAuth client';
+  const consent = `<p class="consent"><strong>${clientLabel}</strong> is requesting access on behalf of your account. After sign-in it will redirect to <code>${escHtml(redirectHost)}</code>.</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — CP Legal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+    .card { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 2.5rem 2rem; width: 100%; max-width: 380px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: .25rem; color: #1a1a1a; }
+    p.subtitle { font-size: .875rem; color: #666; margin-bottom: 1.25rem; }
+    p.consent { font-size: .8125rem; color: #444; background: #faf9f6; border: 1px solid #eae7dd; border-radius: 6px; padding: .625rem .75rem; margin-bottom: 1.25rem; }
+    p.consent code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #fff; padding: 0 .25rem; border-radius: 3px; }
+    label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
+    input[type="text"], input[type="password"] { width: 100%; padding: .625rem .75rem; border: 1px solid #d0cdc6; border-radius: 6px; font-size: .9375rem; outline: none; transition: border-color .15s; margin-bottom: 1.25rem; }
+    input:focus { border-color: #1a1a1a; }
+    button { width: 100%; padding: .75rem; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background .15s; }
+    button:hover { background: #333; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #dc2626; font-size: .875rem; padding: .625rem .75rem; margin-bottom: 1.25rem; }
+    .logo { font-weight: 700; letter-spacing: -.5px; margin-bottom: 1.5rem; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">CP Legal</div>
+    <h1>Sign in to continue</h1>
+    <p class="subtitle">Sign in to authorise access to your research tools.</p>
+    ${consent}
+    ${errorBlock}
+    <form method="POST" action="/auslaw/oauth/authorize">
+      <input type="hidden" name="client_id" value="${escHtml(clientId)}">
+      <input type="hidden" name="redirect_uri" value="${escHtml(redirectUri)}">
+      <input type="hidden" name="code_challenge" value="${escHtml(codeChallenge)}">
+      <input type="hidden" name="code_challenge_method" value="${escHtml(codeChallengeMethod)}">
+      ${stateField}
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      <label for="password">Token</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>`;
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const oauthRouter = Router();
+
+// Rate limit all OAuth endpoints — 30 req/min per IP is generous for humans
+// completing a login flow but kills credential-stuffing and DCR-flood attempts.
+const oauthRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests', error_description: 'Rate limit exceeded on OAuth endpoint.' },
+});
+
+// Stricter limiter for the login POST — 10 failed attempts per IP per 15 min.
+const oauthLoginRateLimit = rateLimit({
+  windowMs: 15 * 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // 302 after a valid login doesn't count
+  message: { error: 'too_many_requests', error_description: 'Too many failed login attempts. Wait 15 minutes before retrying.' },
+});
 
 // CORS for all OAuth endpoints — browser-based clients (ChatGPT, etc.) make
 // cross-origin requests to /.well-known/*, /oauth/register, and /oauth/token.
@@ -114,6 +206,10 @@ oauthRouter.use((req: Request, res: Response, next) => {
   if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
   next();
 });
+
+// Apply baseline rate limit to every OAuth path (discovery endpoints excluded
+// below — those are cheap GETs that monitoring tools hit).
+oauthRouter.use(/^\/(auslaw\/)?oauth\//, oauthRateLimit);
 
 // RFC 9728 — Protected Resource Metadata
 // Tells clients where to find the authorization server.
@@ -238,99 +334,19 @@ oauthRouter.get('/auslaw/oauth/authorize', (req: Request, res: Response) => {
     return;
   }
 
-  // Encode all OAuth params into hidden fields so the POST can validate them
-  const stateField = state ? `<input type="hidden" name="state" value="${escHtml(state)}">` : '';
-
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in — CP Legal</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f5f0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 1rem;
-    }
-    .card {
-      background: #fff;
-      border: 1px solid #e0ddd6;
-      border-radius: 8px;
-      padding: 2.5rem 2rem;
-      width: 100%;
-      max-width: 380px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.06);
-    }
-    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: .25rem; color: #1a1a1a; }
-    p.subtitle { font-size: .875rem; color: #666; margin-bottom: 2rem; }
-    label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
-    input[type="text"], input[type="password"] {
-      width: 100%;
-      padding: .625rem .75rem;
-      border: 1px solid #d0cdc6;
-      border-radius: 6px;
-      font-size: .9375rem;
-      outline: none;
-      transition: border-color .15s;
-      margin-bottom: 1.25rem;
-    }
-    input:focus { border-color: #1a1a1a; }
-    button {
-      width: 100%;
-      padding: .75rem;
-      background: #1a1a1a;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background .15s;
-    }
-    button:hover { background: #333; }
-    .error {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 6px;
-      color: #dc2626;
-      font-size: .875rem;
-      padding: .625rem .75rem;
-      margin-bottom: 1.25rem;
-    }
-    .logo { font-weight: 700; letter-spacing: -.5px; margin-bottom: 1.5rem; font-size: 1.1rem; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">CP Legal</div>
-    <h1>Sign in to continue</h1>
-    <p class="subtitle">Sign in to authorise access to your research tools.</p>
-    <form method="POST" action="/auslaw/oauth/authorize">
-      <input type="hidden" name="client_id" value="${escHtml(client_id)}">
-      <input type="hidden" name="redirect_uri" value="${escHtml(redirect_uri)}">
-      <input type="hidden" name="code_challenge" value="${escHtml(code_challenge)}">
-      <input type="hidden" name="code_challenge_method" value="${escHtml(code_challenge_method)}">
-      ${stateField}
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
-      <label for="password">Token</label>
-      <input type="password" id="password" name="password" autocomplete="current-password" required>
-      <button type="submit">Sign in</button>
-    </form>
-  </div>
-</body>
-</html>`);
+  res.send(renderLoginForm({
+    clientId: client_id,
+    redirectUri: redirect_uri,
+    codeChallenge: code_challenge,
+    codeChallengeMethod: code_challenge_method,
+    state,
+    clientName: client.clientName,
+  }));
 });
 
 // POST /oauth/authorize — Validate credentials, issue code, redirect
-oauthRouter.post('/auslaw/oauth/authorize', async (req: Request, res: Response) => {
+oauthRouter.post('/auslaw/oauth/authorize', oauthLoginRateLimit, async (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -366,51 +382,16 @@ oauthRouter.post('/auslaw/oauth/authorize', async (req: Request, res: Response) 
 
   if (!credValid) {
     logger.warn({ username }, 'OAuth: failed login attempt');
-    // Redisplay form with error
-    const stateField = state ? `<input type="hidden" name="state" value="${escHtml(state)}">` : '';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in — CP Legal</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-    .card { background: #fff; border: 1px solid #e0ddd6; border-radius: 8px; padding: 2.5rem 2rem; width: 100%; max-width: 380px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
-    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: .25rem; color: #1a1a1a; }
-    p.subtitle { font-size: .875rem; color: #666; margin-bottom: 2rem; }
-    label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #333; }
-    input[type="text"], input[type="password"] { width: 100%; padding: .625rem .75rem; border: 1px solid #d0cdc6; border-radius: 6px; font-size: .9375rem; outline: none; transition: border-color .15s; margin-bottom: 1.25rem; }
-    input:focus { border-color: #1a1a1a; }
-    button { width: 100%; padding: .75rem; background: #1a1a1a; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background .15s; }
-    button:hover { background: #333; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; color: #dc2626; font-size: .875rem; padding: .625rem .75rem; margin-bottom: 1.25rem; }
-    .logo { font-weight: 700; letter-spacing: -.5px; margin-bottom: 1.5rem; font-size: 1.1rem; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">CP Legal</div>
-    <h1>Sign in to continue</h1>
-    <p class="subtitle">Sign in to authorise access to your research tools.</p>
-    <div class="error">Incorrect username or token. Please try again.</div>
-    <form method="POST" action="/auslaw/oauth/authorize">
-      <input type="hidden" name="client_id" value="${escHtml(client_id)}">
-      <input type="hidden" name="redirect_uri" value="${escHtml(redirect_uri)}">
-      <input type="hidden" name="code_challenge" value="${escHtml(code_challenge)}">
-      <input type="hidden" name="code_challenge_method" value="${escHtml(code_challenge_method)}">
-      ${stateField}
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" autocomplete="username" required autofocus>
-      <label for="password">Token</label>
-      <input type="password" id="password" name="password" autocomplete="current-password" required>
-      <button type="submit">Sign in</button>
-    </form>
-  </div>
-</body>
-</html>`);
+    res.status(401).send(renderLoginForm({
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
+      codeChallengeMethod: code_challenge_method,
+      state,
+      clientName: client.clientName,
+      error: 'Incorrect username or token. Please try again.',
+    }));
     return;
   }
 
