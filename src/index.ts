@@ -180,13 +180,9 @@ app.post('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendC
 app.get('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 app.delete('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 
-// Startup
-const server = app.listen(config.PORT, async () => {
-  logger.info(
-    { port: config.PORT, env: config.NODE_ENV },
-    'cp-legal-mcp listening',
-  );
-
+// Startup — initialise DB and auth caches BEFORE binding the listener so there
+// is no window where /auslaw accepts requests while auth is still warming.
+async function startup(): Promise<ReturnType<typeof app.listen>> {
   // Pre-register static OAuth client for Claude Web / ChatGPT connectors
   if (config.OAUTH_CLIENT_ID) {
     preRegisterClient(
@@ -210,25 +206,29 @@ const server = app.listen(config.PORT, async () => {
     logger.warn('OAUTH_CLIENT_ID not set — Claude Web / ChatGPT static client will not be pre-registered');
   }
 
-  // Initialise DB (creates schema if needed; no-op if DATABASE_URL not set)
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
 
-  // Migrate users from MCP_AUTH_TOKENS env var if users table is empty
   await migrateUsersFromEnv(
     process.env.MCP_AUTH_TOKENS ?? '',
     (config.ADMIN_USERS ?? 'admin').split(',').map((u) => u.trim().toLowerCase()),
   ).catch((err) => logger.error({ err }, 'User migration failed'));
 
-  // Build in-memory auth token cache from DB
   await buildAuthCache().catch((err) => logger.error({ err }, 'Auth cache build failed'));
 
-  // Build session version cache (for force-logout invalidation)
   const usersForCache = await listUsers().catch(() => []);
   buildSessionVersionCache(usersForCache);
 
+  return app.listen(config.PORT, () => {
+    logger.info({ port: config.PORT, env: config.NODE_ENV }, 'cp-legal-mcp listening');
+  });
+}
+
+const serverPromise = startup().catch((err) => {
+  logger.fatal({ err }, 'Startup failed');
+  process.exit(1);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
   // Force-exit after 10 s — Railway allows 30 s before SIGKILL, so this ensures
   // we exit cleanly before the hard kill and don't block on idle keep-alive connections.
@@ -237,6 +237,8 @@ process.on('SIGTERM', () => {
     process.exit(1);
   }, 10_000);
   forceExit.unref();
+  const server = await serverPromise;
+  if (!server) { clearTimeout(forceExit); await closeDb(); process.exit(0); return; }
   server.close(async () => {
     clearTimeout(forceExit);
     await closeDb();

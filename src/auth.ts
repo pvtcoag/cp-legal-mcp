@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from './logger.js';
+import { config } from './config.js';
 import { listUsers, updateUserLastActive } from './db.js';
 import { verifyToken } from './token-utils.js';
 
@@ -80,9 +81,10 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return sendUnauthorized(res);
   }
 
-  // If DB cache has been built and has entries, use it exclusively.
-  // This prevents revoked env var tokens from working after migration.
-  if (cacheBuilt && userCredCache.size > 0) {
+  // Once the DB cache has been built successfully, it is the sole authority.
+  // This holds even if the DB returned zero active users — a disabled account
+  // must not be silently rescued by a still-present env-var token.
+  if (cacheBuilt) {
     for (const [username, saltHash] of userCredCache) {
       const colon = saltHash.indexOf(':');
       if (colon < 0) continue;
@@ -98,7 +100,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return sendUnauthorized(res);
   }
 
-  // Fallback: env var token map (DB cache not yet built or no active DB users)
+  // Pre-init path — DB cache not yet built. Only accept env-var tokens if some
+  // are configured; otherwise fail closed so an unprotected window can't appear
+  // between app.listen and buildAuthCache completing.
   if (envTokenMap.size > 0) {
     const identity = envTokenMap.get(token);
     if (identity) {
@@ -109,13 +113,13 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return sendUnauthorized(res);
   }
 
-  // No auth configured — allow through with warning
-  logger.warn('Auth: no tokens configured (DB cache empty, MCP_AUTH_TOKENS not set) — endpoint unprotected');
-  next();
+  // Fail closed — no tokens configured anywhere.
+  logger.warn('Auth: no tokens configured and DB cache not built — rejecting request');
+  return sendUnauthorized(res);
 }
 
 function sendUnauthorized(res: Response): void {
-  const issuer = process.env.OAUTH_ISSUER ?? 'https://mcp.example.com/auslaw';
+  const issuer = config.OAUTH_ISSUER;
   // OAuth resource metadata URL tells Claude web and other OAuth-aware clients
   // where to discover the authorization server and start the flow automatically.
   res.setHeader(

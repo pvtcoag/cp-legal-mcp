@@ -573,7 +573,8 @@ oauthRouter.post('/auslaw/oauth/token', async (req: Request, res: Response) => {
 // Only accessible when DEBUG_SECRET env var is set and ?secret=<value> matches.
 oauthRouter.get('/oauth/debug', (req: Request, res: Response) => {
   const debugSecret = process.env.DEBUG_SECRET;
-  if (!debugSecret || req.query['secret'] !== debugSecret) {
+  const provided = typeof req.query['secret'] === 'string' ? req.query['secret'] : '';
+  if (!debugSecret || !safeEqual(provided, debugSecret)) {
     res.status(403).json({ error: 'forbidden' });
     return;
   }
