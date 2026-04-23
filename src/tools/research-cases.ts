@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { searchCases, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
@@ -81,20 +82,19 @@ const inputSchema = z.object({
       'Example: \'"duty of care" AND negligence NOT "contributory negligence"\'. ' +
       'Only affects result ranking — AustLII search still receives the raw query.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe(
-      'Matter reference to tag this search in the research log (e.g. "ABC-2024-001" or "Smith Dispute"). If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
-    ),
+  matter_ref: matterRefSchema,
 });
 
 export function registerResearchCases(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'research_cases',
-    '[Case Research] Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
-    inputSchema.shape,
+    {
+      title: 'Research cases',
+      description: '[Case Research] Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'research_cases' });
 

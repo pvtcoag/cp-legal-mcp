@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { enrichDocument, extractAnswer } from '../isaacus-client.js';
 import { extractRelevantPassages, truncateText } from '../text-utils.js';
 import { logger } from '../logger.js';
@@ -23,11 +24,7 @@ const inputSchema = z.object({
       'compact: date + event type + description. ' +
       'detailed: adds confidence scores and source text extracts.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this extraction in the research log.'),
+  matter_ref: matterRefSchema,
 });
 
 interface ChronologyEntry {
@@ -60,10 +57,15 @@ function sortChronology(entries: ChronologyEntry[]): ChronologyEntry[] {
 }
 
 export function registerBuildChronology(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'build_chronology',
-    '[Matter] Extract and sort dates and events from a legal document or text to build a chronological timeline. Uses Isaacus Kanon 2 Enricher for structured date extraction. Useful for building matter chronologies, summarising procedural histories, and organising evidence timelines.',
-    inputSchema.shape,
+    {
+      title: 'Build chronology',
+      description: '[Matter] Extract and sort dates and events from a legal document or text to build a chronological timeline. Uses Isaacus Kanon 2 Enricher for structured date extraction. Useful for building matter chronologies, summarising procedural histories, and organising evidence timelines.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'build_chronology' });
       let totalTokens = 0;

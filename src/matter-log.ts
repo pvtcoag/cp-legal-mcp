@@ -12,7 +12,7 @@ export function fmtToolError(msg: string): string {
 }
 
 // matter_ref validation: alphanumeric, hyphens, underscores, slashes, spaces. Max 100 chars.
-const MATTER_REF_RE = /^[a-zA-Z0-9\-_\/ ]{1,100}$/;
+export const MATTER_REF_RE = /^[a-zA-Z0-9\-_\/ ]{1,100}$/;
 
 export function validateMatterRef(ref: string): boolean {
   return MATTER_REF_RE.test(ref);

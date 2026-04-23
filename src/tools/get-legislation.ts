@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { fetchDocumentText, fetchLegislationSection, AuslawError } from '../auslaw-client.js';
 import { extractAnswer } from '../isaacus-client.js';
 import { extractRelevantPassages } from '../text-utils.js';
@@ -42,23 +43,22 @@ const inputSchema = z.object({
     .max(10)
     .default(3)
     .describe('Maximum number of answer candidates to return (only applies when question is provided)'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe(
-      'Matter reference to tag this retrieval in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
-    ),
+  matter_ref: matterRefSchema,
 });
 
 export function registerGetLegislation(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'get_legislation',
-    '[Legislation] Retrieve an Australian Act or regulation from AustLII. Two modes: ' +
+    {
+      title: 'Get legislation',
+      description: '[Legislation] Retrieve an Australian Act or regulation from AustLII. Two modes: ' +
     '(1) Full text — omit question to return the complete consolidated text. ' +
     '(2) Targeted QA — provide a question to extract a direct answer from the legislation using Isaacus extractive QA; optionally narrow to a specific section for cheaper, faster results. ' +
     'Use research_legislation to find the URL first.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'get_legislation', url: input.url });
 

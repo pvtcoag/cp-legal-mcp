@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { searchByCitation, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
@@ -19,18 +20,19 @@ const inputSchema = z.object({
     .max(20)
     .default(5)
     .describe('Maximum number of results to return'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  matter_ref: matterRefSchema,
 });
 
 export function registerSearchByCitation(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'search_by_citation',
-    '[Case Research] Look up an Australian case by its neutral citation or case name. Returns matching cases with URLs and metadata. Use this when you have a specific citation or case name to resolve.',
-    inputSchema.shape,
+    {
+      title: 'Search by citation',
+      description: '[Case Research] Look up an Australian case by its neutral citation or case name. Returns matching cases with URLs and metadata. Use this when you have a specific citation or case name to resolve.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'search_by_citation' });
 

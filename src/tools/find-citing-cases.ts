@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { searchCitingCases, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
@@ -17,18 +18,19 @@ const inputSchema = z.object({
     .max(20)
     .default(10)
     .describe('Maximum number of citing cases to return'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  matter_ref: matterRefSchema,
 });
 
 export function registerFindCitingCases(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'find_citing_cases',
-    '[Case Research] Find Australian cases that have cited a given judgment. Uses LawCite (AustLII\'s citator service) to trace how a case has been applied, distinguished, or overruled.',
-    inputSchema.shape,
+    {
+      title: 'Find citing cases',
+      description: '[Case Research] Find Australian cases that have cited a given judgment. Uses LawCite (AustLII\'s citator service) to trace how a case has been applied, distinguished, or overruled.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'find_citing_cases', citation: input.citation });
 

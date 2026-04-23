@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from './_shared.js';
 import { getMatterHistory, isDbEnabled } from '../db.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
@@ -43,13 +44,18 @@ const inputSchema = z.object({
 });
 
 export function registerGetMatterHistory(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'get_matter_history',
-    '[Matter] Retrieve research history for a matter reference. ' +
+    {
+      title: 'Get matter history',
+      description: '[Matter] Retrieve research history for a matter reference. ' +
     'Two formats: list (default) — chronological log of every research query with tool, query text, and top results; ' +
     'summary — aggregated overview of total queries, tools used, unique cases and legislation researched, API token usage, and date range. ' +
     'Requires matter tracking to be enabled (DATABASE_URL configured).',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
     async (input) => {
       const log = logger.child({ tool: 'get_matter_history' });
 

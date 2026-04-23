@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from './_shared.js';
 import { getMatterHistory, getCachedJudgmentsByUrls, isDbEnabled } from '../db.js';
 import { extractAnswer } from '../isaacus-client.js';
 import { logger } from '../logger.js';
@@ -148,15 +149,20 @@ function detectPracticeArea(
 }
 
 export function registerDraftResearchMemo(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'draft_research_memo',
-    '[Matter] Compile all research for a matter into a structured brief ready for memo drafting. ' +
+    {
+      title: 'Draft research memo',
+      description: '[Matter] Compile all research for a matter into a structured brief ready for memo drafting. ' +
     'Aggregates cases researched, legislation consulted, entities checked, regulatory decisions found, ' +
     'and research queries — pulling from the matter research log and judgment cache. ' +
     'Optionally runs extractive QA (with_case_analysis: true) on cached case texts to pre-extract ' +
     'holdings and legal principles for each case. ' +
     'Returns structured data and a memo scaffold; use this as context when writing the final research memorandum.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
     async (input) => {
       const log = logger.child({ tool: 'draft_research_memo' });
 

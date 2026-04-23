@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import {
   fetchDocumentText,
   resolveJudgmentUrl,
@@ -26,11 +27,7 @@ const inputSchemaBase = z.object({
       'Array of up to 5 neutral citations or AustLII URLs for batch enrichment. ' +
       'Use instead of citation_or_url when enriching multiple judgments at once.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this enrichment in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  matter_ref: matterRefSchema,
 });
 
 const inputSchema = inputSchemaBase.refine(
@@ -39,14 +36,19 @@ const inputSchema = inputSchemaBase.refine(
 );
 
 export function registerEnrichJudgment(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'enrich_judgment',
-    '[Judgment Analysis] Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher. Accepts a single citation/URL or an array of up to 5 for batch enrichment.',
-    inputSchemaBase.shape,
-    async (input) => {
+    {
+      title: 'Enrich judgment',
+      description: '[Judgment Analysis] Extract structured entities from an Australian court judgment: parties and their roles, key dates, cases cited with reception sentiment (positive/mixed/negative/neutral), and defined legal terms. Reception sentiment is particularly valuable — it reveals how each cited case was treated by the court. Uses Isaacus Kanon 2 Enricher. Accepts a single citation/URL or an array of up to 5 for batch enrichment.',
+      inputSchema: inputSchemaBase.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (input: z.infer<typeof inputSchemaBase>) => {
       const log = logger.child({ tool: 'enrich_judgment' });
 
-      const inputs = input.citations_or_urls ?? (input.citation_or_url ? [input.citation_or_url] : []);
+      const inputs: string[] = input.citations_or_urls ?? (input.citation_or_url ? [input.citation_or_url] : []);
       const isBatch = !!input.citations_or_urls;
 
       interface EnrichSuccess {

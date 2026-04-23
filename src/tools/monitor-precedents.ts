@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { searchCitingCases } from '../auslaw-client.js';
 import {
   listWatchlist, addWatchlistEntry, removeWatchlistEntry, updateWatchlistCheck, isDbEnabled,
@@ -19,17 +20,21 @@ const inputSchema = z.object({
     .describe('Neutral citation to add or remove, e.g. "[2024] HCA 12". Required for add/remove.'),
   label: z.string().max(200).optional()
     .describe('Human-readable label for the case, e.g. "Kennon v Spry — family trust". Optional for add.'),
-  matter_ref: z.string().min(1).max(100).optional()
-    .describe('Matter reference to tag this check in the research log.'),
+  matter_ref: matterRefSchema,
 });
 
 export function registerMonitorPrecedents(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'monitor_precedents',
-    '[Matter] Manage a watchlist of key cases and check for new citing cases. ' +
+    {
+      title: 'Monitor precedents',
+      description: '[Matter] Manage a watchlist of key cases and check for new citing cases. ' +
     'Use "check" to scan all watched citations for new citations since last check. ' +
     'Use "add"/"remove" to manage the watchlist. Use "list" to see all watched cases.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
     async (input) => {
       if (!isDbEnabled()) {
         return {

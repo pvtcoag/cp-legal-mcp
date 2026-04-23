@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { classifyText } from '../isaacus-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
@@ -256,24 +257,23 @@ const inputSchema = z.object({
     .describe(
       'Legal text, query, or issue description to classify. Can be a research question, a case excerpt, a legal problem description, a claim summary, or a matter description involving entities or corporate issues.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe(
-      'Matter reference to tag this classification in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
-    ),
+  matter_ref: matterRefSchema,
 });
 
 export function registerClassifyLegalIssue(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'classify_legal_issue',
-    '[Classification & Workflow] Classify a legal issue or matter description into Australian law practice areas, proceeding types, and corporate intelligence categories. ' +
+    {
+      title: 'Classify legal issue',
+      description: '[Classification & Workflow] Classify a legal issue or matter description into Australian law practice areas, proceeding types, and corporate intelligence categories. ' +
     'Returns ranked classifications with confidence scores, suggested jurisdiction codes for research_cases, and a prioritised list of suggested tools with purpose and parameters for each research category. ' +
     'Covers both legal research workflows (cases, legislation, judgments) and entity intelligence workflows (ASIC register, ABR, ASX, regulatory decisions). ' +
     'Use as the first step on any new matter to identify the most relevant courts, practice areas, and research tools. ' +
     'Powered by zero-shot AI classification (Kanon Universal Classifier).',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
     async (input) => {
       const log = logger.child({ tool: 'classify_legal_issue' });
 

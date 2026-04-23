@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import {
   isDbEnabled,
   listMatters,
@@ -32,11 +33,7 @@ const inputSchema = z.object({
       'matter_detail — full query history for one matter | ' +
       'check_conflicts — search all matters for queries matching given entity or case names',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Required for matter_detail command. For check_conflicts, the current matter to exclude from results.'),
+  matter_ref: matterRefSchema,
   search_terms: z
     .array(z.string().min(1).max(200))
     .min(1)
@@ -61,11 +58,16 @@ const inputSchema = z.object({
 });
 
 export function registerInspectDatabase(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'inspect_database',
-    '[Admin] Inspect matter research history across all users and matters. ' +
+    {
+      title: 'Inspect database',
+      description: '[Admin] Inspect matter research history across all users and matters. ' +
     'Restricted to admin users only. Not for end-user research — use get_matter_history for that.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
     async (input) => {
       const log = logger.child({ tool: 'inspect_database', user: getUser() });
 

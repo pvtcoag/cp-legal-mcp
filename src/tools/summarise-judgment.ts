@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import {
   fetchDocumentText,
   resolveJudgmentUrl,
@@ -24,13 +25,7 @@ const inputSchema = z.object({
       'Set false for a faster summary containing only the five narrative dimensions (holding, orders, key facts, ' +
       'legal principles, outcome). Reduces cost by ~32% — use when you need the summary only, not the citation network.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe(
-      'Matter reference to tag this summary in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
-    ),
+  matter_ref: matterRefSchema,
 });
 
 // Five dimensions of a judgment summary, each answered with targeted extractive QA
@@ -51,10 +46,15 @@ function qaField(
 }
 
 export function registerSummariseJudgment(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'summarise_judgment',
-    '[Judgment Analysis] Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome. By default also includes enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Set include_metadata: false for a faster, cheaper summary covering only the five narrative dimensions — useful when you just need the substance and not the citation network. Ideal as a first step before deeper research.',
-    inputSchema.shape,
+    {
+      title: 'Summarise judgment',
+      description: '[Judgment Analysis] Produce a structured legal summary of an Australian court judgment: holding, orders, key facts, legal principles, and outcome. By default also includes enriched metadata (parties, key dates, cases cited with reception sentiment, defined terms). Set include_metadata: false for a faster, cheaper summary covering only the five narrative dimensions — useful when you just need the substance and not the citation network. Ideal as a first step before deeper research.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'summarise_judgment', input: input.citation_or_url });
 

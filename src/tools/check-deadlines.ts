@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 
 // ── Limitation period data ─────────────────────────────────────────────────────
 // Sources: NSW Limitation Act 1969, QLD Limitation of Actions Act 1974,
@@ -460,19 +461,18 @@ const inputSchema = z.object({
     .string()
     .optional()
     .describe('ISO date string (YYYY-MM-DD) of the trigger event (for filing deadlines)'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Optional matter reference for tracking purposes (max 100 characters).'),
+  matter_ref: matterRefSchema,
 });
 
 // ── Tool ──────────────────────────────────────────────────────────────────────
 
 export function registerCheckDeadlines(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'check_deadlines',
-    '[Matter] Check limitation periods or court filing deadlines in a single tool. ' +
+    {
+      title: 'Check deadlines',
+      description: '[Matter] Check limitation periods or court filing deadlines in a single tool. ' +
     'Set type="limitation" to look up the limitation period for a cause of action by jurisdiction — ' +
     'returns the period length, governing Act, relevant section, and (if date_of_accrual is provided) ' +
     'the calculated expiry date and days remaining. ' +
@@ -484,7 +484,9 @@ export function registerCheckDeadlines(server: McpServer): void {
     'Filing covers NSW, QLD, Federal Court, and FCFCOA for defence, response, reply, appeal notices, ' +
     'summary judgment, discovery, interrogatories, and subpoena objections. ' +
     'Use as a first step in any time-sensitive matter or crisis situation.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
     (input) => {
 
       // ── Limitation path ────────────────────────────────────────────────────

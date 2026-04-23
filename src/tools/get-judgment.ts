@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import {
   fetchDocumentText,
   resolveJudgmentUrl,
@@ -26,11 +27,7 @@ const inputSchema = z.object({
       'Use 30000–80000 when you only need to read or quote a portion. ' +
       'The response includes total_chars so you can request more if needed.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this retrieval in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  matter_ref: matterRefSchema,
   start_at_section: z
     .string()
     .min(1)
@@ -45,10 +42,15 @@ const inputSchema = z.object({
 });
 
 export function registerGetJudgment(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'get_judgment',
-    '[Judgment Analysis] Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata. Check total_chars in the response before requesting full text of lengthy judgments — use max_chars to limit context usage when you only need part of the text.',
-    inputSchema.shape,
+    {
+      title: 'Get judgment',
+      description: '[Judgment Analysis] Retrieve the full text of an Australian court judgment by neutral citation or AustLII URL. Validates citations and returns structured text with metadata. Check total_chars in the response before requesting full text of lengthy judgments — use max_chars to limit context usage when you only need part of the text.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'get_judgment', input: input.citation_or_url });
 

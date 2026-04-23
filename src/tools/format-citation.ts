@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from './_shared.js';
 import {
   formatCitation,
   generatePinpoint,
@@ -55,13 +56,18 @@ const inputSchema = z.object({
 });
 
 export function registerFormatCitation(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'format_citation',
-    '[Citation] Format an Australian case citation per AGLC4, or generate a pinpoint reference to a specific paragraph. ' +
+    {
+      title: 'Format citation',
+      description: '[Citation] Format an Australian case citation per AGLC4, or generate a pinpoint reference to a specific paragraph. ' +
     'Two modes: (1) Citation formatting — provide title + neutral/reported citation components → returns correctly formatted AGLC4 string. ' +
     '(2) Pinpoint generation — provide citation_or_url + paragraph_number or phrase → resolves the judgment and returns a full pinpoint citation. ' +
     'Use mode 1 when you have the citation components and need to format them; use mode 2 when you need to cite a specific paragraph.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'format_citation' });
 

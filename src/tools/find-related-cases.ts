@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import {
   fetchDocumentText,
   resolveJudgmentUrl,
@@ -39,20 +40,19 @@ const inputSchema = z.object({
     .max(15)
     .default(5)
     .describe('Maximum number of related cases to return'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe(
-      'Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.',
-    ),
+  matter_ref: matterRefSchema,
 });
 
 export function registerFindRelatedCases(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'find_related_cases',
-    '[Case Research] Find Australian judgments semantically related to a given case using Kanon 2 Embedder vector similarity. Searches the judgment corpus (built up as cases are researched) plus an AustLII keyword search based on the case title. Results improve as the corpus grows. Use this to discover cases that address similar legal issues without relying solely on the citation network.',
-    inputSchema.shape,
+    {
+      title: 'Find related cases',
+      description: '[Case Research] Find Australian judgments semantically related to a given case using Kanon 2 Embedder vector similarity. Searches the judgment corpus (built up as cases are researched) plus an AustLII keyword search based on the case title. Results improve as the corpus grows. Use this to discover cases that address similar legal issues without relying solely on the citation network.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'find_related_cases', input: input.citation_or_url });
       let totalTokens = 0;
@@ -126,7 +126,7 @@ export function registerFindRelatedCases(server: McpServer): void {
 
       if (input.additional_seeds && input.additional_seeds.length > 0) {
         const additionalResults = await Promise.allSettled(
-          input.additional_seeds.map(async (seed) => {
+          input.additional_seeds.map(async (seed: string) => {
             const res = await resolveJudgmentUrl(seed);
             const d = await fetchDocumentText(res.url);
             const t = d.text.slice(0, TEXT_WINDOW);

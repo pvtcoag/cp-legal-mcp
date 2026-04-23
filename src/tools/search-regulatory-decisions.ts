@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { externalFetch, ExternalApiError } from '../external-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
@@ -68,11 +69,7 @@ const inputSchema = z.object({
     .max(20)
     .default(10)
     .describe('Maximum number of results to return'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this search in the research log.'),
+  matter_ref: matterRefSchema,
 });
 
 interface RegulatoryDecision {
@@ -241,12 +238,17 @@ function parseAcccRegister(
 // ── Tool registration ──────────────────────────────────────────────────────────
 
 export function registerSearchRegulatoryDecisions(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'search_regulatory_decisions',
-    '[Regulatory Intelligence] Search ASIC and ACCC public registers for regulatory decisions — enforcement outcomes, banning orders, enforceable undertakings, and merger assessments. ' +
+    {
+      title: 'Search regulatory decisions',
+      description: '[Regulatory Intelligence] Search ASIC and ACCC public registers for regulatory decisions — enforcement outcomes, banning orders, enforceable undertakings, and merger assessments. ' +
     'Filter by regulator (asic/accc/all) and decision type. ' +
     'Use for regulatory risk assessment, counterparty due diligence, competition law research, and government advisory matters.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'search_regulatory_decisions' });
 

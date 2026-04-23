@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { externalFetch, ExternalApiError } from '../external-client.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
@@ -148,11 +149,7 @@ const inputSchema = z.object({
     .max(20)
     .default(10)
     .describe('Maximum number of search results to return for name searches'),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this lookup in the research log.'),
+  matter_ref: matterRefSchema,
 });
 
 // ── Helper: detect identifier type ────────────────────────────────────────────
@@ -206,16 +203,21 @@ function parseAbrEntity(entity: AbrBusinessEntity) {
 
 // ── Tool registration ──────────────────────────────────────────────────────────
 export function registerLookupEntity(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'lookup_entity',
-    '[Entity Intelligence] Look up one or multiple Australian business entities by ABN, ACN, or name via the ABR (Australian Business Register). ' +
+    {
+      title: 'Lookup entity',
+      description: '[Entity Intelligence] Look up one or multiple Australian business entities by ABN, ACN, or name via the ABR (Australian Business Register). ' +
     'Returns verified registration data: name, entity type, ABN/ACN, GST status, state, and ABR/ASIC links. ' +
     'Single mode (identifier): ABN or ACN → direct ABR lookup; name → ABR name search. ' +
     'Batch mode (identifiers): Provide 2–10 ABNs, ACNs, or names to look up in parallel. ' +
     'Requires ABR_GUID environment variable (free registration at https://abr.business.gov.au/Tools/WebServices). ' +
     'For company directors/officeholders, use the ASIC manual URL returned in results. ' +
     'Use for counterparty due diligence, conflicts checking, entity verification, and corporate governance research.',
-    inputSchema.shape,
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'lookup_entity' });
 
@@ -249,7 +251,7 @@ export function registerLookupEntity(server: McpServer): void {
         log.debug({ identifiers: input.identifiers }, 'bulk entity lookup starting');
 
         const results = await Promise.all(
-          input.identifiers.map((id) => lookupOne(id, guid)),
+          input.identifiers.map((id: string) => lookupOne(id, guid)),
         );
 
         const found  = results.filter((r) => !('error' in r)).length;

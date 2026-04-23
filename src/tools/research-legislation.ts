@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool, matterRefSchema } from './_shared.js';
 import { searchLegislation, AuslawError } from '../auslaw-client.js';
 import { rerank } from '../isaacus-client.js';
 import { logger } from '../logger.js';
@@ -31,11 +32,7 @@ const inputSchema = z.object({
       'Example: \'"fair dealing" AND copyright NOT "moral rights"\'. ' +
       'Only affects result ranking — AustLII search still receives the raw query.',
     ),
-  matter_ref: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Matter reference to tag this search in the research log. If a matter_ref was provided earlier in this conversation or in your project instructions, always include it here.'),
+  matter_ref: matterRefSchema,
   from_year: z
     .number()
     .int()
@@ -53,10 +50,15 @@ const inputSchema = z.object({
 });
 
 export function registerResearchLegislation(server: McpServer): void {
-  server.tool(
+  registerTool(
+    server,
     'research_legislation',
-    '[Legislation] Search Australian federal and state legislation. Returns semantically reranked acts and regulations from AustLII.',
-    inputSchema.shape,
+    {
+      title: 'Research legislation',
+      description: '[Legislation] Search Australian federal and state legislation. Returns semantically reranked acts and regulations from AustLII.',
+      inputSchema: inputSchema.shape,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
     async (input) => {
       const log = logger.child({ tool: 'research_legislation' });
 
