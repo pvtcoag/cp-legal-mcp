@@ -247,6 +247,31 @@ const DEFAULT_TOOLS: ToolSuggestion[] = [
   { tool: 'research_legislation', purpose: 'Find applicable legislation' },
 ];
 
+// ── Output schema ────────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  error: z.string().optional(),
+  message: z.string().optional(),
+  detail: z.string().optional(),
+
+  input_text: z.string().optional(),
+  primary_practice_area: z.string().nullable().optional(),
+  primary_score: z.number().nullable().optional(),
+  all_practice_areas: z.array(z.object({ area: z.string(), score: z.number() })).optional(),
+  primary_proceeding_type: z.string().nullable().optional(),
+  primary_proceeding_score: z.number().nullable().optional(),
+  all_proceeding_types: z.array(z.object({ type: z.string(), score: z.number() })).optional(),
+  primary_corporate_category: z.union([z.string(), z.number()]).nullable().optional(),
+  primary_corporate_score: z.number().nullable().optional(),
+  all_corporate_categories: z.array(z.object({ category: z.string(), score: z.number() })).optional(),
+  suggested_jurisdictions: z.array(z.string()).optional(),
+  suggested_tools: z.array(z.object({
+    tool: z.string(),
+    purpose: z.string(),
+    suggested_params: z.record(z.any()).optional(),
+  })).optional(),
+  note: z.string().optional(),
+};
+
 // ── Tool ──────────────────────────────────────────────────────────────────────
 
 const inputSchema = z.object({
@@ -272,6 +297,7 @@ export function registerClassifyLegalIssue(server: McpServer): void {
     'Use as the first step on any new matter to identify the most relevant courts, practice areas, and research tools. ' +
     'Powered by zero-shot AI classification (Kanon Universal Classifier).',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (input) => {
@@ -290,13 +316,15 @@ export function registerClassifyLegalIssue(server: McpServer): void {
         ]);
       } catch (err) {
         log.warn({ err }, 'Isaacus classification failed');
+        const obj = {
+          error: 'classification_failed',
+          message:
+            'Could not classify the legal issue. Try using research_cases with your query directly.',
+          detail: err instanceof Error ? err.message : String(err),
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'classification_failed',
-            message:
-              'Could not classify the legal issue. Try using research_cases with your query directly.',
-            detail: err instanceof Error ? err.message : String(err),
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
@@ -374,31 +402,33 @@ export function registerClassifyLegalIssue(server: McpServer): void {
         api_tokens_used: totalTokens,
       });
 
+      const obj = {
+        input_text: input.text.length > 200 ? `${input.text.slice(0, 200)}…` : input.text,
+
+        // Legal practice area classification
+        primary_practice_area:  primaryArea?.area ?? null,
+        primary_score:          primaryArea?.score ?? null,
+        all_practice_areas:     practiceAreas,
+
+        // Proceeding type classification
+        primary_proceeding_type:  proceedingTypes[0]?.type ?? null,
+        primary_proceeding_score: proceedingTypes[0]?.score ?? null,
+        all_proceeding_types:     proceedingTypes,
+
+        // Corporate / entity intelligence classification
+        primary_corporate_category: primaryCorporate?.score ?? 0 >= 0.5 ? primaryCorporate?.category : null,
+        primary_corporate_score:    primaryCorporate?.score ?? null,
+        all_corporate_categories:   corporateCategories,
+
+        // Research routing
+        suggested_jurisdictions: suggestedJurisdictions,
+        suggested_tools:         suggestedTools,
+
+        note: 'Scores > 0.5 indicate a positive match. Use suggested_jurisdictions with research_cases and follow suggested_tools in order.',
+      };
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          input_text: input.text.length > 200 ? `${input.text.slice(0, 200)}…` : input.text,
-
-          // Legal practice area classification
-          primary_practice_area:  primaryArea?.area ?? null,
-          primary_score:          primaryArea?.score ?? null,
-          all_practice_areas:     practiceAreas,
-
-          // Proceeding type classification
-          primary_proceeding_type:  proceedingTypes[0]?.type ?? null,
-          primary_proceeding_score: proceedingTypes[0]?.score ?? null,
-          all_proceeding_types:     proceedingTypes,
-
-          // Corporate / entity intelligence classification
-          primary_corporate_category: primaryCorporate?.score ?? 0 >= 0.5 ? primaryCorporate?.category : null,
-          primary_corporate_score:    primaryCorporate?.score ?? null,
-          all_corporate_categories:   corporateCategories,
-
-          // Research routing
-          suggested_jurisdictions: suggestedJurisdictions,
-          suggested_tools:         suggestedTools,
-
-          note: 'Scores > 0.5 indicate a positive match. Use suggested_jurisdictions with research_cases and follow suggested_tools in order.',
-        }) }],
+        structuredContent: obj,
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

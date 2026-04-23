@@ -115,6 +115,44 @@ async function lookupOne(identifier: string, guid: string): Promise<SingleResult
   }
 }
 
+// ── Output schema ──────────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  // Error branches
+  error: z.string().optional(),
+  message: z.string().optional(),
+  detail: z.string().optional(),
+
+  // Single-mode ABN/ACN success
+  source: z.string().optional(),
+  identifier_type: z.string().optional(),
+  abn: z.string().nullable().optional(),
+  abn_status: z.string().optional(),
+  entity_name: z.string().nullable().optional(),
+  entity_type: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  acn: z.string().nullable().optional(),
+  gst_registered: z.boolean().optional(),
+  state: z.string().nullable().optional(),
+  postcode: z.string().nullable().optional(),
+  abr_url: z.string().optional(),
+  asic_search_url: z.string().optional(),
+  manual_url: z.string().optional(),
+
+  // Name-search / batch
+  query: z.string().optional(),
+  result_count: z.number().optional(),
+  results: z.array(z.record(z.any())).optional(),
+  pagination: z.object({
+    returned: z.number(),
+    limit: z.number(),
+  }).optional(),
+
+  // Batch-specific
+  requested: z.number().optional(),
+  found: z.number().optional(),
+  errors: z.number().optional(),
+};
+
 // ── Input schema ───────────────────────────────────────────────────────────────
 const inputSchema = z.object({
   identifier: z
@@ -216,30 +254,35 @@ export function registerLookupEntity(server: McpServer): void {
     'For company directors/officeholders, use the ASIC manual URL returned in results. ' +
     'Use for counterparty due diligence, conflicts checking, entity verification, and corporate governance research.',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async (input) => {
       const log = logger.child({ tool: 'lookup_entity' });
 
       if (!input.identifier && !input.identifiers) {
+        const obj = {
+          error: 'missing_input',
+          message: 'Either identifier (single lookup) or identifiers (batch lookup) must be provided.',
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'missing_input',
-            message: 'Either identifier (single lookup) or identifiers (batch lookup) must be provided.',
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
 
       if (!config.ABR_GUID) {
+        const obj = {
+          error: 'not_configured',
+          message:
+            'ABR_GUID is not configured. Register for a free GUID at https://abr.business.gov.au/Tools/WebServices ' +
+            'and set it as the ABR_GUID environment variable.',
+          manual_url: ASIC_MANUAL_URL,
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'not_configured',
-            message:
-              'ABR_GUID is not configured. Register for a free GUID at https://abr.business.gov.au/Tools/WebServices ' +
-              'and set it as the ABR_GUID environment variable.',
-            manual_url: ASIC_MANUAL_URL,
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
@@ -268,18 +311,20 @@ export function registerLookupEntity(server: McpServer): void {
             .map((r) => ({ title: r.entity_name!, url: (r as { abr_url: string }).abr_url })),
         });
 
+        const obj = {
+          requested: input.identifiers.length,
+          found,
+          errors,
+          results,
+          manual_url: ASIC_MANUAL_URL,
+          pagination: {
+            returned: results.length,
+            limit: input.identifiers.length,
+          },
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            requested: input.identifiers.length,
-            found,
-            errors,
-            results,
-            manual_url: ASIC_MANUAL_URL,
-            pagination: {
-              returned: results.length,
-              limit: input.identifiers.length,
-            },
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
@@ -301,12 +346,14 @@ export function registerLookupEntity(server: McpServer): void {
           data = await parseAbrJsonp(res);
         } catch (err) {
           log.warn({ err }, 'ABR lookup failed');
+          const obj = {
+            error: 'upstream_unavailable',
+            message: `ABR is currently unavailable. Search manually at ${ASIC_MANUAL_URL}`,
+            manual_url: ASIC_MANUAL_URL,
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: `ABR is currently unavailable. Search manually at ${ASIC_MANUAL_URL}`,
-              manual_url: ASIC_MANUAL_URL,
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }
@@ -315,13 +362,15 @@ export function registerLookupEntity(server: McpServer): void {
         const payload = (data as any)?.ABRPayloadSearchResults?.response;
 
         if (!payload || payload.exception) {
+          const obj = {
+            error: 'not_found',
+            message: payload?.exception?.exceptionDescription
+              ?? `No ABR record found for ${idType.toUpperCase()} ${singleId}. Search manually at ${ASIC_MANUAL_URL}`,
+            manual_url: ASIC_MANUAL_URL,
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'not_found',
-              message: payload?.exception?.exceptionDescription
-                ?? `No ABR record found for ${idType.toUpperCase()} ${singleId}. Search manually at ${ASIC_MANUAL_URL}`,
-              manual_url: ASIC_MANUAL_URL,
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }
@@ -331,12 +380,14 @@ export function registerLookupEntity(server: McpServer): void {
         const entity = entityKey ? (payload as any)[entityKey] as AbrBusinessEntity : null;
 
         if (!entity) {
+          const obj = {
+            error: 'not_found',
+            message: `No entity record found for ${idType.toUpperCase()} ${singleId}. Search manually at ${ASIC_MANUAL_URL}`,
+            manual_url: ASIC_MANUAL_URL,
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'not_found',
-              message: `No entity record found for ${idType.toUpperCase()} ${singleId}. Search manually at ${ASIC_MANUAL_URL}`,
-              manual_url: ASIC_MANUAL_URL,
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }
@@ -354,17 +405,19 @@ export function registerLookupEntity(server: McpServer): void {
             : [],
         });
 
+        const obj = {
+          source: 'abr',
+          identifier_type: idType,
+          ...parsed,
+          abr_url: `https://abr.business.gov.au/ABN/View?abn=${parsed.abn ?? ''}`,
+          asic_search_url: resolvedAcn
+            ? `https://www.asic.gov.au/online-services/search-asic-s-registers/companies-and-registered-schemes/?q=${resolvedAcn}&type=companies`
+            : ASIC_MANUAL_URL,
+          manual_url: ASIC_MANUAL_URL,
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            source: 'abr',
-            identifier_type: idType,
-            ...parsed,
-            abr_url: `https://abr.business.gov.au/ABN/View?abn=${parsed.abn ?? ''}`,
-            asic_search_url: resolvedAcn
-              ? `https://www.asic.gov.au/online-services/search-asic-s-registers/companies-and-registered-schemes/?q=${resolvedAcn}&type=companies`
-              : ASIC_MANUAL_URL,
-            manual_url: ASIC_MANUAL_URL,
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
@@ -419,28 +472,32 @@ export function registerLookupEntity(server: McpServer): void {
       });
 
       if (abrResults.length === 0) {
+        const obj = {
+          query: singleId,
+          result_count: 0,
+          message: `No ABR records found matching "${singleId}". Search the ASIC register manually for company details.`,
+          manual_url: ASIC_MANUAL_URL,
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            query: singleId,
-            result_count: 0,
-            message: `No ABR records found matching "${singleId}". Search the ASIC register manually for company details.`,
-            manual_url: ASIC_MANUAL_URL,
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
+      const obj = {
+        query: singleId,
+        source: 'abr',
+        result_count: abrResults.length,
+        results: abrResults,
+        manual_url: ASIC_MANUAL_URL,
+        pagination: {
+          returned: abrResults.length,
+          limit: input.limit ?? 10,
+        },
+      };
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          query: singleId,
-          source: 'abr',
-          result_count: abrResults.length,
-          results: abrResults,
-          manual_url: ASIC_MANUAL_URL,
-          pagination: {
-            returned: abrResults.length,
-            limit: input.limit ?? 10,
-          },
-        }) }],
+        structuredContent: obj,
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

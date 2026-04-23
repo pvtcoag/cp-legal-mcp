@@ -85,6 +85,32 @@ const inputSchema = z.object({
   matter_ref: matterRefSchema,
 });
 
+// ── Output schema ───────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  error: z.string().optional(),
+  message: z.string().optional(),
+  detail: z.string().optional(),
+
+  query: z.string().optional(),
+  jurisdiction: z.string().optional(),
+  result_count: z.number().optional(),
+  results: z.array(z.object({
+    title: z.string(),
+    citation: z.string().optional(),
+    url: z.string(),
+    excerpt: z.string().optional(),
+    court: z.string().optional(),
+    date: z.string().optional(),
+    jurisdiction: z.string().optional(),
+    relevance_score: z.number(),
+  })).optional(),
+  pagination: z.object({
+    returned: z.number(),
+    limit: z.number(),
+    has_more: z.boolean(),
+  }).optional(),
+};
+
 export function registerResearchCases(server: McpServer): void {
   registerTool(
     server,
@@ -93,6 +119,7 @@ export function registerResearchCases(server: McpServer): void {
       title: 'Research cases',
       description: '[Case Research] Search Australian case law using natural language. Returns semantically reranked results from AustLII with formatted citations ready for legal writing.',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async (input) => {
@@ -123,8 +150,10 @@ export function registerResearchCases(server: McpServer): void {
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'AusLaw search_cases failed');
+          const obj = { error: 'upstream_unavailable', message: 'The Australian legal database is currently unavailable. Please retry in a moment.', detail: err.message };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: 'upstream_unavailable', message: 'The Australian legal database is currently unavailable. Please retry in a moment.', detail: err.message }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }
@@ -171,21 +200,20 @@ export function registerResearchCases(server: McpServer): void {
       });
 
       const effectiveLimit = input.limit ?? 5;
+      const obj = {
+        query: input.query,
+        jurisdiction: input.jurisdiction,
+        result_count: results.length,
+        results,
+        pagination: {
+          returned: results.length,
+          limit: effectiveLimit,
+          has_more: rawResults.length > effectiveLimit,
+        },
+      };
       return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            query: input.query,
-            jurisdiction: input.jurisdiction,
-            result_count: results.length,
-            results,
-            pagination: {
-              returned: results.length,
-              limit: effectiveLimit,
-              has_more: rawResults.length > effectiveLimit,
-            },
-          }),
-        }],
+        structuredContent: obj,
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

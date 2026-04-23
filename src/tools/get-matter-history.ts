@@ -43,6 +43,32 @@ const inputSchema = z.object({
     ),
 });
 
+// ── Output schema ─────────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  error: z.string().optional(),
+  message: z.string().optional(),
+
+  matter_ref: z.string().optional(),
+  record_count: z.number().optional(),
+  records: z.array(z.record(z.any())).optional(),
+  summary: z.object({
+    total_queries: z.number(),
+    tools_used: z.record(z.number()),
+    cases_researched: z.array(z.record(z.any())),
+    legislation_found: z.array(z.record(z.any())),
+    total_api_tokens: z.number(),
+    date_range: z.object({ first: z.any(), last: z.any() }).nullable(),
+    errors: z.number(),
+  }).optional(),
+  queries: z.array(z.record(z.any())).optional(),
+  pagination: z.object({
+    returned: z.number(),
+    limit: z.number(),
+    total_count: z.number().optional(),
+    has_more: z.boolean().optional(),
+  }).optional(),
+};
+
 export function registerGetMatterHistory(server: McpServer): void {
   registerTool(
     server,
@@ -54,20 +80,20 @@ export function registerGetMatterHistory(server: McpServer): void {
     'summary — aggregated overview of total queries, tools used, unique cases and legislation researched, API token usage, and date range. ' +
     'Requires matter tracking to be enabled (DATABASE_URL configured).',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (input) => {
       const log = logger.child({ tool: 'get_matter_history' });
 
       if (!isDbEnabled()) {
+        const obj = {
+          error: 'not_configured',
+          message: 'Matter tracking is not enabled on this deployment (DATABASE_URL not set).',
+        };
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              error: 'not_configured',
-              message: 'Matter tracking is not enabled on this deployment (DATABASE_URL not set).',
-            }),
-          }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
@@ -83,28 +109,26 @@ export function registerGetMatterHistory(server: McpServer): void {
         log.debug({ matter_ref: input.matter_ref, rowCount: rows.length, totalCount }, 'Matter history retrieved');
       } catch (err) {
         log.error({ err }, 'getMatterHistory failed');
+        const obj = {
+          error: 'database_error',
+          message: 'Could not retrieve matter history. Please try again.',
+        };
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              error: 'database_error',
-              message: 'Could not retrieve matter history. Please try again.',
-            }),
-          }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
 
       if (rows.length === 0) {
+        const obj = {
+          matter_ref: input.matter_ref,
+          record_count: 0,
+          message: 'No research records found for this matter reference.',
+        };
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              matter_ref: input.matter_ref,
-              record_count: 0,
-              message: 'No research records found for this matter reference.',
-            }),
-          }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
@@ -162,28 +186,27 @@ export function registerGetMatterHistory(server: McpServer): void {
             }))
           : undefined;
 
+        const obj = {
+          matter_ref: input.matter_ref,
+          summary: {
+            total_queries: rows.length,
+            tools_used: toolCounts,
+            cases_researched: Array.from(casesSeen.values()),
+            legislation_found: Array.from(legislationSeen.values()),
+            total_api_tokens: totalTokens,
+            date_range: dates.length > 0 ? { first: dates[0]!, last: dates[dates.length - 1]! } : null,
+            errors: errorCount,
+          },
+          ...(queryList ? { queries: queryList } : {}),
+          pagination: {
+            returned: rows.length,
+            limit: input.limit ?? 50,
+            ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > rows.length } : {}),
+          },
+        };
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              matter_ref: input.matter_ref,
-              summary: {
-                total_queries: rows.length,
-                tools_used: toolCounts,
-                cases_researched: Array.from(casesSeen.values()),
-                legislation_found: Array.from(legislationSeen.values()),
-                total_api_tokens: totalTokens,
-                date_range: dates.length > 0 ? { first: dates[0]!, last: dates[dates.length - 1]! } : null,
-                errors: errorCount,
-              },
-              ...(queryList ? { queries: queryList } : {}),
-              pagination: {
-                returned: rows.length,
-                limit: input.limit ?? 50,
-                ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > rows.length } : {}),
-              },
-            }),
-          }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
@@ -199,20 +222,19 @@ export function registerGetMatterHistory(server: McpServer): void {
         top_results: r.top_results,
       }));
 
+      const obj = {
+        matter_ref: input.matter_ref,
+        record_count: records.length,
+        records,
+        pagination: {
+          returned: records.length,
+          limit: input.limit ?? 50,
+          ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > records.length } : {}),
+        },
+      };
       return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            matter_ref: input.matter_ref,
-            record_count: records.length,
-            records,
-            pagination: {
-              returned: records.length,
-              limit: input.limit ?? 50,
-              ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > records.length } : {}),
-            },
-          }),
-        }],
+        structuredContent: obj,
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

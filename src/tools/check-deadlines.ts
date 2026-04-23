@@ -464,6 +464,51 @@ const inputSchema = z.object({
   matter_ref: matterRefSchema,
 });
 
+// ── Output schema ─────────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  error: z.string().optional(),
+  message: z.string().optional(),
+
+  type: z.string().optional(),
+
+  // Limitation branch
+  cause_of_action: z.string().optional(),
+  group: z.string().nullable().optional(),
+  jurisdiction: z.string().optional(),
+  period: z.string().optional(),
+  long_stop: z.string().optional(),
+  runs_from: z.string().optional(),
+  governing_act: z.string().optional(),
+  section: z.string().optional(),
+  notes: z.string().optional(),
+  extension_available: z.boolean().optional(),
+  expiry_calculation: z.object({
+    expiry_date: z.string(),
+    days_remaining: z.number(),
+    urgent: z.boolean(),
+    long_stop_date: z.string().optional(),
+  }).optional(),
+  disclaimer: z.string().optional(),
+
+  // Filing branch
+  proceeding_type: z.string().optional(),
+  rule: z.object({
+    days: z.number(),
+    court_days: z.boolean().optional(),
+    from: z.string(),
+    rule: z.string(),
+    notes: z.string().optional(),
+  }).optional(),
+  deadline_calculation: z.object({
+    event_date: z.string(),
+    deadline_date: z.string(),
+    days_remaining: z.number(),
+    urgent: z.boolean(),
+    overdue: z.boolean(),
+    court_days_note: z.string().optional(),
+  }).optional(),
+};
+
 // ── Tool ──────────────────────────────────────────────────────────────────────
 
 export function registerCheckDeadlines(server: McpServer): void {
@@ -485,6 +530,7 @@ export function registerCheckDeadlines(server: McpServer): void {
     'summary judgment, discovery, interrogatories, and subpoena objections. ' +
     'Use as a first step in any time-sensitive matter or crisis situation.',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     (input) => {
@@ -492,11 +538,13 @@ export function registerCheckDeadlines(server: McpServer): void {
       // ── Limitation path ────────────────────────────────────────────────────
       if (input.type === 'limitation') {
         if (!input.cause_of_action || !input.jurisdiction) {
+          const obj = {
+            error: 'missing_fields',
+            message: 'For type="limitation", both cause_of_action and jurisdiction are required.',
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'missing_fields',
-              message: 'For type="limitation", both cause_of_action and jurisdiction are required.',
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           };
         }
 
@@ -511,18 +559,20 @@ export function registerCheckDeadlines(server: McpServer): void {
           const availableJurisdictions = rulesForCause
             ? Object.keys(rulesForCause).join(', ')
             : 'none';
+          const obj = {
+            error: 'not_found',
+            cause_of_action: input.cause_of_action,
+            jurisdiction: input.jurisdiction,
+            message:
+              `No limitation period data available for "${causeEntry?.label ?? input.cause_of_action}" ` +
+              `in ${input.jurisdiction.toUpperCase()}. ` +
+              (availableJurisdictions !== 'none'
+                ? `Data available for: ${availableJurisdictions}.`
+                : 'Consult a legal practitioner or the applicable state Limitation Act.'),
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'not_found',
-              cause_of_action: input.cause_of_action,
-              jurisdiction: input.jurisdiction,
-              message:
-                `No limitation period data available for "${causeEntry?.label ?? input.cause_of_action}" ` +
-                `in ${input.jurisdiction.toUpperCase()}. ` +
-                (availableJurisdictions !== 'none'
-                  ? `Data available for: ${availableJurisdictions}.`
-                  : 'Consult a legal practitioner or the applicable state Limitation Act.'),
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           };
         }
 
@@ -541,11 +591,13 @@ export function registerCheckDeadlines(server: McpServer): void {
         if (input.date_of_accrual) {
           const accrual = parseEventDate(input.date_of_accrual);
           if (!accrual) {
+            const obj = {
+              error: 'invalid_date',
+              message: `Could not parse date_of_accrual "${input.date_of_accrual}". Use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY format.`,
+            };
             return {
-              content: [{ type: 'text' as const, text: JSON.stringify({
-                error: 'invalid_date',
-                message: `Could not parse date_of_accrual "${input.date_of_accrual}". Use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY format.`,
-              }) }],
+              structuredContent: obj,
+              content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             };
           }
           const today = new Date();
@@ -573,34 +625,38 @@ export function registerCheckDeadlines(server: McpServer): void {
           };
         }
 
+        const obj = {
+          type: 'limitation',
+          cause_of_action: causeEntry?.label ?? input.cause_of_action,
+          group: causeEntry?.group ?? null,
+          jurisdiction: input.jurisdiction.toUpperCase(),
+          period: periodDescription,
+          ...(longStopDescription ? { long_stop: longStopDescription } : {}),
+          runs_from: rule.from,
+          governing_act: rule.act,
+          ...(rule.section ? { section: rule.section } : {}),
+          ...(rule.notes ? { notes: rule.notes } : {}),
+          ...(rule.extension_available != null ? { extension_available: rule.extension_available } : {}),
+          ...(expiry ? { expiry_calculation: expiry } : {}),
+          disclaimer:
+            'This is a reference guide only. Limitation periods are fact-specific — ' +
+            'verify against the current Act and seek legal advice before relying on this information.',
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            type: 'limitation',
-            cause_of_action: causeEntry?.label ?? input.cause_of_action,
-            group: causeEntry?.group ?? null,
-            jurisdiction: input.jurisdiction.toUpperCase(),
-            period: periodDescription,
-            ...(longStopDescription ? { long_stop: longStopDescription } : {}),
-            runs_from: rule.from,
-            governing_act: rule.act,
-            ...(rule.section ? { section: rule.section } : {}),
-            ...(rule.notes ? { notes: rule.notes } : {}),
-            ...(rule.extension_available != null ? { extension_available: rule.extension_available } : {}),
-            ...(expiry ? { expiry_calculation: expiry } : {}),
-            disclaimer:
-              'This is a reference guide only. Limitation periods are fact-specific — ' +
-              'verify against the current Act and seek legal advice before relying on this information.',
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
       // ── Filing path ────────────────────────────────────────────────────────
       if (!input.proceeding_type || !input.filing_jurisdiction) {
+        const obj = {
+          error: 'missing_fields',
+          message: 'For type="filing", both proceeding_type and filing_jurisdiction are required.',
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'missing_fields',
-            message: 'For type="filing", both proceeding_type and filing_jurisdiction are required.',
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
@@ -621,14 +677,13 @@ export function registerCheckDeadlines(server: McpServer): void {
       if (input.event_date) {
         const eventDate = parseEventDate(input.event_date);
         if (!eventDate) {
+          const obj = {
+            error: 'invalid_date',
+            message: `Could not parse event_date "${input.event_date}". Use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY format.`,
+          };
           return {
-            content: [{
-              type: 'text' as const,
-              text: JSON.stringify({
-                error: 'invalid_date',
-                message: `Could not parse event_date "${input.event_date}". Use ISO 8601 (YYYY-MM-DD) or DD/MM/YYYY format.`,
-              }),
-            }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           };
         }
 
@@ -660,24 +715,23 @@ export function registerCheckDeadlines(server: McpServer): void {
         }
       }
 
+      const obj = {
+        type: 'filing',
+        proceeding_type: proceedingEntry?.label ?? input.proceeding_type,
+        jurisdiction: input.filing_jurisdiction.toUpperCase(),
+        rule: {
+          days: rule.days,
+          ...(rule.court_days ? { court_days: true } : {}),
+          from: rule.from,
+          rule: rule.rule,
+          ...(rule.notes ? { notes: rule.notes } : {}),
+        },
+        ...(deadline_calculation ? { deadline_calculation } : {}),
+        disclaimer: 'Verify deadlines with applicable court rules and practice notes before relying on them.',
+      };
       return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            type: 'filing',
-            proceeding_type: proceedingEntry?.label ?? input.proceeding_type,
-            jurisdiction: input.filing_jurisdiction.toUpperCase(),
-            rule: {
-              days: rule.days,
-              ...(rule.court_days ? { court_days: true } : {}),
-              from: rule.from,
-              rule: rule.rule,
-              ...(rule.notes ? { notes: rule.notes } : {}),
-            },
-            ...(deadline_calculation ? { deadline_calculation } : {}),
-            disclaimer: 'Verify deadlines with applicable court rules and practice notes before relying on them.',
-          }),
-        }],
+        structuredContent: obj,
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

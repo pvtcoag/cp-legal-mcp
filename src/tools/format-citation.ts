@@ -55,6 +55,29 @@ const inputSchema = z.object({
     .describe('Phrase to search for within the judgment (alternative to paragraph_number)'),
 });
 
+// ── Output schema ──────────────────────────────────────────────────────────────
+const outputSchemaShape = {
+  error: z.string().optional(),
+  message: z.string().optional(),
+  detail: z.string().optional(),
+  received: z.string().optional(),
+
+  mode: z.string().optional(),
+
+  // Pinpoint mode
+  citation: z.string().optional(),
+  url: z.string().optional(),
+  paragraph_number: z.number().optional(),
+  pinpoint: z.string().optional(),
+  full_citation: z.string().optional(),
+  paragraph_text: z.string().optional(),
+
+  // Format mode
+  title: z.string().optional(),
+  formatted: z.string().optional(),
+  style: z.string().optional(),
+};
+
 export function registerFormatCitation(server: McpServer): void {
   registerTool(
     server,
@@ -66,6 +89,7 @@ export function registerFormatCitation(server: McpServer): void {
     '(2) Pinpoint generation — provide citation_or_url + paragraph_number or phrase → resolves the judgment and returns a full pinpoint citation. ' +
     'Use mode 1 when you have the citation components and need to format them; use mode 2 when you need to cite a specific paragraph.',
       inputSchema: inputSchema.shape,
+      outputSchema: outputSchemaShape,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async (input) => {
@@ -74,11 +98,13 @@ export function registerFormatCitation(server: McpServer): void {
       // ── Mode 2: pinpoint generation ──────────────────────────────────────
       if (input.citation_or_url) {
         if (input.paragraph_number === undefined && !input.phrase) {
+          const obj = {
+            error: 'invalid_input',
+            message: 'Provide at least one of paragraph_number or phrase when using citation_or_url.',
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'invalid_input',
-              message: 'Provide at least one of paragraph_number or phrase when using citation_or_url.',
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }
@@ -89,12 +115,14 @@ export function registerFormatCitation(server: McpServer): void {
         } catch (err) {
           if (err instanceof AuslawError) {
             log.warn({ err }, 'resolveJudgmentUrl failed');
+            const obj = {
+              error: 'invalid_input',
+              message: err.message,
+              received: input.citation_or_url,
+            };
             return {
-              content: [{ type: 'text' as const, text: JSON.stringify({
-                error: 'invalid_input',
-                message: err.message,
-                received: input.citation_or_url,
-              }) }],
+              structuredContent: obj,
+              content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
               isError: true,
             };
           }
@@ -110,26 +138,30 @@ export function registerFormatCitation(server: McpServer): void {
           });
           log.debug('generate_pinpoint succeeded');
 
+          const obj = {
+            mode: 'pinpoint',
+            citation: resolved.citation ?? input.citation_or_url,
+            url: resolved.url,
+            paragraph_number: result.paragraphNumber ?? input.paragraph_number,
+            pinpoint: result.pinpointString,
+            full_citation: result.fullCitation,
+            ...(result.paragraphText ? { paragraph_text: result.paragraphText } : {}),
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              mode: 'pinpoint',
-              citation: resolved.citation ?? input.citation_or_url,
-              url: resolved.url,
-              paragraph_number: result.paragraphNumber ?? input.paragraph_number,
-              pinpoint: result.pinpointString,
-              full_citation: result.fullCitation,
-              ...(result.paragraphText ? { paragraph_text: result.paragraphText } : {}),
-            }, null, 2) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj, null, 2) }],
           };
         } catch (err) {
           if (err instanceof AuslawError) {
             log.warn({ err }, 'generatePinpoint failed');
+            const obj = {
+              error: 'upstream_unavailable',
+              message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
+              detail: err.message,
+            };
             return {
-              content: [{ type: 'text' as const, text: JSON.stringify({
-                error: 'upstream_unavailable',
-                message: 'Could not retrieve the judgment. The legal database may be temporarily unavailable.',
-                detail: err.message,
-              }) }],
+              structuredContent: obj,
+              content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
               isError: true,
             };
           }
@@ -139,13 +171,15 @@ export function registerFormatCitation(server: McpServer): void {
 
       // ── Mode 1: citation formatting ───────────────────────────────────────
       if (!input.title) {
+        const obj = {
+          error: 'invalid_input',
+          message:
+            'Provide title (+ neutral/reported citation components) for citation formatting, ' +
+            'or citation_or_url (+ paragraph_number or phrase) for pinpoint generation.',
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            error: 'invalid_input',
-            message:
-              'Provide title (+ neutral/reported citation components) for citation formatting, ' +
-              'or citation_or_url (+ paragraph_number or phrase) for pinpoint generation.',
-          }) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
           isError: true,
         };
       }
@@ -160,23 +194,27 @@ export function registerFormatCitation(server: McpServer): void {
         });
         log.debug('format_citation succeeded');
 
+        const obj = {
+          mode: 'format',
+          title: input.title,
+          formatted: result.formatted,
+          style: result.style ?? input.style,
+        };
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({
-            mode: 'format',
-            title: input.title,
-            formatted: result.formatted,
-            style: result.style ?? input.style,
-          }, null, 2) }],
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: JSON.stringify(obj, null, 2) }],
         };
       } catch (err) {
         if (err instanceof AuslawError) {
           log.warn({ err }, 'formatCitation failed');
+          const obj = {
+            error: 'upstream_unavailable',
+            message: 'Could not format citation. The legal database may be temporarily unavailable.',
+            detail: err.message,
+          };
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              error: 'upstream_unavailable',
-              message: 'Could not format citation. The legal database may be temporarily unavailable.',
-              detail: err.message,
-            }) }],
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
             isError: true,
           };
         }

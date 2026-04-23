@@ -46,7 +46,7 @@ export interface ToolAnnotations {
 type Handler = (input: any, ctx?: any) => Promise<any> | any;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ToolResult = { isError?: boolean; content?: Array<{ type: string; text?: string; [k: string]: any }> };
+type ToolResult = { isError?: boolean; content?: Array<{ type: string; text?: string; [k: string]: any }>; structuredContent?: Record<string, unknown> };
 
 function decorateError(result: ToolResult): ToolResult {
   if (!result?.isError) return result;
@@ -77,6 +77,8 @@ export function registerTool(
     description: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     inputSchema: Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    outputSchema?: Record<string, any>;
     annotations: ToolAnnotations;
   },
   handler: Handler,
@@ -93,6 +95,7 @@ export function registerTool(
       ...(config.title ? { title: config.title } : {}),
       description: config.description,
       inputSchema: config.inputSchema,
+      ...(config.outputSchema ? { outputSchema: config.outputSchema } : {}),
       annotations: config.annotations,
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
