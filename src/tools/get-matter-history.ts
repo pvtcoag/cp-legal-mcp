@@ -21,13 +21,17 @@ const inputSchema = z.object({
     .min(1)
     .max(100)
     .describe('The matter reference to retrieve history for (e.g. "Smith-2025")'),
-  format: z
+  view: z
     .enum(['list', 'summary'])
     .default('list')
     .describe(
       'list — return the full chronological log of individual research queries (default). ' +
       'summary — return aggregated stats: tools used, cases researched, legislation found, token usage, and date range.',
     ),
+  format: z
+    .enum(['json', 'markdown'])
+    .default('json')
+    .describe('Response format: "json" for structured data, "markdown" for human-readable prose'),
   limit: z
     .number()
     .int()
@@ -76,7 +80,7 @@ export function registerGetMatterHistory(server: McpServer): void {
     {
       title: 'Get matter history',
       description: '[Matter] Retrieve research history for a matter reference. ' +
-    'Two formats: list (default) — chronological log of every research query with tool, query text, and top results; ' +
+    'Two views: list (default) — chronological log of every research query with tool, query text, and top results; ' +
     'summary — aggregated overview of total queries, tools used, unique cases and legislation researched, API token usage, and date range. ' +
     'Requires matter tracking to be enabled (DATABASE_URL configured).',
       inputSchema: inputSchema.shape,
@@ -132,8 +136,8 @@ export function registerGetMatterHistory(server: McpServer): void {
         };
       }
 
-      // ── Summary format ─────────────────────────────────────────────────────
-      if (input.format === 'summary') {
+      // ── Summary view ───────────────────────────────────────────────────────
+      if (input.view === 'summary') {
         const toolCounts: Record<string, number> = {};
         for (const row of rows) {
           toolCounts[row.tool_name] = (toolCounts[row.tool_name] ?? 0) + 1;
@@ -204,13 +208,59 @@ export function registerGetMatterHistory(server: McpServer): void {
             ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > rows.length } : {}),
           },
         };
+        if (input.format === 'markdown') {
+          const lines: string[] = [];
+          lines.push(`# Matter History — ${input.matter_ref}`);
+          lines.push('');
+          lines.push('## Summary');
+          lines.push('');
+          lines.push(`- Total queries: ${obj.summary.total_queries}`);
+          lines.push(`- Total API tokens: ${obj.summary.total_api_tokens}`);
+          lines.push(`- Errors: ${obj.summary.errors}`);
+          if (obj.summary.date_range) {
+            lines.push(`- Date range: ${obj.summary.date_range.first} to ${obj.summary.date_range.last}`);
+          }
+          lines.push('');
+          lines.push('## Tools Used');
+          lines.push('');
+          lines.push('| Tool | Calls |');
+          lines.push('| --- | --- |');
+          for (const [tool, count] of Object.entries(obj.summary.tools_used)) {
+            lines.push(`| ${tool} | ${count} |`);
+          }
+          lines.push('');
+          if (obj.summary.cases_researched.length > 0) {
+            lines.push('## Cases Researched');
+            lines.push('');
+            lines.push('| Title | Citation | URL |');
+            lines.push('| --- | --- | --- |');
+            for (const c of obj.summary.cases_researched) {
+              lines.push(`| ${c.title} | ${c.citation ?? ''} | ${c.url} |`);
+            }
+            lines.push('');
+          }
+          if (obj.summary.legislation_found.length > 0) {
+            lines.push('## Legislation Found');
+            lines.push('');
+            lines.push('| Title | URL |');
+            lines.push('| --- | --- |');
+            for (const l of obj.summary.legislation_found) {
+              lines.push(`| ${l.title} | ${l.url} |`);
+            }
+            lines.push('');
+          }
+          return {
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: lines.join('\n').trimEnd() }],
+          };
+        }
         return {
           structuredContent: obj,
           content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
         };
       }
 
-      // ── List format (default) ──────────────────────────────────────────────
+      // ── List view (default) ────────────────────────────────────────────────
       const records = rows.map((r) => ({
         id: r.id,
         tool: r.tool_name,
@@ -232,6 +282,23 @@ export function registerGetMatterHistory(server: McpServer): void {
           ...(totalCount !== undefined ? { total_count: totalCount, has_more: totalCount > records.length } : {}),
         },
       };
+      if (input.format === 'markdown') {
+        const lines: string[] = [];
+        lines.push(`# Matter History — ${input.matter_ref}`);
+        lines.push('');
+        lines.push(`${obj.record_count} record${obj.record_count === 1 ? '' : 's'}`);
+        lines.push('');
+        lines.push('## Queries');
+        lines.push('');
+        for (const r of obj.records) {
+          const jur = r.jurisdiction ? ` [${r.jurisdiction}]` : '';
+          lines.push(`- **${r.tool}**${jur} — ${r.query} (${r.result_count} result${r.result_count === 1 ? '' : 's'}, ${r.searched_at})`);
+        }
+        return {
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: lines.join('\n').trimEnd() }],
+        };
+      }
       return {
         structuredContent: obj,
         content: [{ type: 'text' as const, text: JSON.stringify(obj) }],

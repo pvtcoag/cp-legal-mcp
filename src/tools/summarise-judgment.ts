@@ -26,6 +26,10 @@ const inputSchema = z.object({
       'legal principles, outcome). Reduces cost by ~32% — use when you need the summary only, not the citation network.',
     ),
   matter_ref: matterRefSchema,
+  format: z
+    .enum(['json', 'markdown'])
+    .default('json')
+    .describe('Response format: "json" for structured data, "markdown" for human-readable prose'),
 });
 
 // Five dimensions of a judgment summary, each answered with targeted extractive QA
@@ -171,32 +175,51 @@ export function registerSummariseJudgment(server: McpServer): void {
         accuracy_score,
       });
 
+      const obj = {
+        judgment: {
+          title,
+          citation,
+          url: resolved.url,
+          canonical_url: resolved.canonicalUrl ?? resolved.url,
+        },
+        ...(enriched ? {
+          document_type: enriched.document_type,
+          jurisdiction: enriched.jurisdiction,
+          parties: enriched.parties,
+          key_dates: enriched.key_dates,
+        } : {}),
+        summary: {
+          holding: qaField(holdingR),
+          orders: qaField(ordersR),
+          key_facts: qaField(factsR),
+          legal_principles: qaField(principlesR),
+          outcome: qaField(outcomeR),
+        },
+        ...(enriched ? {
+          cases_cited: enriched.citations_made,
+          defined_terms: enriched.defined_terms,
+        } : {}),
+      };
+
+      if (input.format === 'markdown') {
+        const s = obj.summary;
+        const sec = (heading: string, field: { text: string; confidence: number } | null): string =>
+          `## ${heading}\n\n${field ? field.text : '_Not extractable from the judgment._'}\n\n`;
+        const header = `# ${title}${citation ? ` — ${citation}` : ''}\n\n` +
+          `Source: ${resolved.url}\n\n`;
+        const body =
+          sec('Holding', s.holding) +
+          sec('Orders', s.orders) +
+          sec('Key Facts', s.key_facts) +
+          sec('Legal Principles', s.legal_principles) +
+          sec('Outcome', s.outcome);
+        return {
+          content: [{ type: 'text' as const, text: header + body.trimEnd() }],
+        };
+      }
+
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          judgment: {
-            title,
-            citation,
-            url: resolved.url,
-            canonical_url: resolved.canonicalUrl ?? resolved.url,
-          },
-          ...(enriched ? {
-            document_type: enriched.document_type,
-            jurisdiction: enriched.jurisdiction,
-            parties: enriched.parties,
-            key_dates: enriched.key_dates,
-          } : {}),
-          summary: {
-            holding: qaField(holdingR),
-            orders: qaField(ordersR),
-            key_facts: qaField(factsR),
-            legal_principles: qaField(principlesR),
-            outcome: qaField(outcomeR),
-          },
-          ...(enriched ? {
-            cases_cited: enriched.citations_made,
-            defined_terms: enriched.defined_terms,
-          } : {}),
-        }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );

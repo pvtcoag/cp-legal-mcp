@@ -462,6 +462,10 @@ const inputSchema = z.object({
     .optional()
     .describe('ISO date string (YYYY-MM-DD) of the trigger event (for filing deadlines)'),
   matter_ref: matterRefSchema,
+  format: z
+    .enum(['json', 'markdown'])
+    .default('json')
+    .describe('Response format: "json" for structured data, "markdown" for human-readable prose'),
 });
 
 // ── Output schema ─────────────────────────────────────────────────────────────
@@ -642,6 +646,57 @@ export function registerCheckDeadlines(server: McpServer): void {
             'This is a reference guide only. Limitation periods are fact-specific — ' +
             'verify against the current Act and seek legal advice before relying on this information.',
         };
+        if (input.format === 'markdown') {
+          const lines: string[] = [];
+          lines.push(`# Limitation Period — ${obj.cause_of_action} (${obj.jurisdiction})`);
+          lines.push('');
+          const warnings: string[] = [];
+          if (expiry) {
+            if (expiry.days_remaining < 0) {
+              warnings.push(`**⚠️ Warning:** Limitation period expired ${Math.abs(expiry.days_remaining)} day(s) ago on ${expiry.expiry_date}.`);
+            } else if (expiry.urgent) {
+              warnings.push(`**⚠️ Warning:** Limitation period expires in ${expiry.days_remaining} day(s) on ${expiry.expiry_date}.`);
+            }
+          }
+          for (const w of warnings) {
+            lines.push(w);
+            lines.push('');
+          }
+          lines.push('## Period');
+          lines.push('');
+          lines.push(`- Period: ${obj.period}`);
+          if (obj.long_stop) lines.push(`- Long stop: ${obj.long_stop}`);
+          lines.push(`- Runs from: ${obj.runs_from}`);
+          if (obj.group) lines.push(`- Category: ${obj.group}`);
+          if (obj.extension_available != null) lines.push(`- Extension available: ${obj.extension_available ? 'yes' : 'no'}`);
+          lines.push('');
+          lines.push('## Authority');
+          lines.push('');
+          lines.push(`- Act: ${obj.governing_act}`);
+          if (obj.section) lines.push(`- Section: ${obj.section}`);
+          lines.push('');
+          if (expiry) {
+            lines.push('## Calculation');
+            lines.push('');
+            lines.push(`- Expiry date: ${expiry.expiry_date}`);
+            lines.push(`- Days remaining: ${expiry.days_remaining}`);
+            if (expiry.long_stop_date) lines.push(`- Long-stop date: ${expiry.long_stop_date}`);
+            lines.push('');
+          }
+          if (obj.notes) {
+            lines.push('## Notes');
+            lines.push('');
+            lines.push(obj.notes);
+            lines.push('');
+          }
+          lines.push('## Disclaimer');
+          lines.push('');
+          lines.push(obj.disclaimer);
+          return {
+            structuredContent: obj,
+            content: [{ type: 'text' as const, text: lines.join('\n').trimEnd() }],
+          };
+        }
         return {
           structuredContent: obj,
           content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
@@ -729,6 +784,49 @@ export function registerCheckDeadlines(server: McpServer): void {
         ...(deadline_calculation ? { deadline_calculation } : {}),
         disclaimer: 'Verify deadlines with applicable court rules and practice notes before relying on them.',
       };
+      if (input.format === 'markdown') {
+        const lines: string[] = [];
+        lines.push(`# Filing Deadline — ${obj.proceeding_type} (${obj.jurisdiction})`);
+        lines.push('');
+        const warnings: string[] = [];
+        if (deadline_calculation) {
+          if (deadline_calculation.overdue) {
+            warnings.push(`**⚠️ Warning:** Deadline overdue by ${Math.abs(deadline_calculation.days_remaining)} day(s) (was ${deadline_calculation.deadline_date}).`);
+          } else if (deadline_calculation.urgent) {
+            warnings.push(`**⚠️ Warning:** Deadline in ${deadline_calculation.days_remaining} day(s) on ${deadline_calculation.deadline_date}.`);
+          }
+          if (deadline_calculation.court_days_note) {
+            warnings.push(`**⚠️ Warning:** ${deadline_calculation.court_days_note}`);
+          }
+        }
+        for (const w of warnings) {
+          lines.push(w);
+          lines.push('');
+        }
+        lines.push('## Rule');
+        lines.push('');
+        const dayLabel = obj.rule.court_days ? 'court days' : 'days';
+        lines.push(`- Period: ${obj.rule.days} ${dayLabel}`);
+        lines.push(`- From: ${obj.rule.from}`);
+        lines.push(`- Authority: ${obj.rule.rule}`);
+        if (obj.rule.notes) lines.push(`- Notes: ${obj.rule.notes}`);
+        lines.push('');
+        if (deadline_calculation) {
+          lines.push('## Calculation');
+          lines.push('');
+          lines.push(`- Event date: ${deadline_calculation.event_date}`);
+          lines.push(`- Deadline: ${deadline_calculation.deadline_date}`);
+          lines.push(`- Days remaining: ${deadline_calculation.days_remaining}`);
+          lines.push('');
+        }
+        lines.push('## Disclaimer');
+        lines.push('');
+        lines.push(obj.disclaimer);
+        return {
+          structuredContent: obj,
+          content: [{ type: 'text' as const, text: lines.join('\n').trimEnd() }],
+        };
+      }
       return {
         structuredContent: obj,
         content: [{ type: 'text' as const, text: JSON.stringify(obj) }],

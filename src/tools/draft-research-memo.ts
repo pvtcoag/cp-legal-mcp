@@ -38,6 +38,10 @@ const inputSchema = z.object({
     .max(10)
     .default(5)
     .describe('Maximum number of cases to include in the compiled output (highest-frequency cases first)'),
+  format: z
+    .enum(['json', 'markdown'])
+    .default('json')
+    .describe('Response format: "json" for structured data, "markdown" for human-readable prose'),
 });
 
 // Questions to extract per case when with_case_analysis is true
@@ -271,47 +275,116 @@ export function registerDraftResearchMemo(server: McpServer): void {
         top_results: [],
       });
 
+      const obj = {
+        matter_ref: input.matter_ref,
+        ...(input.issue_summary ? { issue_summary: input.issue_summary } : {}),
+        research_period: researchPeriod,
+        research_summary: {
+          total_queries: rows.length,
+          tools_used: toolsUsed,
+          total_api_tokens: totalTokens,
+          cases_researched: allCaseRefs.length,
+          legislation_consulted: legislation.length,
+          entities_checked: entities.length,
+          regulatory_decisions_found: regulatory.length,
+        },
+        ...(classifyQuery ? { classification_context: { original_classify_text: classifyQuery.slice(0, 300) } } : {}),
+        cases: caseDetails,
+        legislation,
+        entities_checked: entities,
+        regulatory_decisions: regulatory,
+        research_queries: queries,
+        memo_scaffold: {
+          suggested_sections: [
+            '1. Issue',
+            '2. Applicable Law',
+            '3. Key Authorities',
+            '4. Analysis',
+            '5. Risk Assessment',
+            '6. Options',
+            '7. Recommendation',
+          ],
+          advisory_frameworks: {
+            crisis_72hr: 'If this is an urgent matter: lead with immediate actions required within 24–72 hours before deeper analysis.',
+            negotiation: 'If advising on a negotiation: identify BATNA, ZOPA, and key pressure points for each party.',
+            board_advisory: 'If advising a board: structure around governance obligations → director duties → risk → recommended resolution.',
+          },
+          note:
+            'Use the research data above to populate each section. ' +
+            'For cases, cite by [title] [citation] and quote key passages verbatim from the judgment text. ' +
+            'Include matter_ref in all further tool calls to keep the research log complete.',
+        },
+      };
+
+      if (input.format === 'markdown') {
+        const lines: string[] = [];
+        lines.push(`# Research Memo — ${input.matter_ref}`);
+        lines.push('');
+        if (input.issue_summary) {
+          lines.push('## Issues');
+          lines.push('');
+          lines.push(input.issue_summary);
+          lines.push('');
+        }
+        lines.push('## Research Summary');
+        lines.push('');
+        lines.push(`- Research period: ${researchPeriod.from} to ${researchPeriod.to}`);
+        lines.push(`- Total queries: ${rows.length}`);
+        lines.push(`- Tools used: ${toolsUsed.join(', ')}`);
+        lines.push(`- API tokens: ${totalTokens}`);
+        lines.push(`- Cases researched: ${allCaseRefs.length}`);
+        lines.push(`- Legislation consulted: ${legislation.length}`);
+        lines.push(`- Entities checked: ${entities.length}`);
+        lines.push(`- Regulatory decisions found: ${regulatory.length}`);
+        lines.push('');
+
+        lines.push('## Key Cases');
+        lines.push('');
+        if (caseDetails.length === 0) {
+          lines.push('_No cases recorded._');
+        } else {
+          for (const c of caseDetails) {
+            const label = c.title ?? c.citation ?? c.url;
+            const cite = c.citation ? ` — ${c.citation}` : '';
+            lines.push(`- **${label}**${cite} (cited ${c.frequency}x) — ${c.url}`);
+            if (c.extracts) {
+              for (const e of c.extracts) {
+                if (e.answer) {
+                  lines.push(`  - _${e.question}_ ${e.answer}`);
+                }
+              }
+            }
+          }
+        }
+        lines.push('');
+
+        lines.push('## Legislation');
+        lines.push('');
+        if (legislation.length === 0) {
+          lines.push('_No legislation recorded._');
+        } else {
+          for (const l of legislation) {
+            lines.push(`- ${l.title} — ${l.url}`);
+          }
+        }
+        lines.push('');
+
+        lines.push('## Recommendations');
+        lines.push('');
+        lines.push('Suggested memo sections:');
+        for (const s of obj.memo_scaffold.suggested_sections) {
+          lines.push(`- ${s}`);
+        }
+        lines.push('');
+        lines.push(obj.memo_scaffold.note);
+
+        return {
+          content: [{ type: 'text' as const, text: lines.join('\n').trimEnd() }],
+        };
+      }
+
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({
-          matter_ref: input.matter_ref,
-          ...(input.issue_summary ? { issue_summary: input.issue_summary } : {}),
-          research_period: researchPeriod,
-          research_summary: {
-            total_queries: rows.length,
-            tools_used: toolsUsed,
-            total_api_tokens: totalTokens,
-            cases_researched: allCaseRefs.length,
-            legislation_consulted: legislation.length,
-            entities_checked: entities.length,
-            regulatory_decisions_found: regulatory.length,
-          },
-          ...(classifyQuery ? { classification_context: { original_classify_text: classifyQuery.slice(0, 300) } } : {}),
-          cases: caseDetails,
-          legislation,
-          entities_checked: entities,
-          regulatory_decisions: regulatory,
-          research_queries: queries,
-          memo_scaffold: {
-            suggested_sections: [
-              '1. Issue',
-              '2. Applicable Law',
-              '3. Key Authorities',
-              '4. Analysis',
-              '5. Risk Assessment',
-              '6. Options',
-              '7. Recommendation',
-            ],
-            advisory_frameworks: {
-              crisis_72hr: 'If this is an urgent matter: lead with immediate actions required within 24–72 hours before deeper analysis.',
-              negotiation: 'If advising on a negotiation: identify BATNA, ZOPA, and key pressure points for each party.',
-              board_advisory: 'If advising a board: structure around governance obligations → director duties → risk → recommended resolution.',
-            },
-            note:
-              'Use the research data above to populate each section. ' +
-              'For cases, cite by [title] [citation] and quote key passages verbatim from the judgment text. ' +
-              'Include matter_ref in all further tool calls to keep the research log complete.',
-          },
-        }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify(obj) }],
       };
     },
   );
