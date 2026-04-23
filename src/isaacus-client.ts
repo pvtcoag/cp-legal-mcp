@@ -36,7 +36,15 @@ function qaCacheSet(key: string, value: typeof _qaCache extends Map<string, infe
 const client = new Isaacus({ apiKey: config.ISAACUS_API_KEY });
 
 function inputTokens(response: unknown): number {
-  return (response as any)?.usage?.input_tokens ?? 0;
+  const usage = (response as { usage?: { input_tokens?: number } })?.usage;
+  const tokens = usage?.input_tokens;
+  if (typeof tokens !== 'number') {
+    // Billing attribution depends on this — surface the gap so we notice if
+    // Isaacus changes its response shape.
+    logger.warn({ hasUsage: !!usage }, 'isaacus: response missing usage.input_tokens — billing will under-count');
+    return 0;
+  }
+  return tokens;
 }
 
 export interface RerankCandidate {

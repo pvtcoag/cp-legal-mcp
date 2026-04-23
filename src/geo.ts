@@ -1,6 +1,6 @@
 /**
  * IP geolocation helper — fire-and-forget, cached in-memory.
- * Uses ip-api.com free tier (no API key required, rate limited to ~45 req/min).
+ * Uses ipwho.is (free tier, HTTPS, no API key, 10k req/month).
  */
 
 export interface GeoResult {
@@ -9,7 +9,19 @@ export interface GeoResult {
   country: string;
 }
 
+// Bounded LRU-ish cache — evicts oldest insertion when full. For CP Legal's
+// expected traffic this cap won't be hit, but it guards against
+// pathological fuzzing of the X-Forwarded-For header.
+const GEO_CACHE_MAX = 5_000;
 const geoCache = new Map<string, GeoResult>();
+
+function cacheSet(key: string, value: GeoResult): void {
+  if (geoCache.size >= GEO_CACHE_MAX) {
+    const firstKey = geoCache.keys().next().value;
+    if (firstKey !== undefined) geoCache.delete(firstKey);
+  }
+  geoCache.set(key, value);
+}
 
 const PRIVATE_IP_RE = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|localhost)/;
 
@@ -19,23 +31,25 @@ export async function getGeoForIp(ip: string | undefined): Promise<GeoResult | n
   const cleanIp = ip.replace(/^::ffff:/, '');
   if (PRIVATE_IP_RE.test(cleanIp)) return null;
 
-  if (geoCache.has(cleanIp)) return geoCache.get(cleanIp)!;
+  const cached = geoCache.get(cleanIp);
+  if (cached) return cached;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
     const res = await fetch(
-      `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=city,regionName,country`,
+      `https://ipwho.is/${encodeURIComponent(cleanIp)}?fields=city,region,country,success`,
       { signal: controller.signal },
     ).finally(() => clearTimeout(timeout));
     if (!res.ok) return null;
-    const data = await res.json() as { city?: string; regionName?: string; country?: string };
+    const data = await res.json() as { success?: boolean; city?: string; region?: string; country?: string };
+    if (data.success === false) return null;
     const result: GeoResult = {
       city: data.city ?? '',
-      region: data.regionName ?? '',
+      region: data.region ?? '',
       country: data.country ?? '',
     };
-    geoCache.set(cleanIp, result);
+    cacheSet(cleanIp, result);
     return result;
   } catch {
     return null;

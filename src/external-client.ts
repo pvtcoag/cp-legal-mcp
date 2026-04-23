@@ -10,6 +10,23 @@ const USER_AGENT = 'cp-legal-mcp/1.0 (legal research; https://example.com)';
 // Only retries on status codes that indicate server-side transient errors.
 const RETRY_DELAYS_MS = [1_000, 2_000];
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+// Network-level error codes that warrant a retry. Other errors (e.g. JSON
+// parse failures, programming mistakes, caller AbortError) must not retry.
+const RETRYABLE_NET_CODES = new Set([
+  'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'EPIPE', 'UND_ERR_SOCKET',
+]);
+
+function isRetryableError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'TimeoutError') return true;
+  if (err.name === 'AbortError') return false; // caller-initiated abort — do not retry
+  // undici wraps network errors as TypeError with a cause that carries the code
+  const cause = (err as { cause?: unknown }).cause;
+  const code = (cause && typeof cause === 'object' && 'code' in cause)
+    ? String((cause as { code: unknown }).code)
+    : (err as { code?: unknown }).code;
+  return typeof code === 'string' && RETRYABLE_NET_CODES.has(code);
+}
 
 export class ExternalApiError extends Error {
   constructor(
@@ -59,22 +76,15 @@ export async function externalFetch(
 
       return response;
     } catch (err) {
-      if (err instanceof Error && err.name === 'TimeoutError') {
-        lastErr = new ExternalApiError('external', `Request timed out after ${timeoutMs}ms: ${url}`);
-        // Timeouts are retryable
-        if (attempt < RETRY_DELAYS_MS.length) {
-          await delay(RETRY_DELAYS_MS[attempt]!);
-          continue;
-        }
-        throw lastErr;
-      }
-      // Non-timeout errors (DNS, connection refused) — retry on network errors
-      lastErr = err;
-      if (attempt < RETRY_DELAYS_MS.length) {
+      const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+      lastErr = isTimeout
+        ? new ExternalApiError('external', `Request timed out after ${timeoutMs}ms: ${url}`)
+        : err;
+      if (isRetryableError(err) && attempt < RETRY_DELAYS_MS.length) {
         await delay(RETRY_DELAYS_MS[attempt]!);
         continue;
       }
-      throw err;
+      throw lastErr;
     }
   }
 
