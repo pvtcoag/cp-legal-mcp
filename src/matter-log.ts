@@ -1,3 +1,4 @@
+import { LRUCache } from 'lru-cache';
 import { logMatterQuery } from './db.js';
 import { config } from './config.js';
 import { getUser, getSessionId } from './request-context.js';
@@ -45,12 +46,11 @@ export interface MatterLogParams {
 
 const SESSION_MATTER_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — covers a typical work session
 
-interface SessionMatter {
-  ref: string;
-  expiresAt: number;
-}
-
-const sessionMatterCache = new Map<string, SessionMatter>();
+const sessionMatterCache = new LRUCache<string, string>({
+  max: 10_000,
+  ttl: SESSION_MATTER_TTL_MS,
+  updateAgeOnGet: true,
+});
 
 /**
  * Extract a human-readable matter name from user input (query text only — not results).
@@ -126,14 +126,11 @@ function resolveEffectiveMatterRef(
   const sessionId = getSessionId();
   if (sessionId) {
     const cached = sessionMatterCache.get(sessionId);
-    if (cached && cached.expiresAt > Date.now()) {
-      cached.expiresAt = Date.now() + SESSION_MATTER_TTL_MS; // refresh TTL on use
-      return cached.ref;
-    }
+    if (cached !== undefined) return cached;
 
     // First untagged call in this session — infer from user input and cache
     const inferred = inferMatterRef(queryText);
-    sessionMatterCache.set(sessionId, { ref: inferred, expiresAt: Date.now() + SESSION_MATTER_TTL_MS });
+    sessionMatterCache.set(sessionId, inferred);
     logger.info({ sessionId, inferred }, 'matter-log: inferred matter ref for session');
     return inferred;
   }

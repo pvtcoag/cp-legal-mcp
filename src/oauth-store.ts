@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { LRUCache } from 'lru-cache';
 import { logger } from './logger.js';
 
 // ── Registered clients ────────────────────────────────────────────────────────
@@ -111,37 +112,24 @@ export interface AuthCode {
   redirectUri: string;
   codeChallenge: string;
   codeChallengeMethod: string;
-  expiresAt: number;
 }
 
 const CODE_TTL_MS = 5 * 60 * 1000;
-const authCodes = new Map<string, AuthCode>();
+const authCodes = new LRUCache<string, AuthCode>({
+  max: 10_000,
+  ttl: CODE_TTL_MS,
+  ttlAutopurge: true,
+});
 
-function purgeExpiredCodes(): void {
-  const now = Date.now();
-  for (const [code, entry] of authCodes) {
-    if (now > entry.expiresAt) authCodes.delete(code);
-  }
-}
-
-// Periodic background cleanup so codes don't accumulate on idle servers.
-// unref() prevents this timer from keeping the process alive during graceful shutdown.
-setInterval(purgeExpiredCodes, 60_000).unref();
-
-export function createAuthCode(params: Omit<AuthCode, 'expiresAt'>): string {
-  purgeExpiredCodes();
+export function createAuthCode(params: AuthCode): string {
   const code = randomUUID();
-  authCodes.set(code, { ...params, expiresAt: Date.now() + CODE_TTL_MS });
+  authCodes.set(code, params);
   return code;
 }
 
 export function consumeAuthCode(code: string): AuthCode | null {
   const entry = authCodes.get(code);
   if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    authCodes.delete(code);
-    return null;
-  }
   authCodes.delete(code); // single-use
   return entry;
 }

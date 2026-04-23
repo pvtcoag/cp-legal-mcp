@@ -1,35 +1,30 @@
 import { createHash } from 'node:crypto';
 import Isaacus from 'isaacus';
+import { LRUCache } from 'lru-cache';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
 // ── In-memory QA result cache ─────────────────────────────────────────────────
 // Avoids repeat Kanon Answer Extractor calls for identical (document, question) pairs.
-// LRU-like: evicts oldest entry when limit is reached. Survives server restarts
-// only via the 30-day PostgreSQL judgment cache feeding consistent document text.
+// Survives server restarts only via the 30-day PostgreSQL judgment cache feeding
+// consistent document text.
 
-const QA_CACHE_MAX = 200;
-const _qaCache = new Map<string, {
+interface QaCacheEntry {
   answers: ExtractedAnswer[];
   inextractable: boolean;
   inextractability_score: number;
   tokensUsed: number;
-}>();
+}
+
+const QA_CACHE_MAX = 200;
+const qaCache = new LRUCache<string, QaCacheEntry>({
+  max: QA_CACHE_MAX,
+});
 
 function qaKey(question: string, documentText: string, topK: number): string {
   const docHash = createHash('sha1').update(documentText).digest('hex').slice(0, 16);
   const qHash   = createHash('sha1').update(question).digest('hex').slice(0, 8);
   return `${docHash}:${qHash}:${topK}`;
-}
-
-function qaCacheGet(key: string) { return _qaCache.get(key); }
-
-function qaCacheSet(key: string, value: typeof _qaCache extends Map<string, infer V> ? V : never) {
-  if (_qaCache.size >= QA_CACHE_MAX) {
-    // Evict oldest (first insertion order)
-    _qaCache.delete(_qaCache.keys().next().value as string);
-  }
-  _qaCache.set(key, value);
 }
 
 // Singleton — Isaacus client is stateless, safe to share across requests
@@ -77,34 +72,20 @@ function candidateToText(c: RerankCandidate): string {
 // ── In-memory rerank cache ────────────────────────────────────────────────────
 // Deduplicates Isaacus rerankings within a 5-minute window.
 // Covers retries, follow-up queries with the same candidates, and concurrent
-// users running the same search. LRU-like eviction when cap is reached.
+// users running the same search.
 
 const RERANK_CACHE_MAX = 100;
 const RERANK_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const _rerankCache = new Map<string, {
-  results: Array<{ index: number; score: number }>;
-  expiresAt: number;
-}>();
+const rerankCache = new LRUCache<string, Array<{ index: number; score: number }>>({
+  max: RERANK_CACHE_MAX,
+  ttl: RERANK_CACHE_TTL_MS,
+});
 
 function rerankKey(query: string, texts: string[], topK: number, isIql: boolean): string {
   const textHash = createHash('sha1').update(texts.join('\0')).digest('hex').slice(0, 16);
   const qHash    = createHash('sha1').update(query).digest('hex').slice(0, 8);
   return `r:${qHash}:${textHash}:${topK}:${isIql ? 1 : 0}`;
-}
-
-function rerankCacheGet(key: string) {
-  const entry = _rerankCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() > entry.expiresAt) { _rerankCache.delete(key); return undefined; }
-  return entry.results;
-}
-
-function rerankCacheSet(key: string, results: Array<{ index: number; score: number }>) {
-  if (_rerankCache.size >= RERANK_CACHE_MAX) {
-    _rerankCache.delete(_rerankCache.keys().next().value as string);
-  }
-  _rerankCache.set(key, { results, expiresAt: Date.now() + RERANK_CACHE_TTL_MS });
 }
 
 // ── Extractive QA ─────────────────────────────────────────────────────────────
@@ -130,7 +111,7 @@ export async function extractAnswer(
   topK = 5,
 ): Promise<{ answers: ExtractedAnswer[]; inextractable: boolean; inextractability_score: number; tokensUsed: number }> {
   const cacheKey = qaKey(question, documentText, topK);
-  const cached = qaCacheGet(cacheKey);
+  const cached = qaCache.get(cacheKey);
   if (cached) {
     logger.debug({ cacheKey }, 'QA cache hit — skipping Isaacus call');
     return cached;
@@ -161,7 +142,7 @@ export async function extractAnswer(
     inextractability_score,
     tokensUsed: inputTokens(response),
   };
-  qaCacheSet(cacheKey, { ...result, tokensUsed: 0 }); // cache with 0 tokensUsed — subsequent hits are free
+  qaCache.set(cacheKey, { ...result, tokensUsed: 0 }); // cache with 0 tokensUsed — subsequent hits are free
   return result;
 }
 
@@ -247,7 +228,7 @@ export async function rerank<T extends RerankCandidate>(
   const isIql = options?.isIql ?? false;
   const texts = candidates.map(candidateToText);
   const cacheKey = rerankKey(query, texts, topK, isIql);
-  const cached = rerankCacheGet(cacheKey);
+  const cached = rerankCache.get(cacheKey);
 
   if (cached) {
     logger.debug({ cacheKey, candidateCount: candidates.length }, 'Rerank cache hit — skipping Isaacus call');
@@ -269,7 +250,7 @@ export async function rerank<T extends RerankCandidate>(
   });
 
   const rawResults = response.results as Array<{ index: number; score: number }>;
-  rerankCacheSet(cacheKey, rawResults);
+  rerankCache.set(cacheKey, rawResults);
 
   return {
     results: rawResults.map((result) => ({

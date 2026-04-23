@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { LRUCache } from 'lru-cache';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { getCachedJudgment, upsertJudgmentCache } from './db.js';
@@ -7,20 +8,19 @@ import { getCachedJudgment, upsertJudgmentCache } from './db.js';
 // ── Search result cache (in-memory, 5-min TTL) ────────────────────────────────
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_CACHE_MAX = 200;
-const _searchCache = new Map<string, { results: unknown; expiresAt: number }>();
+const searchCache = new LRUCache<string, object>({
+  max: SEARCH_CACHE_MAX,
+  ttl: SEARCH_CACHE_TTL_MS,
+});
 
 function _searchCacheKey(fn: string, params: unknown): string {
   return `${fn}:${JSON.stringify(params)}`;
 }
 function _searchCacheGet<T>(key: string): T | undefined {
-  const entry = _searchCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() > entry.expiresAt) { _searchCache.delete(key); return undefined; }
-  return entry.results as T;
+  return searchCache.get(key) as T | undefined;
 }
 function _searchCacheSet(key: string, results: unknown): void {
-  if (_searchCache.size >= SEARCH_CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value as string);
-  _searchCache.set(key, { results, expiresAt: Date.now() + SEARCH_CACHE_TTL_MS });
+  searchCache.set(key, results as object);
 }
 
 // --- Response types (inferred from AusLaw MCP source) ---

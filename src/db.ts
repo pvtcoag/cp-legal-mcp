@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { LRUCache } from 'lru-cache';
 import { logger } from './logger.js';
 import { encryptToken, hashToken } from './token-utils.js';
 
@@ -8,8 +9,13 @@ let pool: pg.Pool | null = null;
 
 // ── Matter status cache ───────────────────────────────────────────────────────
 // Avoids repeated status lookups on every logMatterQuery call within a 10-minute window.
-const _matterStatusCache = new Map<string, { status: string | null; expiresAt: number }>();
 const MATTER_STATUS_TTL_MS = 10 * 60 * 1000;
+// Status can be null when the matter row doesn't exist, so wrap in an object
+// (LRUCache v11 requires non-null values).
+const matterStatusCache = new LRUCache<string, { status: string | null }>({
+  max: 10_000,
+  ttl: MATTER_STATUS_TTL_MS,
+});
 
 // DB is optional — if DATABASE_URL is not set, matter tracking is silently disabled.
 export function isDbEnabled(): boolean {
@@ -786,7 +792,7 @@ export async function deleteMatter(ref: string): Promise<number> {
     [ref],
   );
   await pool.query('DELETE FROM matters WHERE matter_ref = $1', [ref]);
-  _matterStatusCache.delete(ref);
+  matterStatusCache.delete(ref);
   return r.rowCount ?? 0;
 }
 
@@ -828,20 +834,20 @@ export async function upsertMatter(ref: string, updates: { displayName?: string;
   `, [ref, updates.displayName ?? null, updates.status ?? null, updates.notes !== undefined ? (updates.notes || null) : null]);
   // Invalidate matter status cache when status may have changed
   if (updates.status !== undefined) {
-    _matterStatusCache.delete(ref);
+    matterStatusCache.delete(ref);
   }
 }
 
 export async function isMatterClosed(ref: string): Promise<boolean> {
   if (!pool) return false;
   // Check cache first
-  const cached = _matterStatusCache.get(ref);
-  if (cached && Date.now() < cached.expiresAt) {
+  const cached = matterStatusCache.get(ref);
+  if (cached) {
     return cached.status === 'closed';
   }
   const r = await pool.query<{ status: string }>('SELECT status FROM matters WHERE matter_ref = $1', [ref]);
   const status = r.rows[0]?.status ?? null;
-  _matterStatusCache.set(ref, { status, expiresAt: Date.now() + MATTER_STATUS_TTL_MS });
+  matterStatusCache.set(ref, { status });
   return status === 'closed';
 }
 

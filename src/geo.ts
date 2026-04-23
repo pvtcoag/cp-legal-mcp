@@ -3,25 +3,18 @@
  * Uses ipwho.is (free tier, HTTPS, no API key, 10k req/month).
  */
 
+import { LRUCache } from 'lru-cache';
+
 export interface GeoResult {
   city: string;
   region: string;
   country: string;
 }
 
-// Bounded LRU-ish cache — evicts oldest insertion when full. For CP Legal's
+// Bounded LRU cache — evicts least-recently-used when full. For CP Legal's
 // expected traffic this cap won't be hit, but it guards against
 // pathological fuzzing of the X-Forwarded-For header.
-const GEO_CACHE_MAX = 5_000;
-const geoCache = new Map<string, GeoResult>();
-
-function cacheSet(key: string, value: GeoResult): void {
-  if (geoCache.size >= GEO_CACHE_MAX) {
-    const firstKey = geoCache.keys().next().value;
-    if (firstKey !== undefined) geoCache.delete(firstKey);
-  }
-  geoCache.set(key, value);
-}
+const geoCache = new LRUCache<string, GeoResult>({ max: 5_000 });
 
 const PRIVATE_IP_RE = /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|localhost)/;
 
@@ -49,7 +42,7 @@ export async function getGeoForIp(ip: string | undefined): Promise<GeoResult | n
       region: data.region ?? '',
       country: data.country ?? '',
     };
-    cacheSet(cleanIp, result);
+    geoCache.set(cleanIp, result);
     return result;
   } catch {
     return null;

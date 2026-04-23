@@ -1,5 +1,6 @@
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
+import { LRUCache } from 'lru-cache';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { authMiddleware, buildAuthCache } from './auth.js';
@@ -95,8 +96,11 @@ app.get('/auslaw/health', async (_req, res) => {
 });
 
 // Spend cap cache — 5-minute TTL per user to avoid hammering the DB on every request.
-const spendCapCache = new Map<string, { result: Awaited<ReturnType<typeof checkSpendCap>>; expiresAt: number }>();
 const SPEND_CAP_CACHE_TTL_MS = 5 * 60 * 1000;
+const spendCapCache = new LRUCache<string, Awaited<ReturnType<typeof checkSpendCap>>>({
+  max: 10_000,
+  ttl: SPEND_CAP_CACHE_TTL_MS,
+});
 
 // Spend cap middleware — blocks requests when the user's or global monthly spend cap is exceeded.
 // Runs after auth so res.locals['user'] is set. Fails open on DB errors (logs warning).
@@ -110,8 +114,8 @@ async function spendCapMiddleware(
   try {
     // Check cache first — avoids repeated DB reads within the TTL window
     const cached = spendCapCache.get(user);
-    if (cached && Date.now() < cached.expiresAt) {
-      const cap = cached.result;
+    if (cached) {
+      const cap = cached;
       if (!cap.allowed) {
         const capStr = cap.cap_usd != null ? `$${cap.cap_usd.toFixed(2)}` : 'set limit';
         res.status(429).json({
@@ -124,7 +128,7 @@ async function spendCapMiddleware(
       return;
     }
     const cap = await checkSpendCap(user);
-    spendCapCache.set(user, { result: cap, expiresAt: Date.now() + SPEND_CAP_CACHE_TTL_MS });
+    spendCapCache.set(user, cap);
     if (!cap.allowed) {
       const capStr = cap.cap_usd != null ? `$${cap.cap_usd.toFixed(2)}` : 'set limit';
       res.status(429).json({
