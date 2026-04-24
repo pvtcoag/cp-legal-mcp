@@ -34,6 +34,6 @@ ENV NODE_ENV=production \
 # Portable healthcheck (Railway has its own, but this helps local runs and
 # other orchestrators gate traffic onto a warm container).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/auslaw/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/mcp/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/index.js"]

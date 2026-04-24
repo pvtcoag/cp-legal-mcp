@@ -87,7 +87,7 @@ export function renderAdminShell(data: AdminShellData): string {
     `<a href="${href}" class="sb-link${activePath === href ? ' active' : ''}">${icon}<span>${label}</span></a>`;
 
   const sidebarHtml = user ? `<aside class="sidebar">
-    <a href="/auslaw/admin" class="sb-logo">
+    <a href="/mcp/admin" class="sb-logo">
       <img src="${LOGO_SRC}" alt="CP Legal" onerror="this.style.display='none'">
       <div class="sb-logo-mark" style="display:flex">C</div>
       <div class="sb-wordmark">
@@ -97,18 +97,18 @@ export function renderAdminShell(data: AdminShellData): string {
     </a>
     <nav class="sb-nav">
       <div class="sb-section">Overview</div>
-      ${lnk('/auslaw/admin', 'Dashboard', iconDash)}
+      ${lnk('/mcp/admin', 'Dashboard', iconDash)}
       <div class="sb-section">Management</div>
-      ${lnk('/auslaw/admin/users', 'Users', iconUsers)}
-      ${lnk('/auslaw/admin/matters', 'Matters', iconMatters)}
+      ${lnk('/mcp/admin/users', 'Users', iconUsers)}
+      ${lnk('/mcp/admin/matters', 'Matters', iconMatters)}
       <div class="sb-section">Research</div>
-      ${lnk('/auslaw/admin/watchlist', 'Watchlist', iconWatch)}
+      ${lnk('/mcp/admin/watchlist', 'Watchlist', iconWatch)}
       <div class="sb-section">System</div>
-      ${lnk('/auslaw/admin/config', 'Config', iconConfig)}
-      ${lnk('/auslaw/admin/data', 'Data', iconData)}
-      ${lnk('/auslaw/admin/docs', 'Docs', iconDocs)}
+      ${lnk('/mcp/admin/config', 'Config', iconConfig)}
+      ${lnk('/mcp/admin/data', 'Data', iconData)}
+      ${lnk('/mcp/admin/docs', 'Docs', iconDocs)}
       <div class="sb-section">Navigation</div>
-      ${lnk('/auslaw/matters', 'Research Portal', iconMattersRes)}
+      ${lnk('/mcp/matters', 'Research Portal', iconMattersRes)}
     </nav>
     <div class="sb-footer">
       <div class="sb-user">
@@ -117,7 +117,7 @@ export function renderAdminShell(data: AdminShellData): string {
           <div class="sb-username">${escAttr(user)}</div>
           <div class="sb-role">Admin</div>
         </div>
-        <a href="/auslaw/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
+        <a href="/mcp/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
       </div>
     </div>
   </aside>` : '';

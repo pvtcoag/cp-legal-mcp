@@ -345,7 +345,7 @@ export function renderMattersShell(data: MattersShellData): string {
   const role = isAdminUser ? 'Admin' : 'Researcher';
 
   const navLink = (href: string, label: string, icon: string) =>
-    `<a href="${href}" class="sb-link${activePath === href || (href !== '/auslaw/matters' && activePath?.startsWith(href)) ? ' active' : ''}">${icon}${label}</a>`;
+    `<a href="${href}" class="sb-link${activePath === href || (href !== '/mcp/matters' && activePath?.startsWith(href)) ? ' active' : ''}">${icon}${label}</a>`;
 
   const iconMatters = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
   const iconDash = `<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>`;
@@ -353,7 +353,7 @@ export function renderMattersShell(data: MattersShellData): string {
   const iconLogout = `<svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`;
 
   const sidebar = `<aside class="sidebar">
-    <a href="/auslaw/matters" class="sb-logo">
+    <a href="/mcp/matters" class="sb-logo">
       <img src="${LOGO_SRC}" alt="CP Legal" onerror="this.style.display='none'">
       <div class="sb-logo-mark" style="display:flex">C</div>
       <div class="sb-wordmark">
@@ -363,9 +363,9 @@ export function renderMattersShell(data: MattersShellData): string {
     </a>
     <nav class="sb-nav">
       <div class="sb-section">Research</div>
-      ${navLink('/auslaw/matters/dashboard', 'Dashboard', iconDash)}
-      ${navLink('/auslaw/matters', 'Matters', iconMatters)}
-      ${isAdminUser ? `<div class="sb-section">Administration</div>${navLink('/auslaw/admin', 'Admin Panel', iconAdmin)}` : ''}
+      ${navLink('/mcp/matters/dashboard', 'Dashboard', iconDash)}
+      ${navLink('/mcp/matters', 'Matters', iconMatters)}
+      ${isAdminUser ? `<div class="sb-section">Administration</div>${navLink('/mcp/admin', 'Admin Panel', iconAdmin)}` : ''}
     </nav>
     <div class="sb-footer">
       <div class="sb-user">
@@ -374,7 +374,7 @@ export function renderMattersShell(data: MattersShellData): string {
           <div class="sb-username">${escAttr(user)}</div>
           <div class="sb-role">${role}</div>
         </div>
-        <a href="/auslaw/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
+        <a href="/mcp/matters/logout" class="sb-logout" title="Sign out">${iconLogout}</a>
       </div>
     </div>
   </aside>`;

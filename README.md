@@ -69,15 +69,13 @@ npm start
 
 ## Deploy
 
-Railway builds from the Dockerfile (multi-stage, Node 22 alpine, non-root `nodejs` user, `HEALTHCHECK` against `/auslaw/health`). `railway.toml` pins the build+start commands. Push to `main` triggers a deploy.
-
-Each MCP now runs on its own subdomain under `example.com` (e.g. `mcp.example.com`, `other.example.com`) — the legacy Cloudflare Worker that fronted `mcp.example.com/<slug>` is no longer in use. Route the subdomain directly at the Railway service.
+Railway builds from the Dockerfile (multi-stage, Node 22 alpine, non-root `nodejs` user, `HEALTHCHECK` against `/mcp/health`). `railway.toml` pins the build+start commands. Push to `main` triggers a deploy.
 
 ## Endpoints
 
-- `POST /auslaw/mcp` — MCP Streamable HTTP
-- `/auslaw/health` — liveness
-- `/auslaw/matters` — per-user matter history UI
-- `/auslaw/admin` — admin UI (restricted)
+- `POST /mcp` — MCP Streamable HTTP
+- `/mcp/health` — liveness
+- `/mcp/matters` — per-user matter history UI
+- `/mcp/admin` — admin UI (restricted)
 - `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` — OAuth discovery
 - `/oauth/authorize`, `/oauth/token`, `/oauth/register` — OAuth flow

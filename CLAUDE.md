@@ -118,7 +118,7 @@ Use `search_by_citation` — it resolves faster and returns exact matches.
 
 ## Matter References
 
-Include `matter_ref` in every tool call if one has been established for the current research session. This enables the matter history at `https://mcp.example.com/auslaw/matters` to track all queries against the same matter.
+Include `matter_ref` in every tool call if one has been established for the current research session. This enables the matter history at `https://mcp.example.com/mcp/matters` to track all queries against the same matter.
 
 - Format: alphanumeric, hyphens, underscores, spaces — e.g. `"Smith-2024"`, `"ABC v DEF"`, `"negligence-research"`
 - If no matter ref has been given for this session, omit the field entirely — do not invent one

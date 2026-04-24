@@ -14,7 +14,7 @@ const ConfigSchema = z.object({
 
   // OAuth 2.0 — public base URL of this service (no trailing slash).
   // Used as the issuer in OAuth discovery endpoints and as the WWW-Authenticate realm.
-  OAUTH_ISSUER: z.string().url().default('https://mcp.example.com/auslaw'),
+  OAUTH_ISSUER: z.string().url().default('https://mcp.example.com/mcp'),
 
   // Static OAuth client ID for Claude Web and ChatGPT connectors.
   // Claude Web: enter this value in claude.ai remote MCP settings.

@@ -22,7 +22,7 @@ export const matterRefSchema = z
   .max(100)
   .optional()
   .describe(
-    'Optional matter/file reference to tag this query with for tracking at /auslaw/matters. ' +
+    'Optional matter/file reference to tag this query with for tracking at /mcp/matters. ' +
     'Alphanumeric, hyphens, underscores, slashes, spaces. Max 100 chars.',
   );
 

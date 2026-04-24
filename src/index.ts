@@ -23,7 +23,7 @@ app.use(express.urlencoded({ extended: false, limit: '16kb' })); // OAuth login 
 app.use(oauthRouter);
 
 // CORS — allow any origin so browser-based MCP clients (OpenAI, Cursor, etc.) can connect
-// Scoped inline to the MCP route only (not app.use — avoids matching /auslaw/matters etc.)
+// Scoped inline to the MCP route only (not app.use — avoids matching /mcp/matters etc.)
 const mcpCors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
@@ -49,7 +49,7 @@ app.use(mattersRouter);
 app.use(adminRouter);
 
 // Diagnostic: probe auslaw-mcp — no auth required, safe (read-only connectivity test)
-app.get('/auslaw/health/upstream', async (_req, res) => {
+app.get('/mcp/health/upstream', async (_req, res) => {
   const base = config.AUSLAW_BASE_URL;
   const results: Record<string, unknown> = { base };
 
@@ -84,7 +84,7 @@ app.get('/auslaw/health/upstream', async (_req, res) => {
 
 // Health check — used by Railway to gate traffic onto new deployments.
 // Returns 503 if the DB is unreachable so Railway holds the old deployment live.
-app.get('/auslaw/health', async (_req, res) => {
+app.get('/mcp/health', async (_req, res) => {
   const dbOk = await pingDb();
   const status = !isDbEnabled() || dbOk ? 'ok' : 'degraded';
   res.status(status === 'ok' ? 200 : 503).json({
@@ -178,14 +178,14 @@ function mcpRoute(req: express.Request, res: express.Response): void {
   });
 }
 
-// MCP endpoint at /auslaw — OPTIONS for CORS preflight, then authenticated methods
-app.options('/auslaw', mcpCors);
-app.post('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.get('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
-app.delete('/auslaw', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+// MCP endpoint at /mcp — OPTIONS for CORS preflight, then authenticated methods
+app.options('/mcp', mcpCors);
+app.post('/mcp', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.get('/mcp', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
+app.delete('/mcp', mcpCors, mcpRateLimit, authMiddleware, userRateLimit, spendCapMiddleware, mcpRoute);
 
 // Startup — initialise DB and auth caches BEFORE binding the listener so there
-// is no window where /auslaw accepts requests while auth is still warming.
+// is no window where /mcp accepts requests while auth is still warming.
 async function startup(): Promise<ReturnType<typeof app.listen>> {
   // Pre-register static OAuth client for Claude Web / ChatGPT connectors
   if (config.OAUTH_CLIENT_ID) {

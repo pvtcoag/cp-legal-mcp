@@ -32,7 +32,7 @@ import { decryptToken, verifyToken } from './token-utils.js';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function issuer(): string {
-  return process.env.OAUTH_ISSUER ?? 'https://mcp.example.com/auslaw';
+  return process.env.OAUTH_ISSUER ?? 'https://mcp.example.com/mcp';
 }
 
 /** Map of username → bearer token, built lazily from MCP_AUTH_TOKENS. */
@@ -156,7 +156,7 @@ function renderLoginForm(params: LoginFormParams): string {
     <p class="subtitle">Sign in to authorise access to your research tools.</p>
     ${consent}
     ${errorBlock}
-    <form method="POST" action="/auslaw/oauth/authorize">
+    <form method="POST" action="/mcp/oauth/authorize">
       <input type="hidden" name="client_id" value="${escHtml(clientId)}">
       <input type="hidden" name="redirect_uri" value="${escHtml(redirectUri)}">
       <input type="hidden" name="code_challenge" value="${escHtml(codeChallenge)}">
@@ -244,16 +244,16 @@ function authorizationServerMetadata(_req: Request, res: Response): void {
 }
 
 // RFC 9728 — Protected Resource Metadata
-// Served at both the /auslaw-prefixed path (via Worker routing) and at the
-// unprefixed RFC 8414 paths that some clients discover by convention.
-oauthRouter.get('/auslaw/.well-known/oauth-protected-resource', protectedResourceMetadata);
+// Served at both the /mcp-prefixed path and at the unprefixed RFC 8414 paths
+// that some clients discover by convention.
+oauthRouter.get('/mcp/.well-known/oauth-protected-resource', protectedResourceMetadata);
 oauthRouter.get('/.well-known/oauth-protected-resource', protectedResourceMetadata);
-oauthRouter.get('/.well-known/oauth-protected-resource/auslaw', protectedResourceMetadata);
+oauthRouter.get('/.well-known/oauth-protected-resource/mcp', protectedResourceMetadata);
 
 // RFC 8414 — Authorization Server Metadata
-oauthRouter.get('/auslaw/.well-known/oauth-authorization-server', authorizationServerMetadata);
+oauthRouter.get('/mcp/.well-known/oauth-authorization-server', authorizationServerMetadata);
 oauthRouter.get('/.well-known/oauth-authorization-server', authorizationServerMetadata);
-oauthRouter.get('/.well-known/oauth-authorization-server/auslaw', authorizationServerMetadata);
+oauthRouter.get('/.well-known/oauth-authorization-server/mcp', authorizationServerMetadata);
 
 // RFC 7591 — Dynamic Client Registration
 // Used by ChatGPT, mcp-remote, Cursor, Windsurf, and other MCP clients that
@@ -296,13 +296,13 @@ function dynamicClientRegistration(req: Request, res: Response): void {
   });
 }
 
-oauthRouter.post('/auslaw/oauth/register', dynamicClientRegistration);
+oauthRouter.post('/mcp/oauth/register', dynamicClientRegistration);
 // Alias: some clients POST to /register (no service prefix) per RFC 7591
 oauthRouter.post('/register', dynamicClientRegistration);
 
 // GET /oauth/authorize — Serve login form
 // Parameters come from mcp-remote as query string.
-oauthRouter.get('/auslaw/oauth/authorize', (req: Request, res: Response) => {
+oauthRouter.get('/mcp/oauth/authorize', (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -346,7 +346,7 @@ oauthRouter.get('/auslaw/oauth/authorize', (req: Request, res: Response) => {
 });
 
 // POST /oauth/authorize — Validate credentials, issue code, redirect
-oauthRouter.post('/auslaw/oauth/authorize', oauthLoginRateLimit, async (req: Request, res: Response) => {
+oauthRouter.post('/mcp/oauth/authorize', oauthLoginRateLimit, async (req: Request, res: Response) => {
   const {
     client_id,
     redirect_uri,
@@ -414,7 +414,7 @@ oauthRouter.post('/auslaw/oauth/authorize', oauthLoginRateLimit, async (req: Req
 });
 
 // POST /oauth/token — Exchange code + PKCE verifier for access token
-oauthRouter.post('/auslaw/oauth/token', async (req: Request, res: Response) => {
+oauthRouter.post('/mcp/oauth/token', async (req: Request, res: Response) => {
   const {
     grant_type,
     code,

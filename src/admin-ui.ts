@@ -133,7 +133,7 @@ adminRouter.use(noCache);
 function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   const session = getAdminSession(req);
   if (!session) {
-    res.redirect(`/auslaw/matters/login?next=${encodeURIComponent(req.path)}`);
+    res.redirect(`/mcp/matters/login?next=${encodeURIComponent(req.path)}`);
     return;
   }
   if (!session.isAdmin) {
@@ -142,7 +142,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
         <div style="text-align:center;padding:4rem 2rem">
           <h1 style="font-size:1.5rem;margin-bottom:.5rem">403 — Access Denied</h1>
           <p style="color:var(--txt-2);margin-bottom:1.5rem">Your account does not have admin privileges.</p>
-          <a href="/auslaw/matters" class="btn btn-secondary">← Back to Matters</a>
+          <a href="/mcp/matters" class="btn btn-secondary">← Back to Matters</a>
         </div>
       `, session.user, undefined),
     );
@@ -278,7 +278,7 @@ function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showU
 
 function renderTokenDisplay(token: string): string {
   return `<div style="max-width:560px">
-    <div class="token-explain">This is the user's API token. They use it to authenticate with the CP Legal MCP server at <strong>mcp.example.com/auslaw</strong> — enter it as the password when connecting any MCP client (Claude, ChatGPT, Cursor, etc.). It will not be shown again.</div>
+    <div class="token-explain">This is the user's API token. They use it to authenticate with the CP Legal MCP server at <strong>mcp.example.com/mcp</strong> — enter it as the password when connecting any MCP client (Claude, ChatGPT, Cursor, etc.). It will not be shown again.</div>
     <div class="token-warning">Save this token — it cannot be recovered. Share it with the user via a secure channel.</div>
     <div style="display:flex;align-items:flex-start;gap:.5rem">
       <div class="token-display" id="token-val" style="flex:1">${esc(token)}</div>
@@ -292,12 +292,12 @@ function renderUserRow(u: UserRow): string {
   const statusBadge = u.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
   const lastActive = u.last_active ? fmtDate(u.last_active) : '—';
   return `<tr>
-    <td><a href="/auslaw/admin/users/${encodeURIComponent(u.username)}" style="font-weight:600;color:var(--txt);text-decoration:none">${esc(u.username)}</a></td>
+    <td><a href="/mcp/admin/users/${encodeURIComponent(u.username)}" style="font-weight:600;color:var(--txt);text-decoration:none">${esc(u.username)}</a></td>
     <td>${adminBadge || '<span style="color:var(--txt-3);font-size:.8125rem">User</span>'}</td>
     <td>${statusBadge}</td>
     <td class="date-small">${lastActive}</td>
     <td style="text-align:right">
-      <a href="/auslaw/admin/users/${encodeURIComponent(u.username)}" class="btn btn-secondary btn-sm">View</a>
+      <a href="/mcp/admin/users/${encodeURIComponent(u.username)}" class="btn btn-secondary btn-sm">View</a>
     </td>
   </tr>`;
 }
@@ -305,16 +305,16 @@ function renderUserRow(u: UserRow): string {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // Apply requireAdmin to all /admin routes
-adminRouter.use('/auslaw/admin', requireAdmin);
+adminRouter.use('/mcp/admin', requireAdmin);
 
 // ── GET /admin — Dashboard ────────────────────────────────────────────────────
 
-adminRouter.get('/auslaw/admin', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Admin Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', session.user, '/auslaw/admin'));
+    res.send(page('Admin Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', session.user, '/mcp/admin'));
     return;
   }
 
@@ -384,7 +384,7 @@ adminRouter.get('/auslaw/admin', async (req: Request, res: Response) => {
     <p class="subtitle">System overview and health</p>
 
     <div class="summary-grid">
-      <a href="/auslaw/admin/users" class="card-link">
+      <a href="/mcp/admin/users" class="card-link">
         <div class="card">
           <div class="card-label">Total Users</div>
           <div class="card-value">${stats.total_users}</div>
@@ -403,14 +403,14 @@ adminRouter.get('/auslaw/admin', async (req: Request, res: Response) => {
         <div class="card-label">Errors (24h)</div>
         <div class="card-value" style="${errCountColor}">${stats.error_count_24h}</div>
       </div>
-      <a href="/auslaw/admin/data" class="card-link">
+      <a href="/mcp/admin/data" class="card-link">
         <div class="card">
           <div class="card-label">Judgment Cache</div>
           <div class="card-value">${stats.judgment_cache_count}</div>
           <div class="card-sub">${stats.judgment_cache_mb} MB</div>
         </div>
       </a>
-      <a href="/auslaw/admin/matters" class="card-link">
+      <a href="/mcp/admin/matters" class="card-link">
         <div class="card">
           <div class="card-label">Unique Matters</div>
           <div class="card-value">${(stats as { unique_matters_count: number }).unique_matters_count ?? 0}</div>
@@ -452,12 +452,12 @@ adminRouter.get('/auslaw/admin', async (req: Request, res: Response) => {
     <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       ${renderLoginEventsTable(recentLogins, undefined, true)}
     </div>
-  `, session.user, '/auslaw/admin'));
+  `, session.user, '/mcp/admin'));
 });
 
-// ── GET /auslaw/admin/users — User list ──────────────────────────────────────────────
+// ── GET /mcp/admin/users — User list ──────────────────────────────────────────────
 
-adminRouter.get('/auslaw/admin/users', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/users', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
@@ -473,24 +473,24 @@ adminRouter.get('/auslaw/admin/users', async (req: Request, res: Response) => {
   res.send(page('Users', `
     <div class="actions">
       <h1 style="margin:0">Users</h1>
-      <a href="/auslaw/admin/users/new" class="btn btn-primary" style="margin-left:auto">+ New User</a>
+      <a href="/mcp/admin/users/new" class="btn btn-primary" style="margin-left:auto">+ New User</a>
     </div>
     <p class="subtitle">${users.length} user account${users.length !== 1 ? 's' : ''}</p>
     ${tableHtml}
-  `, session.user, '/auslaw/admin/users'));
+  `, session.user, '/mcp/admin/users'));
 });
 
-// ── GET /auslaw/admin/users/new — New user form ──────────────────────────────────────
+// ── GET /mcp/admin/users/new — New user form ──────────────────────────────────────
 
-adminRouter.get('/auslaw/admin/users/new', (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/users/new', (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('New User', `
-    <a href="/auslaw/admin/users" class="btn-back">← Users</a>
+    <a href="/mcp/admin/users" class="btn-back">← Users</a>
     <h1>New User</h1>
     <p class="subtitle">Create a new user account. A token will be generated — show it to the user once.</p>
     <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.5rem;max-width:480px">
-      <form method="POST" action="/auslaw/admin/users/new">
+      <form method="POST" action="/mcp/admin/users/new">
         <div class="form-group">
           <label for="username">Username</label>
           <input type="text" id="username" name="username" required autocomplete="off" pattern="[a-z0-9_\\-]+" title="Lowercase letters, numbers, hyphens, underscores">
@@ -503,12 +503,12 @@ adminRouter.get('/auslaw/admin/users/new', (req: Request, res: Response) => {
         <button type="submit" class="btn btn-primary">Create User</button>
       </form>
     </div>
-  `, session.user, '/auslaw/admin/users'));
+  `, session.user, '/mcp/admin/users'));
 });
 
-// ── POST /auslaw/admin/users/new — Create user ──────────────────────────────────────
+// ── POST /mcp/admin/users/new — Create user ──────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/new', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/new', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const { username, is_admin } = req.body as Record<string, string | undefined>;
   const cleanUsername = (username ?? '').trim().toLowerCase().replace(/[^a-z0-9_\-]/g, '');
@@ -516,13 +516,13 @@ adminRouter.post('/auslaw/admin/users/new', requireCsrf, async (req: Request, re
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!cleanUsername) {
-    res.status(400).send(page('Error', '<div class="empty">Invalid username.</div>', session.user, '/auslaw/admin/users'));
+    res.status(400).send(page('Error', '<div class="empty">Invalid username.</div>', session.user, '/mcp/admin/users'));
     return;
   }
 
   const existing = isDbEnabled() ? await getUserByUsername(cleanUsername) : null;
   if (existing) {
-    res.status(409).send(page('Error', `<div class="empty">Username "${esc(cleanUsername)}" already exists.</div>`, session.user, '/auslaw/admin/users'));
+    res.status(409).send(page('Error', `<div class="empty">Username "${esc(cleanUsername)}" already exists.</div>`, session.user, '/mcp/admin/users'));
     return;
   }
 
@@ -545,27 +545,27 @@ adminRouter.post('/auslaw/admin/users/new', requireCsrf, async (req: Request, re
   logger.info({ createdBy: session.user, username: cleanUsername, isAdmin }, 'admin: user created');
 
   res.send(page('User Created', `
-    <a href="/auslaw/admin/users" class="btn-back">← Users</a>
+    <a href="/mcp/admin/users" class="btn-back">← Users</a>
     <h1>User Created</h1>
     <p class="subtitle">Account <strong>${esc(cleanUsername)}</strong> has been created.</p>
     ${renderTokenDisplay(token)}
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
-      <a href="/auslaw/admin/users/${encodeURIComponent(cleanUsername)}" class="btn btn-primary">View User →</a>
-      <a href="/auslaw/admin/users/new" class="btn btn-secondary">Create Another</a>
+      <a href="/mcp/admin/users/${encodeURIComponent(cleanUsername)}" class="btn btn-primary">View User →</a>
+      <a href="/mcp/admin/users/new" class="btn btn-secondary">Create Another</a>
     </div>
-  `, session.user, '/auslaw/admin/users'));
+  `, session.user, '/mcp/admin/users'));
 });
 
-// ── GET /auslaw/admin/users/:username — User detail ──────────────────────────────────
+// ── GET /mcp/admin/users/:username — User detail ──────────────────────────────────
 
-adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/users/:username', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   const user = isDbEnabled() ? await getUserByUsername(username) : null;
   if (!user) {
-    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/auslaw/admin/users'));
+    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/mcp/admin/users'));
     return;
   }
 
@@ -594,7 +594,7 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
 
   const queryRows = recentQueries.map((r) => `<tr${r.is_error ? ' class="row-error"' : ''}>
     <td class="date-small">${tsDateTime(r.created_at)}</td>
-    <td><a href="/auslaw/matters/${encodeURIComponent(r.matter_ref)}" style="color:var(--txt);font-weight:600;text-decoration:none">${esc(r.matter_ref)}</a></td>
+    <td><a href="/mcp/matters/${encodeURIComponent(r.matter_ref)}" style="color:var(--txt);font-weight:600;text-decoration:none">${esc(r.matter_ref)}</a></td>
     <td><span class="tag">${esc(r.tool_name)}</span></td>
     <td style="max-width:300px;white-space:pre-wrap;word-break:break-word;color:var(--txt-2)">${esc(r.query_text.slice(0, 200))}</td>
     ${r.is_error ? `<td style="color:var(--err)">${esc(r.error_message ?? 'Error')}</td>` : '<td>—</td>'}
@@ -607,7 +607,7 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
   </div>`;
 
   res.send(page(`User: ${username}`, `
-    <a href="/auslaw/admin/users" class="btn-back">← Users</a>
+    <a href="/mcp/admin/users" class="btn-back">← Users</a>
 
     <div style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap;margin-bottom:1.5rem">
       <div>
@@ -672,7 +672,7 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
         Per-user monthly spend cap (USD). Overrides the global <code>spend_cap_monthly_per_user_usd</code> setting for this user.
         ${user.spend_cap_monthly_usd != null ? `<strong>Current cap: $${user.spend_cap_monthly_usd.toFixed(2)} USD/month.</strong>` : 'No per-user cap set (global setting applies).'}
       </p>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/set-spend-cap" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/set-spend-cap" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
         <input type="number" name="cap_usd" min="0" step="0.01" placeholder="e.g. 50.00"
           value="${user.spend_cap_monthly_usd != null ? user.spend_cap_monthly_usd : ''}"
           style="padding:.5rem .75rem;border:1px solid var(--bdr);border-radius:6px;font-size:.875rem;width:150px;background:var(--surf-2);color:var(--txt)">
@@ -685,7 +685,7 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
     <div class="section-title">Token</div>
     <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">Reveal the current encrypted token for this user. Requires <code>ENCRYPTION_KEY</code> to be set.</p>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/reveal-token">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/reveal-token">
         <button type="submit" class="btn btn-secondary">Reveal Token</button>
       </form>
     </div>
@@ -693,20 +693,20 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
     <div class="section-title">Sessions</div>
     <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:1.5rem">
       <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">Active sessions are cookie-based. Use Force Logout to invalidate all current sessions for this user.</p>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/force-logout">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/force-logout">
         <button type="submit" class="btn btn-secondary">Force Logout All Sessions</button>
       </form>
     </div>
 
     <div class="section-title">Actions</div>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:2rem">
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/rotate-token">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/rotate-token">
         <button type="submit" class="btn btn-secondary">Rotate Token</button>
       </form>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/toggle-admin">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/toggle-admin">
         <button type="submit" class="btn btn-secondary">${user.is_admin ? 'Remove Admin' : 'Grant Admin'}</button>
       </form>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/toggle-active">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/toggle-active">
         <button type="submit" class="btn btn-secondary">${user.is_active ? 'Deactivate' : 'Activate'}</button>
       </form>
     </div>
@@ -716,26 +716,26 @@ adminRouter.get('/auslaw/admin/users/:username', async (req: Request, res: Respo
       <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:.75rem">
         This permanently deletes the user account. To confirm, type the username below.
       </p>
-      <form method="POST" action="/auslaw/admin/users/${encodeURIComponent(username)}/delete" onsubmit="return document.getElementById('du').value==='${esc(username)}'||alert('Username does not match.')&&false">
+      <form method="POST" action="/mcp/admin/users/${encodeURIComponent(username)}/delete" onsubmit="return document.getElementById('du').value==='${esc(username)}'||alert('Username does not match.')&&false">
         <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
           <input type="text" id="du" name="confirm_username" placeholder="${esc(username)}" style="max-width:200px;padding:.5rem .75rem;border:1px solid var(--err-bg);border-radius:6px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
           <button type="submit" class="btn btn-danger btn-sm">Delete User</button>
         </div>
       </form>
     </div>
-  `, session.user, '/auslaw/admin/users'));
+  `, session.user, '/mcp/admin/users'));
 });
 
-// ── POST /auslaw/admin/users/:username/rotate-token ──────────────────────────────────
+// ── POST /mcp/admin/users/:username/rotate-token ──────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/rotate-token', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/rotate-token', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   const user = isDbEnabled() ? await getUserByUsername(username) : null;
   if (!user) {
-    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/auslaw/admin/users'));
+    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/mcp/admin/users'));
     return;
   }
 
@@ -750,38 +750,38 @@ adminRouter.post('/auslaw/admin/users/:username/rotate-token', requireCsrf, asyn
   logger.info({ rotatedBy: session.user, username }, 'admin: token rotated');
 
   res.send(page('Token Rotated', `
-    <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+    <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
     <h1>Token Rotated</h1>
     <p class="subtitle">New token for <strong>${esc(username)}</strong>. Share via a secure channel.</p>
     ${renderTokenDisplay(token)}
     <p style="font-size:.875rem;color:var(--txt-2);margin:.5rem 0 1.25rem">The previous token is now invalid.</p>
-    <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn btn-primary">Back to User →</a>
-  `, session.user, '/auslaw/admin/users'));
+    <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn btn-primary">Back to User →</a>
+  `, session.user, '/mcp/admin/users'));
 });
 
 // ── POST /admin/users/:username/reveal-token ──────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/reveal-token', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/reveal-token', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   const user = isDbEnabled() ? await getUserByUsername(username) : null;
   if (!user) {
-    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/auslaw/admin/users'));
+    res.status(404).send(page('Not Found', '<div class="empty">User not found.</div>', session.user, '/mcp/admin/users'));
     return;
   }
 
   const encKey = process.env.ENCRYPTION_KEY?.trim();
   if (!encKey || !user.token_encrypted) {
     res.send(page('Reveal Token', `
-      <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+      <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
       <h1>Token Not Available</h1>
       <div style="max-width:520px">
         <div class="token-warning">${!encKey ? 'ENCRYPTION_KEY is not set on this deployment.' : 'No encrypted token stored — rotate the token to generate one.'} Rotate the token to generate a new encrypted copy.</div>
-        <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn btn-secondary" style="margin-top:1rem">Back to User</a>
+        <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn btn-secondary" style="margin-top:1rem">Back to User</a>
       </div>
-    `, session.user, '/auslaw/admin/users'));
+    `, session.user, '/mcp/admin/users'));
     return;
   }
 
@@ -790,10 +790,10 @@ adminRouter.post('/auslaw/admin/users/:username/reveal-token', requireCsrf, asyn
     revealed = decryptToken(user.token_encrypted, encKey);
   } catch {
     res.send(page('Reveal Token', `
-      <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+      <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
       <h1>Decryption Failed</h1>
       <div class="token-warning" style="max-width:520px">Could not decrypt token — the ENCRYPTION_KEY may have changed. Rotate the token to generate a fresh encrypted copy.</div>
-    `, session.user, '/auslaw/admin/users'));
+    `, session.user, '/mcp/admin/users'));
     return;
   }
 
@@ -801,16 +801,16 @@ adminRouter.post('/auslaw/admin/users/:username/reveal-token', requireCsrf, asyn
   logger.info({ revealedBy: session.user, username }, 'admin: token revealed');
 
   res.send(page('Token Revealed', `
-    <a href="/auslaw/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
+    <a href="/mcp/admin/users/${encodeURIComponent(username)}" class="btn-back">← ${esc(username)}</a>
     <h1>Current Token — ${esc(username)}</h1>
     ${renderTokenDisplay(revealed)}
     <a href="/admin/users/${encodeURIComponent(username)}" class="btn btn-secondary" style="margin-top:1rem">Back to User</a>
-  `, session.user, '/auslaw/admin/users'));
+  `, session.user, '/mcp/admin/users'));
 });
 
 // ── POST /admin/users/:username/toggle-admin ──────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/toggle-admin', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/toggle-admin', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
 
@@ -821,12 +821,12 @@ adminRouter.post('/auslaw/admin/users/:username/toggle-admin', requireCsrf, asyn
   await updateUserAdmin(username, newAdminState);
   logLoginEvent({ username: session.user, eventType: 'admin_action', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { action: 'toggle_admin', target_user: username, new_value: newAdminState } }).catch(() => {/* ignore */});
   logger.info({ changedBy: session.user, username, isAdmin: newAdminState }, 'admin: toggled admin');
-  res.redirect(`/auslaw/admin/users/${encodeURIComponent(username)}`);
+  res.redirect(`/mcp/admin/users/${encodeURIComponent(username)}`);
 });
 
-// ── POST /auslaw/admin/users/:username/toggle-active ─────────────────────────────────
+// ── POST /mcp/admin/users/:username/toggle-active ─────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/toggle-active', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/toggle-active', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
 
@@ -838,19 +838,19 @@ adminRouter.post('/auslaw/admin/users/:username/toggle-active', requireCsrf, asy
   await refreshAuthCache(); // refresh cache so deactivated users lose access immediately
   logLoginEvent({ username: session.user, eventType: 'admin_action', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { action: 'toggle_active', target_user: username, new_value: newActiveState } }).catch(() => {/* ignore */});
   logger.info({ changedBy: session.user, username, isActive: newActiveState }, 'admin: toggled active');
-  res.redirect(`/auslaw/admin/users/${encodeURIComponent(username)}`);
+  res.redirect(`/mcp/admin/users/${encodeURIComponent(username)}`);
 });
 
-// ── POST /auslaw/admin/users/:username/delete ────────────────────────────────────────
+// ── POST /mcp/admin/users/:username/delete ────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/delete', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/delete', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
   const { confirm_username } = req.body as Record<string, string | undefined>;
 
   if (!confirm_username || confirm_username.trim() !== username) {
     res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8').send(
-      page('Error', '<div class="empty">Username confirmation did not match.</div>', session.user, '/auslaw/admin/users'),
+      page('Error', '<div class="empty">Username confirmation did not match.</div>', session.user, '/mcp/admin/users'),
     );
     return;
   }
@@ -858,12 +858,12 @@ adminRouter.post('/auslaw/admin/users/:username/delete', requireCsrf, async (req
   await deleteUser(username);
   await refreshAuthCache();
   logger.info({ deletedBy: session.user, username }, 'admin: user deleted');
-  res.redirect('/auslaw/admin/users');
+  res.redirect('/mcp/admin/users');
 });
 
 // ── POST /admin/users/:username/force-logout ──────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/force-logout', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/force-logout', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
 
@@ -875,12 +875,12 @@ adminRouter.post('/auslaw/admin/users/:username/force-logout', requireCsrf, asyn
 
   logLoginEvent({ username, eventType: 'force_logout', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']), meta: { forced_by: session.user, target_user: username } }).catch(() => {/* ignore */});
   logger.info({ forcedBy: session.user, username }, 'admin: force-logged-out all sessions');
-  res.redirect(`/auslaw/admin/users/${encodeURIComponent(username)}`);
+  res.redirect(`/mcp/admin/users/${encodeURIComponent(username)}`);
 });
 
-// ── POST /auslaw/admin/users/:username/set-spend-cap ─────────────────────────────────
+// ── POST /mcp/admin/users/:username/set-spend-cap ─────────────────────────────────
 
-adminRouter.post('/auslaw/admin/users/:username/set-spend-cap', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/users/:username/set-spend-cap', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const username = decodeURIComponent(req.params['username'] as string ?? '');
   const { cap_usd } = req.body as Record<string, string | undefined>;
@@ -890,10 +890,10 @@ adminRouter.post('/auslaw/admin/users/:username/set-spend-cap', requireCsrf, asy
     await setUserSpendCap(username, cap !== null && !isNaN(cap) ? cap : null);
   }
   logger.info({ changedBy: session.user, username, cap }, 'admin: set per-user spend cap');
-  res.redirect(`/auslaw/admin/users/${encodeURIComponent(username)}`);
+  res.redirect(`/mcp/admin/users/${encodeURIComponent(username)}`);
 });
 
-// ── GET /auslaw/admin/config — Configuration ─────────────────────────────────────────
+// ── GET /mcp/admin/config — Configuration ─────────────────────────────────────────
 
 const DEFAULT_CONFIG_KEYS = [
   { key: 'default_matter_ref',              description: 'Default matter reference for untagged queries', defaultValue: config.DEFAULT_MATTER_REF ?? '' },
@@ -904,12 +904,12 @@ const DEFAULT_CONFIG_KEYS = [
   { key: 'spend_alert_threshold_pct',       description: 'Spend alert threshold — log a warning when a user reaches this % of their cap (default: 80)', defaultValue: '80' },
 ];
 
-adminRouter.get('/auslaw/admin/config', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/config', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Config', '<div class="empty">Database not enabled.</div>', session.user, '/auslaw/admin/config'));
+    res.send(page('Config', '<div class="empty">Database not enabled.</div>', session.user, '/mcp/admin/config'));
     return;
   }
 
@@ -983,7 +983,7 @@ adminRouter.get('/auslaw/admin/config', async (req: Request, res: Response) => {
 
     <div id="edit-panel" style="display:none;background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem;max-width:480px">
       <h2 style="font-size:.9375rem;margin-bottom:.875rem">Edit Config</h2>
-      <form method="POST" action="/auslaw/admin/config">
+      <form method="POST" action="/mcp/admin/config">
         <input type="hidden" id="edit-key" name="key">
         <div class="form-group">
           <label id="edit-label">Value</label>
@@ -1033,28 +1033,28 @@ adminRouter.get('/auslaw/admin/config', async (req: Request, res: Response) => {
         ${config.RECOVERY_TOKEN ? '<span style="color:var(--ok);font-weight:600">&#x2713; Recovery token is configured</span>' : '<span style="color:var(--txt-2)">Not configured — add RECOVERY_TOKEN env var to enable</span>'}
       </p>
     </div>
-  `, session.user, '/auslaw/admin/config'));
+  `, session.user, '/mcp/admin/config'));
 });
 
 // ── POST /admin/config ────────────────────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/config', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/config', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const { key, value } = req.body as Record<string, string | undefined>;
   if (!key) { res.status(400).send('Missing key'); return; }
   await setAppConfig(key, value ?? '', session.user);
   logger.info({ changedBy: session.user, key }, 'admin: config updated');
-  res.redirect('/auslaw/admin/config');
+  res.redirect('/mcp/admin/config');
 });
 
 // ── GET /admin/data — Data management ────────────────────────────────────────
 
-adminRouter.get('/auslaw/admin/data', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/data', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Data Management', '<div class="empty">Database not enabled.</div>', session.user, '/auslaw/admin/data'));
+    res.send(page('Data Management', '<div class="empty">Database not enabled.</div>', session.user, '/mcp/admin/data'));
     return;
   }
 
@@ -1090,7 +1090,7 @@ adminRouter.get('/auslaw/admin/data', async (req: Request, res: Response) => {
 
     <div class="section-title">Retention Settings</div>
     <p style="font-size:.875rem;color:var(--txt-2);margin-bottom:1rem">
-      Adjust in <a href="/auslaw/admin/config">Configuration</a>:
+      Adjust in <a href="/mcp/admin/config">Configuration</a>:
       <code>judgment_cache_ttl_days</code> (current: ${esc(cacheRetention ?? '30')}),
       <code>matter_retention_days</code> (current: ${esc(matterRetention ?? '365')}).
     </p>
@@ -1101,7 +1101,7 @@ adminRouter.get('/auslaw/admin/data', async (req: Request, res: Response) => {
       <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Purge Matter Queries</h2>
         <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Delete matter queries older than N days.</p>
-        <form method="POST" action="/auslaw/admin/data/purge-queries">
+        <form method="POST" action="/mcp/admin/data/purge-queries">
           <div style="display:flex;gap:.75rem;align-items:center">
             <input type="number" name="days" value="${esc(matterRetention ?? '365')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid var(--bdr);border-radius:5px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
             <span style="font-size:.875rem;color:var(--txt-2)">days old</span>
@@ -1113,7 +1113,7 @@ adminRouter.get('/auslaw/admin/data', async (req: Request, res: Response) => {
       <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Purge Judgment Cache</h2>
         <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Delete judgment cache entries older than N days.</p>
-        <form method="POST" action="/auslaw/admin/data/purge-cache">
+        <form method="POST" action="/mcp/admin/data/purge-cache">
           <div style="display:flex;gap:.75rem;align-items:center">
             <input type="number" name="days" value="${esc(cacheRetention ?? '30')}" min="1" max="9999" style="width:100px;padding:.4rem .6rem;border:1px solid var(--bdr);border-radius:5px;font-size:.875rem;background:var(--surf-2);color:var(--txt)">
             <span style="font-size:.875rem;color:var(--txt-2)">days old</span>
@@ -1125,61 +1125,61 @@ adminRouter.get('/auslaw/admin/data', async (req: Request, res: Response) => {
       <div style="background:var(--surface);border:1px solid var(--bdr);border-radius:8px;padding:1.25rem">
         <h2 style="font-size:.9375rem;margin-bottom:.5rem">Clear All Judgment Cache</h2>
         <p style="font-size:.8125rem;color:var(--txt-2);margin-bottom:1rem">Remove all ${stats.judgment_cache_count} cached judgments. They will be re-fetched on demand.</p>
-        <form method="POST" action="/auslaw/admin/data/purge-cache-all">
+        <form method="POST" action="/mcp/admin/data/purge-cache-all">
           <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Clear ALL ${stats.judgment_cache_count} judgment cache entries?')">Clear All Cache</button>
         </form>
       </div>
     </div>
-  `, session.user, '/auslaw/admin/data'));
+  `, session.user, '/mcp/admin/data'));
 });
 
 // ── POST /admin/data/purge-queries ────────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/data/purge-queries', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/data/purge-queries', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const days = parseInt((req.body as Record<string, string>)['days'] ?? '365', 10);
   if (!days || days < 1) { res.status(400).send('Invalid days'); return; }
   const deleted = await purgeOldMatterQueries(days);
   logger.info({ deletedBy: session.user, days, deleted }, 'admin: purged matter queries');
-  res.redirect(`/auslaw/admin/data?msg=Deleted+${deleted}+matter+queries+older+than+${days}+days`);
+  res.redirect(`/mcp/admin/data?msg=Deleted+${deleted}+matter+queries+older+than+${days}+days`);
 });
 
 // ── POST /admin/data/purge-cache ──────────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/data/purge-cache', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/data/purge-cache', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const days = parseInt((req.body as Record<string, string>)['days'] ?? '30', 10);
   if (!days || days < 1) { res.status(400).send('Invalid days'); return; }
   const deleted = await purgeOldJudgmentCache(days);
   logger.info({ deletedBy: session.user, days, deleted }, 'admin: purged judgment cache');
-  res.redirect(`/auslaw/admin/data?msg=Deleted+${deleted}+judgment+cache+entries+older+than+${days}+days`);
+  res.redirect(`/mcp/admin/data?msg=Deleted+${deleted}+judgment+cache+entries+older+than+${days}+days`);
 });
 
 // ── POST /admin/data/purge-cache-all ─────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/data/purge-cache-all', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/data/purge-cache-all', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const deleted = await purgeAllJudgmentCache();
   logger.info({ deletedBy: session.user, deleted }, 'admin: cleared all judgment cache');
-  res.redirect(`/auslaw/admin/data?msg=Cleared+all+judgment+cache+(${deleted}+entries)`);
+  res.redirect(`/mcp/admin/data?msg=Cleared+all+judgment+cache+(${deleted}+entries)`);
 });
 
 // ── POST /admin/matters/:ref/delete ──────────────────────────────────────────
 
-adminRouter.post('/auslaw/admin/matters/:ref/delete', requireCsrf, async (req: Request, res: Response) => {
+adminRouter.post('/mcp/admin/matters/:ref/delete', requireCsrf, async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   const ref = decodeURIComponent(req.params['ref'] as string ?? '');
 
   if (!ref) {
     res.status(400).setHeader('Content-Type', 'text/html; charset=utf-8').send(
-      page('Error', '<div class="empty">Invalid matter reference.</div>', session.user, '/auslaw/admin/matters'),
+      page('Error', '<div class="empty">Invalid matter reference.</div>', session.user, '/mcp/admin/matters'),
     );
     return;
   }
 
   const deleted = await deleteMatter(ref);
   logger.info({ deletedBy: session.user, ref, queriesDeleted: deleted }, 'admin: matter deleted');
-  res.redirect(`/auslaw/admin/matters?msg=${encodeURIComponent(`Deleted matter "${ref}" (${deleted} queries removed)`)}`);
+  res.redirect(`/mcp/admin/matters?msg=${encodeURIComponent(`Deleted matter "${ref}" (${deleted} queries removed)`)}`);
 });
 
 // ── GET /admin/matters — Matter list ──────────────────────────────────────────
@@ -1189,12 +1189,12 @@ function estMatterCostUsd(tokens: number): number {
   return (tokens / 1_000_000) * 1.25;
 }
 
-adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/matters', async (req: Request, res: Response) => {
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Matters', '<div class="empty">Database not enabled.</div>', session.user, '/auslaw/admin/matters'));
+    res.send(page('Matters', '<div class="empty">Database not enabled.</div>', session.user, '/mcp/admin/matters'));
     return;
   }
 
@@ -1222,12 +1222,12 @@ adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => 
       : esc(m.matter_ref);
     const activeUsers = (m.active_users ?? []).join(', ') || '—';
     const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
-    const deleteBtn = `<form method="POST" action="/auslaw/admin/matters/${encodeURIComponent(m.matter_ref)}/delete" style="display:inline" onsubmit="return confirm('Permanently delete matter \\'${esc(m.matter_ref)}\\' and all ${m.query_count} queries? This cannot be undone.')">
+    const deleteBtn = `<form method="POST" action="/mcp/admin/matters/${encodeURIComponent(m.matter_ref)}/delete" style="display:inline" onsubmit="return confirm('Permanently delete matter \\'${esc(m.matter_ref)}\\' and all ${m.query_count} queries? This cannot be undone.')">
       <button type="submit" class="btn btn-danger btn-sm" style="padding:.2rem .5rem;font-size:.75rem">Delete</button>
     </form>`;
     return `<tr>
       <td style="font-weight:600;font-family:ui-monospace,monospace;font-size:.875rem">
-        <a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--txt);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
+        <a href="/mcp/matters/${encodeURIComponent(m.matter_ref)}" style="color:var(--txt);text-decoration:none">${displayLabel}</a>${statusBadge}${copyBtn}
       </td>
       <td class="date-small">${m.creator ? esc(m.creator) : '—'}</td>
       <td class="date-small">${tsDateTime(m.first_seen)}</td>
@@ -1263,24 +1263,24 @@ adminRouter.get('/auslaw/admin/matters', async (req: Request, res: Response) => 
     ${flashMsg}
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.25rem">
       <h1 style="margin-bottom:0">Matters</h1>
-      <a href="/auslaw/admin/billing-export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>
+      <a href="/mcp/admin/billing-export.csv" class="btn btn-secondary btn-sm" style="font-size:.8125rem">⬇ Export all billing (CSV)</a>
     </div>
     <p class="subtitle">${matters.length} matter${matters.length !== 1 ? 's' : ''} on record, sorted by last activity</p>
     ${periodTabHtml}
     ${tableHtml}
-  `, session.user, '/auslaw/admin/matters'));
+  `, session.user, '/mcp/admin/matters'));
 });
 
 // ── Precedent watchlist ───────────────────────────────────────────────────────
 
-adminRouter.get('/auslaw/admin/watchlist', requireAdmin, async (req, res) => {
+adminRouter.get('/mcp/admin/watchlist', requireAdmin, async (req, res) => {
   const entries = await listWatchlist().catch(() => [] as WatchlistEntry[]);
   const session = getAdminSession(req)!;
   res.setHeader('Content-Type', 'text/html; charset=utf-8').send(
     page('Precedent Watchlist', `
       <div class="card" style="margin-bottom:1.5rem">
         <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Add to Watchlist</h2>
-        <form method="POST" action="/auslaw/admin/watchlist/add" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
+        <form method="POST" action="/mcp/admin/watchlist/add" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
           <div>
             <label style="display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem">Neutral Citation</label>
             <input type="text" name="citation" placeholder="[2024] HCA 12" required style="padding:.5rem .75rem;border:1px solid var(--bdr);border-radius:6px;font-size:.875rem;width:240px;background:var(--surf-2);color:var(--txt)">
@@ -1305,7 +1305,7 @@ adminRouter.get('/auslaw/admin/watchlist', requireAdmin, async (req, res) => {
                 <td style="font-size:.8125rem;color:var(--txt-2)">${e.last_checked ? fmtDateTime(e.last_checked) : '—'}</td>
                 <td style="text-align:center">${e.last_count > 0 ? `<span class="badge-active" style="font-size:.75rem">${e.last_count}</span>` : '—'}</td>
                 <td>
-                  <form method="POST" action="/auslaw/admin/watchlist/remove" style="display:inline">
+                  <form method="POST" action="/mcp/admin/watchlist/remove" style="display:inline">
                     <input type="hidden" name="citation" value="${esc(e.citation)}">
                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Remove ${esc(e.citation)} from watchlist?')">Remove</button>
                   </form>
@@ -1315,28 +1315,28 @@ adminRouter.get('/auslaw/admin/watchlist', requireAdmin, async (req, res) => {
           </tbody>
         </table></div>`}
       </div>
-    `, session.user, '/auslaw/admin/watchlist')
+    `, session.user, '/mcp/admin/watchlist')
   );
 });
 
-adminRouter.post('/auslaw/admin/watchlist/add', requireAdmin, requireCsrf, async (req, res) => {
+adminRouter.post('/mcp/admin/watchlist/add', requireAdmin, requireCsrf, async (req, res) => {
   const { citation, label } = req.body as Record<string, string | undefined>;
   if (citation?.trim()) {
     const session = getAdminSession(req)!;
     await addWatchlistEntry(citation.trim(), label?.trim() || undefined, session.user).catch(() => {});
   }
-  res.redirect('/auslaw/admin/watchlist');
+  res.redirect('/mcp/admin/watchlist');
 });
 
-adminRouter.post('/auslaw/admin/watchlist/remove', requireAdmin, requireCsrf, async (req, res) => {
+adminRouter.post('/mcp/admin/watchlist/remove', requireAdmin, requireCsrf, async (req, res) => {
   const { citation } = req.body as Record<string, string | undefined>;
   if (citation?.trim()) await removeWatchlistEntry(citation.trim()).catch(() => {});
-  res.redirect('/auslaw/admin/watchlist');
+  res.redirect('/mcp/admin/watchlist');
 });
 
 // ── Docs ──────────────────────────────────────────────────────────────────────
 
-adminRouter.get('/auslaw/admin/docs', requireAdmin, (_req: Request, res: Response) => {
+adminRouter.get('/mcp/admin/docs', requireAdmin, (_req: Request, res: Response) => {
   try {
     const docsPath = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'docs', 'reference.html');
     const html = readFileSync(docsPath, 'utf8');
@@ -1347,9 +1347,9 @@ adminRouter.get('/auslaw/admin/docs', requireAdmin, (_req: Request, res: Respons
         `<div style="text-align:center;padding:4rem 2rem">
           <h1 style="font-size:1.5rem;margin-bottom:.5rem">Documentation Unavailable</h1>
           <p style="color:var(--txt-2);margin-bottom:1.5rem">The reference documentation file could not be found. Ensure the <code>docs/</code> directory is present in the deployment.</p>
-          <a href="/auslaw/admin" class="btn btn-secondary">← Back to Dashboard</a>
+          <a href="/mcp/admin" class="btn btn-secondary">← Back to Dashboard</a>
         </div>`,
-        undefined, '/auslaw/admin/docs'),
+        undefined, '/mcp/admin/docs'),
     );
   }
 });

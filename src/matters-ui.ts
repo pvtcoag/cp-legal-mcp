@@ -399,12 +399,12 @@ function getSessionIsAdmin(req: Request): boolean {
 function setSessionCookie(res: Response, user: string, isAdminUser: boolean): void {
   const sv = sessionVersionCache.get(user) ?? 0;
   res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser, sv))}; HttpOnly; Secure; SameSite=Strict; Path=/auslaw; Max-Age=${8 * 3600}`);
+    `${COOKIE}=${encodeURIComponent(signSession(user, isAdminUser, sv))}; HttpOnly; Secure; SameSite=Strict; Path=/mcp; Max-Age=${8 * 3600}`);
 }
 
 function clearSessionCookie(res: Response): void {
   res.setHeader('Set-Cookie',
-    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/auslaw; Max-Age=0`);
+    `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/mcp; Max-Age=0`);
 }
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ async function validateCredentials(username: string, token: string): Promise<{ i
 
 function requireSession(req: Request, res: Response, next: NextFunction): void {
   if (!getSessionUser(req)) {
-    res.redirect(`/auslaw/matters/login?next=${encodeURIComponent(req.path)}`);
+    res.redirect(`/mcp/matters/login?next=${encodeURIComponent(req.path)}`);
     return;
   }
   next();
@@ -694,11 +694,11 @@ function renderFilterBar(params: {
 // Apply no-cache to all /matters routes to prevent Cloudflare and browser caching
 mattersRouter.use(noCache);
 
-// GET /auslaw/matters/login
-mattersRouter.get('/auslaw/matters/login', (req: Request, res: Response) => {
-  if (getSessionUser(req)) { res.redirect('/auslaw/matters'); return; }
+// GET /mcp/matters/login
+mattersRouter.get('/mcp/matters/login', (req: Request, res: Response) => {
+  if (getSessionUser(req)) { res.redirect('/mcp/matters'); return; }
   const hasError = !!req.query['error'];
-  const next = typeof req.query['next'] === 'string' ? req.query['next'] : '/auslaw/matters';
+  const next = typeof req.query['next'] === 'string' ? req.query['next'] : '/mcp/matters';
   const error = hasError ? 'Incorrect username or token. Please try again.' : '';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Sign in', `
@@ -715,7 +715,7 @@ mattersRouter.get('/auslaw/matters/login', (req: Request, res: Response) => {
         <div class="login-title">Welcome back</div>
         <div class="login-sub">Sign in to your research workspace</div>
         ${error ? `<div class="error-box">${esc(error)}</div>` : ''}
-        <form method="post" action="/auslaw/matters/login">
+        <form method="post" action="/mcp/matters/login">
           <input type="hidden" name="next" value="${esc(next)}">
           <div class="form-group">
             <label for="u">Username</label>
@@ -743,12 +743,12 @@ const loginRateLimiter = rateLimit({
   skipSuccessfulRequests: true, // only count failed/processing attempts toward the limit
 });
 
-// POST /auslaw/matters/login
-mattersRouter.post('/auslaw/matters/login', loginRateLimiter, async (req: Request, res: Response) => {
+// POST /mcp/matters/login
+mattersRouter.post('/mcp/matters/login', loginRateLimiter, async (req: Request, res: Response) => {
   const { username, password, next } = req.body as Record<string, string | undefined>;
   const user = (username ?? '').trim().toLowerCase();
   const token = (password ?? '').trim();
-  const redirectTo = typeof next === 'string' && (next.startsWith('/auslaw/matters') || next.startsWith('/auslaw/admin')) ? next : '/auslaw/matters';
+  const redirectTo = typeof next === 'string' && (next.startsWith('/mcp/matters') || next.startsWith('/mcp/admin')) ? next : '/mcp/matters';
 
   const validResult = await validateCredentials(user, token);
 
@@ -789,7 +789,7 @@ mattersRouter.post('/auslaw/matters/login', loginRateLimiter, async (req: Reques
         meta: geo ? { city: geo.city, region: geo.region, country: geo.country } : undefined,
       }).catch(() => {/* ignore */});
     }).catch(() => {/* ignore */});
-    res.redirect('/auslaw/matters/login?error=1');
+    res.redirect('/mcp/matters/login?error=1');
     return;
   }
   setSessionCookie(res, user, validResult.isAdmin);
@@ -808,24 +808,24 @@ mattersRouter.post('/auslaw/matters/login', loginRateLimiter, async (req: Reques
   res.redirect(redirectTo);
 });
 
-// GET /auslaw/matters/logout
-mattersRouter.get('/auslaw/matters/logout', (req: Request, res: Response) => {
+// GET /mcp/matters/logout
+mattersRouter.get('/mcp/matters/logout', (req: Request, res: Response) => {
   const user = getSessionUser(req);
   if (user) {
     logLoginEvent({ username: user, eventType: 'logout', ip: clientIp(req), userAgent: req.headers['user-agent'], clientName: parseClientName(req.headers['user-agent']) }).catch(() => {/* ignore */});
   }
   clearSessionCookie(res);
-  res.redirect('/auslaw/matters/login');
+  res.redirect('/mcp/matters/login');
 });
 
-// GET /auslaw/matters/dashboard
-mattersRouter.get('/auslaw/matters/dashboard', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/dashboard
+mattersRouter.get('/mcp/matters/dashboard', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/auslaw/matters/dashboard', undefined, userIsAdmin));
+    res.send(page('Dashboard', '<div class="empty">Database not enabled on this deployment.</div>', user, '/mcp/matters/dashboard', undefined, userIsAdmin));
     return;
   }
 
@@ -880,7 +880,7 @@ mattersRouter.get('/auslaw/matters/dashboard', requireSession, async (req: Reque
           ${recentActivity.map((r) => `
             <tr${r.is_error ? ' class="row-error"' : ''}>
               <td class="date-small">${tsDateTime(r.created_at)}</td>
-              <td><a href="/auslaw/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
+              <td><a href="/mcp/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.matter_ref)}</a></td>
               <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
               <td class="users-cell">${esc(r.user_id ?? '—')}</td>
               <td style="white-space:pre-wrap;word-break:break-word;color:var(--txt-2);max-width:380px">${esc(r.query_text)}</td>
@@ -896,7 +896,7 @@ mattersRouter.get('/auslaw/matters/dashboard', requireSession, async (req: Reque
   });
 
   const errorAlertBanner = userIsAdmin && errorStats.some((e) => e.error_rate_pct > 10)
-    ? `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r);padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:var(--warn)">⚠️ Some tools have elevated error rates. <a href="/auslaw/admin" style="color:var(--warn);font-weight:600">View in Admin →</a></div>`
+    ? `<div style="background:var(--warn-bg);border:1px solid var(--warn);border-radius:var(--r);padding:.75rem 1rem;margin-bottom:1rem;font-size:.875rem;color:var(--warn)">⚠️ Some tools have elevated error rates. <a href="/mcp/admin" style="color:var(--warn);font-weight:600">View in Admin →</a></div>`
     : '';
 
   res.send(page('Dashboard', `
@@ -913,17 +913,17 @@ mattersRouter.get('/auslaw/matters/dashboard', requireSession, async (req: Reque
     ${userIsAdmin ? renderPopularCases(popularCases) : ''}
     ${renderErrorStats(errorStats)}
     ${recentHtml}
-  `, user, '/auslaw/matters/dashboard', undefined, userIsAdmin));
+  `, user, '/mcp/matters/dashboard', undefined, userIsAdmin));
 });
 
-// GET /auslaw/matters — matter list
-mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters — matter list
+mattersRouter.get('/mcp/matters', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (!isDbEnabled()) {
-    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/auslaw/matters', undefined, userIsAdmin));
+    res.send(page('Matters', '<div class="empty">Database not enabled on this deployment.</div>', user, '/mcp/matters', undefined, userIsAdmin));
     return;
   }
 
@@ -947,7 +947,7 @@ mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: R
     if (fromDate) params.set('from', fromDate);
     if (toDate)   params.set('to', toDate);
     params.set('sort', s);
-    return `/auslaw/matters?${params.toString()}`;
+    return `/mcp/matters?${params.toString()}`;
   };
 
   // Admin: default to all matters; can filter by user via ?user=
@@ -958,16 +958,16 @@ mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: R
   // Admin user toggle tabs
   const segTabs = userIsAdmin
     ? `<div class="seg-tabs no-print">
-        <a href="/auslaw/matters" class="seg-tab${!viewUser ? ' active' : ''}">All Matters</a>
-        ${allUsers.map((u) => `<a href="/auslaw/matters?user=${encodeURIComponent(u)}" class="seg-tab${viewUser === u ? ' active' : ''}">${esc(u)}</a>`).join('')}
+        <a href="/mcp/matters" class="seg-tab${!viewUser ? ' active' : ''}">All Matters</a>
+        ${allUsers.map((u) => `<a href="/mcp/matters?user=${encodeURIComponent(u)}" class="seg-tab${viewUser === u ? ' active' : ''}">${esc(u)}</a>`).join('')}
       </div>`
     : '';
 
   // Status filter tabs
   const statusTabs = `<div class="seg-tabs no-print" style="margin-bottom:.75rem">
-    <a href="/auslaw/matters${viewUser ? `?user=${encodeURIComponent(viewUser)}` : ''}" class="seg-tab${!statusFilter || statusFilter === 'all' ? ' active' : ''}">All</a>
-    <a href="/auslaw/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=open" class="seg-tab${statusFilter === 'open' ? ' active' : ''}">Open</a>
-    <a href="/auslaw/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=closed" class="seg-tab${statusFilter === 'closed' ? ' active' : ''}">Closed</a>
+    <a href="/mcp/matters${viewUser ? `?user=${encodeURIComponent(viewUser)}` : ''}" class="seg-tab${!statusFilter || statusFilter === 'all' ? ' active' : ''}">All</a>
+    <a href="/mcp/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=open" class="seg-tab${statusFilter === 'open' ? ' active' : ''}">Open</a>
+    <a href="/mcp/matters?${viewUser ? `user=${encodeURIComponent(viewUser)}&` : ''}status=closed" class="seg-tab${statusFilter === 'closed' ? ' active' : ''}">Closed</a>
   </div>`;
 
   let tableHtml: string;
@@ -984,12 +984,12 @@ mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: R
         : esc(m.matter_ref);
       const copyBtn = `<button class="copy-ref-btn" data-ref="${esc(m.matter_ref)}" title="Copy matter ref" onclick="navigator.clipboard.writeText(this.dataset.ref).then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='⎘',1200)})">⎘</button>`;
       return `<tr>
-        <td><a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}${copyBtn}</td>
+        <td><a href="/mcp/matters/${encodeURIComponent(m.matter_ref)}" class="matter-ref" title="${esc(m.matter_ref)}">${displayLabel}</a>${statusBadge}${copyBtn}</td>
         <td class="date-small td-clip">${tsDate(m.first_activity)}<br>${tsDate(m.last_activity)}</td>
         <td class="count" style="text-align:right">${m.query_count}</td>
         <td class="users-cell td-clip">${esc(researchers)}</td>
         <td>${tools}</td>
-        <td><a href="/auslaw/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
+        <td><a href="/mcp/matters/${encodeURIComponent(m.matter_ref)}" class="btn btn-secondary no-print" style="padding:.3rem .75rem;font-size:.8125rem">View →</a></td>
       </tr>`;
     }).join('');
     const sortIcon = (col: string) => sort === col ? ' ↓' : ' <span style="color:var(--txt-3);font-weight:400">↕</span>';
@@ -1011,30 +1011,30 @@ mattersRouter.get('/auslaw/matters', requireSession, async (req: Request, res: R
       <details class="export-dd no-print">
         <summary class="btn btn-secondary">Summary Report ▾</summary>
         <div class="dd-menu">
-          <a href="/auslaw/matters/export-all.csv" download>Download CSV</a>
+          <a href="/mcp/matters/export-all.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/auslaw/matters/export-all.pdf" target="_blank">Print as PDF</a>
+          <a href="/mcp/matters/export-all.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
     </div>
     ${segTabs}
     ${statusTabs}
-    ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/auslaw/matters' })}
+    ${renderFilterBar({ search, from: fromDate, to: toDate, allUsers, isAdmin: userIsAdmin, viewUser, action: '/mcp/matters' })}
     ${tableHtml}
-  `, user, '/auslaw/matters', undefined, userIsAdmin));
+  `, user, '/mcp/matters', undefined, userIsAdmin));
 });
 
-// GET /auslaw/matters/search — global query search (MUST be before /auslaw/matters/:ref)
-mattersRouter.get('/auslaw/matters/search', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/search — global query search (MUST be before /mcp/matters/:ref)
+mattersRouter.get('/mcp/matters/search', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const q = typeof req.query['q'] === 'string' ? req.query['q'].trim() : '';
-  if (!q) { res.redirect('/auslaw/matters'); return; }
+  if (!q) { res.redirect('/mcp/matters'); return; }
 
   const results = await searchQueries(q, userIsAdmin ? undefined : user, 50);
 
   const rows = results.map((r: SearchResult) => `<tr>
-    <td><a href="/auslaw/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.display_name ?? r.matter_ref)}</a></td>
+    <td><a href="/mcp/matters/${encodeURIComponent(r.matter_ref)}" class="matter-ref">${esc(r.display_name ?? r.matter_ref)}</a></td>
     <td><span class="tag">${esc(toolLabel(r.tool_name))}</span></td>
     <td class="date-small">${tsDateTime(r.created_at)}</td>
     ${userIsAdmin ? `<td class="users-cell">${esc(r.user_id ?? '—')}</td>` : ''}
@@ -1043,7 +1043,7 @@ mattersRouter.get('/auslaw/matters/search', requireSession, async (req: Request,
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(page('Search Results', `
-    <form method="GET" action="/auslaw/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
+    <form method="GET" action="/mcp/matters/search" style="display:flex;gap:.5rem;margin-bottom:1.5rem">
       <input type="text" name="q" value="${esc(q)}" style="flex:1;max-width:400px">
       <button type="submit" class="btn btn-primary">Search</button>
     </form>
@@ -1055,11 +1055,11 @@ mattersRouter.get('/auslaw/matters/search', requireSession, async (req: Request,
           <thead><tr><th>Matter</th><th>Tool</th><th>Date</th>${userIsAdmin ? '<th>Researcher</th>' : ''}<th>Query</th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>`}
-  `, user, '/auslaw/matters', undefined, userIsAdmin));
+  `, user, '/mcp/matters', undefined, userIsAdmin));
 });
 
-// GET /auslaw/matters/export-all.csv — summary CSV of all matters (MUST be before /:ref)
-mattersRouter.get('/auslaw/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/export-all.csv — summary CSV of all matters (MUST be before /:ref)
+mattersRouter.get('/mcp/matters/export-all.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
 
@@ -1104,8 +1104,8 @@ mattersRouter.get('/auslaw/matters/export-all.csv', requireSession, async (req: 
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /auslaw/matters/export-all.pdf — printable matter list (MUST be before /:ref)
-mattersRouter.get('/auslaw/matters/export-all.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/export-all.pdf — printable matter list (MUST be before /:ref)
+mattersRouter.get('/mcp/matters/export-all.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
 
@@ -1153,8 +1153,8 @@ mattersRouter.get('/auslaw/matters/export-all.pdf', requireSession, async (req: 
   </body></html>`);
 });
 
-// GET /auslaw/matters/:ref/export-billing.pdf
-mattersRouter.get('/auslaw/matters/:ref/export-billing.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref/export-billing.pdf
+mattersRouter.get('/mcp/matters/:ref/export-billing.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1221,8 +1221,8 @@ mattersRouter.get('/auslaw/matters/:ref/export-billing.pdf', requireSession, asy
   </body></html>`);
 });
 
-// GET /auslaw/matters/:ref/export-billing-summary.csv
-mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.csv', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref/export-billing-summary.csv
+mattersRouter.get('/mcp/matters/:ref/export-billing-summary.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1270,8 +1270,8 @@ mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.csv', requireSess
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /auslaw/matters/:ref/export-billing-summary.pdf
-mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.pdf', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref/export-billing-summary.pdf
+mattersRouter.get('/mcp/matters/:ref/export-billing-summary.pdf', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1357,8 +1357,8 @@ mattersRouter.get('/auslaw/matters/:ref/export-billing-summary.pdf', requireSess
   </body></html>`);
 });
 
-// GET /auslaw/matters/:ref — matter detail
-mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref — matter detail
+mattersRouter.get('/mcp/matters/:ref', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1458,7 +1458,7 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
 
   const renameForm = `<details class="no-print" style="margin-bottom:.75rem">
     <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Rename matter…</summary>
-    <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/rename" style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <form method="POST" action="/mcp/matters/${encodeURIComponent(ref)}/rename" style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
       <input type="text" name="display_name" value="${esc(displayName ?? '')}" placeholder="Display name (optional)" maxlength="200" style="min-width:200px;width:auto">
       <button type="submit" class="btn btn-secondary btn-sm">Save</button>
       ${displayName ? `<button type="submit" name="display_name" value="" class="btn btn-secondary btn-sm">Clear</button>` : ''}
@@ -1467,7 +1467,7 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
 
   const notesForm = `<details class="no-print" style="margin-bottom:.75rem">
     <summary style="font-size:.8125rem;color:var(--txt-2);cursor:pointer">Matter notes…</summary>
-    <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
+    <form method="POST" action="/mcp/matters/${encodeURIComponent(ref)}/notes" style="margin-top:.5rem">
       <textarea name="notes" rows="4" maxlength="2000" style="max-width:600px;resize:vertical">${esc(matter?.notes ?? '')}</textarea>
       <div style="margin-top:.375rem">
         <button type="submit" class="btn btn-secondary btn-sm">Save Notes</button>
@@ -1482,11 +1482,11 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
 
   const closeButton = userIsAdmin
     ? `<div class="no-print" style="display:inline-flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <form method="POST" action="/auslaw/matters/${encodeURIComponent(ref)}/set-status" style="display:inline">
+        <form method="POST" action="/mcp/matters/${encodeURIComponent(ref)}/set-status" style="display:inline">
           <input type="hidden" name="status" value="${isClosed ? 'open' : 'closed'}">
           <button type="submit" class="btn btn-secondary btn-sm">${isClosed ? 'Reopen Matter' : 'Close Matter'}</button>
         </form>
-        <form method="POST" action="/auslaw/admin/matters/${encodeURIComponent(ref)}/delete" style="display:inline"
+        <form method="POST" action="/mcp/admin/matters/${encodeURIComponent(ref)}/delete" style="display:inline"
               onsubmit="return confirm('Permanently delete matter \\'${esc(ref)}\\' and all ${totalCount} queries? This cannot be undone.')">
           <button type="submit" class="btn btn-danger btn-sm">Delete Matter</button>
         </form>
@@ -1494,7 +1494,7 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
     : '';
 
   res.send(page(`${ref} — Research History`, `
-    <a href="/auslaw/matters" class="btn-back no-print">← All Matters</a>
+    <a href="/mcp/matters" class="btn-back no-print">← All Matters</a>
     <div class="print-header">
       <div class="print-header-firm">CP Legal</div>
       <div class="print-header-sub">Matter Research Report — printed ${esc(today)}</div>
@@ -1540,7 +1540,7 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
       <details class="export-dd">
         <summary class="btn btn-secondary">Research History ▾</summary>
         <div class="dd-menu">
-          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export.csv" download>Download CSV</a>
+          <a href="/mcp/matters/${encodeURIComponent(ref)}/export.csv" download>Download CSV</a>
           <hr class="dd-sep">
           <a href="#" onclick="window.print();return false;">Print as PDF</a>
         </div>
@@ -1548,26 +1548,26 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
       <details class="export-dd">
         <summary class="btn btn-secondary">Billing Detail ▾</summary>
         <div class="dd-menu">
-          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing.csv" download>Download CSV</a>
+          <a href="/mcp/matters/${encodeURIComponent(ref)}/export-billing.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing.pdf" target="_blank">Print as PDF</a>
+          <a href="/mcp/matters/${encodeURIComponent(ref)}/export-billing.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
       <details class="export-dd">
         <summary class="btn btn-secondary">Billing Summary ▾</summary>
         <div class="dd-menu">
-          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing-summary.csv" download>Download CSV</a>
+          <a href="/mcp/matters/${encodeURIComponent(ref)}/export-billing-summary.csv" download>Download CSV</a>
           <hr class="dd-sep">
-          <a href="/auslaw/matters/${encodeURIComponent(ref)}/export-billing-summary.pdf" target="_blank">Print as PDF</a>
+          <a href="/mcp/matters/${encodeURIComponent(ref)}/export-billing-summary.pdf" target="_blank">Print as PDF</a>
         </div>
       </details>
     </div>
-    <form method="GET" action="/auslaw/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
+    <form method="GET" action="/mcp/matters/${encodeURIComponent(ref)}" class="filter-bar no-print" style="margin-bottom:1rem">
       <div class="filter-group">
         <label>Filter by Tool</label>
         <select name="tool" class="filter-input" onchange="this.form.submit()">${toolOptions}</select>
       </div>
-      ${toolFilter ? `<a href="/auslaw/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
+      ${toolFilter ? `<a href="/mcp/matters/${encodeURIComponent(ref)}" class="filter-clear">Clear filter</a>` : ''}
     </form>
     <div class="table-wrap">
     <table style="table-layout:auto">
@@ -1585,11 +1585,11 @@ mattersRouter.get('/auslaw/matters/:ref', requireSession, async (req: Request, r
     </table>
     </div>
     ${paginationHtml}
-  `, user, '/auslaw/matters', undefined, userIsAdmin));
+  `, user, '/mcp/matters', undefined, userIsAdmin));
 });
 
-// GET /auslaw/matters/:ref/export.csv
-mattersRouter.get('/auslaw/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref/export.csv
+mattersRouter.get('/mcp/matters/:ref/export.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1632,8 +1632,8 @@ mattersRouter.get('/auslaw/matters/:ref/export.csv', requireSession, async (req:
   res.send('\uFEFF' + [header, ...dataRows].join('\r\n'));
 });
 
-// GET /auslaw/admin/billing-export.csv — global billing export (admin only)
-mattersRouter.get('/auslaw/admin/billing-export.csv', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/admin/billing-export.csv — global billing export (admin only)
+mattersRouter.get('/mcp/admin/billing-export.csv', requireSession, async (req: Request, res: Response) => {
   if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
   if (!isDbEnabled()) { res.status(503).send('Database not enabled'); return; }
 
@@ -1699,8 +1699,8 @@ mattersRouter.get('/auslaw/admin/billing-export.csv', requireSession, async (req
   res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
 });
 
-// GET /auslaw/matters/:ref/export-billing.csv
-mattersRouter.get('/auslaw/matters/:ref/export-billing.csv', requireSession, async (req: Request, res: Response) => {
+// GET /mcp/matters/:ref/export-billing.csv
+mattersRouter.get('/mcp/matters/:ref/export-billing.csv', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const userIsAdmin = getSessionIsAdmin(req);
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
@@ -1739,8 +1739,8 @@ mattersRouter.get('/auslaw/matters/:ref/export-billing.csv', requireSession, asy
   res.send('\uFEFF' + [header, ...dataRows, summaryRow].join('\r\n'));
 });
 
-// POST /auslaw/matters/:ref/notes
-mattersRouter.post('/auslaw/matters/:ref/notes', requireSession, async (req: Request, res: Response) => {
+// POST /mcp/matters/:ref/notes
+mattersRouter.post('/mcp/matters/:ref/notes', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const rows = await getMatterHistory(ref, 1);
@@ -1748,21 +1748,21 @@ mattersRouter.post('/auslaw/matters/:ref/notes', requireSession, async (req: Req
   if (!getSessionIsAdmin(req) && !rows.some((r) => r.user_id === user)) { res.status(403).send('Forbidden'); return; }
   const { notes } = req.body as Record<string, string>;
   await upsertMatter(ref, { notes: (notes ?? '').trim().slice(0, 2000) || undefined });
-  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/mcp/matters/${encodeURIComponent(ref)}`);
 });
 
-// POST /auslaw/matters/:ref/set-status
-mattersRouter.post('/auslaw/matters/:ref/set-status', requireSession, async (req: Request, res: Response) => {
+// POST /mcp/matters/:ref/set-status
+mattersRouter.post('/mcp/matters/:ref/set-status', requireSession, async (req: Request, res: Response) => {
   if (!getSessionIsAdmin(req)) { res.status(403).send('Admin only'); return; }
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   const { status } = req.body as Record<string, string>;
   if (status !== 'open' && status !== 'closed') { res.status(400).send('Invalid status'); return; }
   await upsertMatter(ref, { status });
-  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/mcp/matters/${encodeURIComponent(ref)}`);
 });
 
-// POST /auslaw/matters/:ref/rename
-mattersRouter.post('/auslaw/matters/:ref/rename', requireSession, async (req: Request, res: Response) => {
+// POST /mcp/matters/:ref/rename
+mattersRouter.post('/mcp/matters/:ref/rename', requireSession, async (req: Request, res: Response) => {
   const user = getSessionUser(req)!;
   const ref = decodeURIComponent((req.params['ref'] as string) ?? '');
   // Check access
@@ -1772,5 +1772,5 @@ mattersRouter.post('/auslaw/matters/:ref/rename', requireSession, async (req: Re
   const { display_name } = req.body as Record<string, string>;
   const clean = (display_name ?? '').trim().slice(0, 200);
   await upsertMatter(ref, { displayName: clean || undefined });
-  res.redirect(`/auslaw/matters/${encodeURIComponent(ref)}`);
+  res.redirect(`/mcp/matters/${encodeURIComponent(ref)}`);
 });
