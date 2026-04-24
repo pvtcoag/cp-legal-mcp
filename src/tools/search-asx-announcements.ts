@@ -5,7 +5,12 @@ import { externalFetch, ExternalApiError } from '../external-client.js';
 import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
-const ASX_API_BASE = 'https://www.asx.com.au/asx/1/company';
+// ASX retired the legacy /asx/1/company/{code}/announcements JSON endpoint.
+// Their markets site (www.asx.com.au/markets/company/*) now reads from the
+// Markit Digital "asx-research" API — the same endpoint the public ASX SPA
+// hits. No auth required; responses are `{ data: { items: [...] } }`.
+const ASX_API_BASE = 'https://asx.api.markitdigital.com/asx-research/1.0/companies';
+const ASX_FILE_BASE = 'https://asx.api.markitdigital.com/asx-research/1.0/file';
 
 const inputSchema = z.object({
   asx_code: z
@@ -54,7 +59,7 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
     async (input) => {
       const log = logger.child({ tool: 'search_asx_announcements' });
       const code = input.asx_code.toUpperCase();
-      const url = `${ASX_API_BASE}/${encodeURIComponent(code)}/announcements?count=${input.limit}&market_sensitive=${input.market_sensitive_only}`;
+      const url = `${ASX_API_BASE}/${encodeURIComponent(code)}/announcements?limit=${input.limit}`;
 
       let data: unknown;
       try {
@@ -64,7 +69,9 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
             Referer: 'https://www.asx.com.au/',
           },
         });
-        if (res.status === 404) {
+        // Markit returns HTTP 400 with {error: "Symbol not found"} for unknown tickers.
+        // Everything else in the 4xx range is either a bad query or upstream oddness.
+        if (res.status === 400 || res.status === 404) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({
               error: 'entity_not_found',
@@ -92,22 +99,26 @@ export function registerSearchAsxAnnouncements(server: McpServer): void {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const raw = data as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rawAnnouncements: any[] = Array.isArray(raw?.data) ? raw.data : [];
-      const totalAvailable: number = raw?.paging?.total_count ?? rawAnnouncements.length;
+      const rawAnnouncements: any[] = Array.isArray(raw?.data?.items) ? raw.data.items : [];
+      // Markit's endpoint doesn't surface a total-count; treat the returned
+      // batch size as the best-effort total so callers know whether to page.
+      const totalAvailable: number = rawAnnouncements.length;
 
-      let announcements: AsxAnnouncement[] = rawAnnouncements.map((a) => ({
-        id: String(a.id ?? ''),
-        date: a.document_release_date
-          ? a.document_release_date.slice(0, 10)
-          : (a.document_date ?? '').slice(0, 10),
-        headline: String(a.header ?? a.headline ?? ''),
-        market_sensitive: Boolean(a.market_sensitive),
-        pages: typeof a.number_of_pages === 'number' ? a.number_of_pages : null,
-        url: String(
-          a.url ??
-          (a.id ? `https://www.asx.com.au/asx/statistics/displayAnnouncement.do?display=pdf&idsId=${a.id}` : ''),
-        ),
-      }));
+      let announcements: AsxAnnouncement[] = rawAnnouncements.map((a) => {
+        const documentKey = String(a.documentKey ?? '');
+        return {
+          id: documentKey,
+          date: typeof a.date === 'string' ? a.date.slice(0, 10) : '',
+          headline: String(a.headline ?? a.announcementType ?? ''),
+          market_sensitive: Boolean(a.isPriceSensitive),
+          // Markit's response exposes fileSize (e.g. "165KB") rather than a
+          // page count; leave pages null.
+          pages: null,
+          url: documentKey
+            ? (typeof a.url === 'string' && a.url.length > 0 ? a.url : `${ASX_FILE_BASE}/${documentKey}`)
+            : '',
+        };
+      });
 
       // Apply filter_text if provided
       if (input.filter_text) {

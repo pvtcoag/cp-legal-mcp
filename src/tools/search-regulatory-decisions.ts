@@ -6,30 +6,41 @@ import { logger } from '../logger.js';
 import { recordMatterQuery } from '../matter-log.js';
 
 // ── ASIC endpoints ─────────────────────────────────────────────────────────────
+// ASIC retired the legacy /regulatory-resources/find-a-document/* search URLs.
+// There is no public HTML register with a scrape-friendly query parameter; the
+// canonical entry points below are mostly landing pages that gate results behind
+// JS-rendered filters. We still attempt a scrape (best-effort), but the main
+// value is surfacing these URLs via `manual_urls` in the response so the agent
+// can fall back to direct browsing. Update these if ASIC restructures again.
 const ASIC_ENFORCEMENT_URL =
-  'https://asic.gov.au/regulatory-resources/find-a-document/search-for-enforcement-outcomes/';
+  'https://asic.gov.au/about-asic/asic-investigations-and-enforcement/asic-enforcement-outcomes/';
 const ASIC_UNDERTAKINGS_URL =
-  'https://asic.gov.au/regulatory-resources/find-a-document/search-for-enforceable-undertakings/';
+  'https://asic.gov.au/about-asic/asic-investigations-and-enforcement/about-the-court-enforceable-undertakings-register/';
 const ASIC_BANNING_URL =
-  'https://asic.gov.au/regulatory-resources/find-a-document/search-for-banning-orders/';
+  'https://asic.gov.au/newsroom/bannings-and-alerts/';
 
 // ── ACCC endpoints ─────────────────────────────────────────────────────────────
+// ACCC re-slugged `/public-registers/mergers-registers/*` to
+// `/public-registers/mergers-and-acquisitions-registers/*` and broke out
+// undertakings per statutory section. Enforcement now lives under
+// infringement-notices / public-warning-notice registers rather than a single
+// "compliance-and-enforcement" landing. URLs updated 2026-04.
 const ACCC_REGISTERS: Record<string, { url: string; label: string }> = {
   mergers_informal: {
-    url: 'https://www.accc.gov.au/public-registers/mergers-registers/public-informal-merger-assessments',
-    label: 'ACCC Informal Merger Assessments',
+    url: 'https://www.accc.gov.au/public-registers/mergers-and-acquisitions-registers/public-informal-merger-reviews-register-2002-25',
+    label: 'ACCC Informal Merger Reviews',
   },
   mergers_formal: {
-    url: 'https://www.accc.gov.au/public-registers/mergers-registers/formal-merger-review-register',
-    label: 'ACCC Formal Merger Reviews',
+    url: 'https://www.accc.gov.au/public-registers/mergers-and-acquisitions-registers',
+    label: 'ACCC Mergers & Acquisitions Registers',
   },
   enforcement: {
-    url: 'https://www.accc.gov.au/public-registers/compliance-and-enforcement',
-    label: 'ACCC Compliance & Enforcement',
+    url: 'https://www.accc.gov.au/public-registers/infringement-notices-register',
+    label: 'ACCC Infringement Notices Register',
   },
   undertakings: {
-    url: 'https://www.accc.gov.au/public-registers/court-enforceable-undertakings',
-    label: 'ACCC Court Enforceable Undertakings',
+    url: 'https://www.accc.gov.au/public-registers/undertakings-registers/section-87b-undertakings-register',
+    label: 'ACCC s 87B Court Enforceable Undertakings',
   },
 };
 
@@ -259,12 +270,16 @@ export function registerSearchRegulatoryDecisions(server: McpServer): void {
       const dt = input.decision_type;
 
       if (wantAsic) {
+        // ASIC's current enforcement/banning/undertakings pages don't accept a
+        // `?query=...` parameter — they're landing pages. We fetch the page and
+        // the parser filters items by title/summary match against `input.query`
+        // downstream.
         if (dt === 'all' || dt === 'enforcement')
-          targets.push({ url: ASIC_ENFORCEMENT_URL + `?query=${encodeURIComponent(input.query)}`, type: 'enforcement', parser: 'asic' });
+          targets.push({ url: ASIC_ENFORCEMENT_URL, type: 'enforcement', parser: 'asic' });
         if (dt === 'all' || dt === 'enforceable_undertaking')
-          targets.push({ url: ASIC_UNDERTAKINGS_URL + `?query=${encodeURIComponent(input.query)}`, type: 'enforceable_undertaking', parser: 'asic' });
+          targets.push({ url: ASIC_UNDERTAKINGS_URL, type: 'enforceable_undertaking', parser: 'asic' });
         if (dt === 'all' || dt === 'banning_order')
-          targets.push({ url: ASIC_BANNING_URL + `?query=${encodeURIComponent(input.query)}`, type: 'banning_order', parser: 'asic' });
+          targets.push({ url: ASIC_BANNING_URL, type: 'banning_order', parser: 'asic' });
       }
 
       if (wantAccc) {

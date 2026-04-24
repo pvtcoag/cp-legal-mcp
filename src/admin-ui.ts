@@ -108,9 +108,9 @@ function checkCsrf(req: Request): boolean {
   try {
     const checkHost = new URL(check).host;
     // Accept either:
-    //   (a) X-Forwarded-Host set by the Cloudflare Worker (when Worker is updated), or
-    //   (b) the configured public hostname from OAUTH_ISSUER — handles the case where
-    //       the Worker hasn't set X-Forwarded-Host yet (raw Host is the Railway-internal name).
+    //   (a) X-Forwarded-Host set by Railway's edge proxy, or
+    //   (b) the configured public hostname from OAUTH_ISSUER — fallback when
+    //       the edge proxy hasn't set X-Forwarded-Host (raw Host is the Railway-internal name).
     const forwardedHost = req.headers['x-forwarded-host'] as string | undefined;
     const issuerHost = new URL(config.OAUTH_ISSUER).host;   // e.g. mcp.example.com
     const rawHost = req.headers['host'] ?? '';
