@@ -167,7 +167,7 @@ export async function searchCases(params: {
   const cacheKey = _searchCacheKey('searchCases', params);
   const cached = _searchCacheGet<AuslawCase[]>(cacheKey);
   if (cached) return cached;
-  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('search_cases', {
+  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('auslaw_search_cases', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
@@ -187,7 +187,7 @@ export async function searchLegislation(params: {
   const cacheKey = _searchCacheKey('searchLegislation', params);
   const cached = _searchCacheGet<AuslawLegislation[]>(cacheKey);
   if (cached) return cached;
-  const results = await withRetry(() => callAuslawTool<AuslawLegislation[]>('search_legislation', {
+  const results = await withRetry(() => callAuslawTool<AuslawLegislation[]>('auslaw_search_legislation', {
     query: params.query,
     ...(params.jurisdiction && { jurisdiction: params.jurisdiction }),
     ...(params.limit && { limit: params.limit }),
@@ -210,7 +210,7 @@ export async function fetchDocumentText(url: string): Promise<AuslawDocumentText
   }
 
   logger.debug({ url }, 'auslaw: fetch_document_text (cache miss)');
-  const doc = await withRetry(() => callAuslawTool<AuslawDocumentText>('fetch_document_text', { url }));
+  const doc = await withRetry(() => callAuslawTool<AuslawDocumentText>('auslaw_fetch_document_text', { url }));
 
   // Cache for future calls — fire-and-forget, never blocks the response
   upsertJudgmentCache({
@@ -229,7 +229,7 @@ export async function validateCitation(
   citation: string,
 ): Promise<AuslawCitationValidation> {
   logger.debug({ citation }, 'auslaw: validate_citation');
-  return withRetry(() => callAuslawTool<AuslawCitationValidation>('validate_citation', { citation }));
+  return withRetry(() => callAuslawTool<AuslawCitationValidation>('auslaw_validate_citation', { citation }));
 }
 
 export interface AuslawCitingCase {
@@ -267,7 +267,7 @@ export async function searchCitingCases(params: {
   // auslaw-mcp returns { totalCount: number, results: AuslawCitingCase[] }, not a bare array.
   // The generic cast in callAuslawTool doesn't validate at runtime, so unwrap here.
   const response = await withRetry(() =>
-    callAuslawTool<{ results: AuslawCitingCase[] } | AuslawCitingCase[]>('search_citing_cases', {
+    callAuslawTool<{ results: AuslawCitingCase[] } | AuslawCitingCase[]>('auslaw_search_citing_cases', {
       citation: params.citation,
       ...(params.limit && { limit: params.limit }),
     })
@@ -285,7 +285,7 @@ export async function searchByCitation(params: {
   const cacheKey = _searchCacheKey('searchByCitation', params);
   const cached = _searchCacheGet<AuslawCase[]>(cacheKey);
   if (cached) return cached;
-  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('search_by_citation', {
+  const results = await withRetry(() => callAuslawTool<AuslawCase[]>('auslaw_search_by_citation', {
     citation: params.citation_or_name,
     ...(params.limit && { limit: params.limit }),
   }));
@@ -303,7 +303,7 @@ export async function formatCitation(params: {
   logger.debug({ params }, 'auslaw: format_citation');
   // auslaw-mcp format_citation returns plain text, not JSON
   return withRetry(async () => {
-    const text = await callAuslawToolRaw('format_citation', {
+    const text = await callAuslawToolRaw('auslaw_format_citation', {
       title: params.title,
       ...(params.neutralCitation && { neutralCitation: params.neutralCitation }),
       ...(params.reportedCitation && { reportedCitation: params.reportedCitation }),
@@ -367,7 +367,7 @@ export async function generatePinpoint(params: {
   caseCitation?: string;
 }): Promise<AuslawPinpoint> {
   logger.debug({ params }, 'auslaw: generate_pinpoint');
-  return withRetry(() => callAuslawTool<AuslawPinpoint>('generate_pinpoint', {
+  return withRetry(() => callAuslawTool<AuslawPinpoint>('auslaw_generate_pinpoint', {
     url: params.url,
     ...(params.paragraphNumber !== undefined && { paragraphNumber: params.paragraphNumber }),
     ...(params.phrase && { phrase: params.phrase }),
@@ -387,7 +387,7 @@ export async function fetchLegislationSection(params: {
   section: string;
 }): Promise<AuslawLegislationSection> {
   logger.debug({ params }, 'auslaw: fetch_legislation_section');
-  return withRetry(() => callAuslawTool<AuslawLegislationSection>('fetch_legislation_section', {
+  return withRetry(() => callAuslawTool<AuslawLegislationSection>('auslaw_fetch_legislation_section', {
     url: params.url,
     section: params.section,
   }));
