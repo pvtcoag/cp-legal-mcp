@@ -209,7 +209,8 @@ oauthRouter.use((req: Request, res: Response, next) => {
 
 // Apply baseline rate limit to every OAuth path (discovery endpoints excluded
 // below — those are cheap GETs that monitoring tools hit).
-oauthRouter.use(/^\/(auslaw\/)?oauth\//, oauthRateLimit);
+// Matches: /oauth/*, /mcp/oauth/*, /auslaw/oauth/*, and the /register alias.
+oauthRouter.use(/^\/(mcp\/|auslaw\/)?(oauth\/|register$)/, oauthRateLimit);
 
 // RFC 9728 — Protected Resource Metadata
 // Tells clients where to find the authorization server.
