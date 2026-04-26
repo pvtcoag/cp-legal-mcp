@@ -9,6 +9,7 @@ import { requestContext } from './request-context.js';
 import { createMcpHandler } from './server.js';
 import { oauthRouter } from './oauth.js';
 import { preRegisterClient } from './oauth-store.js';
+import { warnIfNoSigningKey } from './jwt.js';
 import { mattersRouter, buildSessionVersionCache } from './matters-ui.js';
 import { adminRouter } from './admin-ui.js';
 
@@ -209,6 +210,7 @@ async function startup(): Promise<ReturnType<typeof app.listen>> {
   if (!config.OAUTH_CLIENT_ID) {
     logger.warn('OAUTH_CLIENT_ID not set — Claude Web / ChatGPT static client will not be pre-registered');
   }
+  warnIfNoSigningKey();
 
   await initDb().catch((err) => logger.error({ err }, 'DB init failed'));
 

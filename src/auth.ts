@@ -3,6 +3,7 @@ import { logger } from './logger.js';
 import { config } from './config.js';
 import { listUsers, updateUserLastActive } from './db.js';
 import { verifyToken } from './token-utils.js';
+import { verifyJwt, looksLikeJwt } from './jwt.js';
 
 // ── In-memory token cache ─────────────────────────────────────────────────────
 // Maps plaintext_token → username for O(1) bearer token lookups.
@@ -78,6 +79,24 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
   if (!token) {
     return sendUnauthorized(res);
+  }
+
+  // ── JWT path ──────────────────────────────────────────────────────────────
+  // Short-lived JWTs issued by /oauth/token. Verified statelessly via HMAC.
+  // We try this first because JWTs are cheap to verify and easy to recognise.
+  if (looksLikeJwt(token)) {
+    const v = verifyJwt(token);
+    if (v.ok && v.payload) {
+      const username = v.payload.sub;
+      res.locals['user'] = username;
+      updateUserLastActive(username).catch(() => {/* fire-and-forget */});
+      next();
+      return;
+    }
+    // Token shaped like a JWT but failed verification — log and fall through
+    // to scrypt verification (a long opaque API token could in principle look
+    // like a JWT regex match). This keeps legacy direct-API tokens working.
+    logger.debug({ reason: v.reason }, 'Auth: JWT verification failed, falling through to legacy bearer check');
   }
 
   // Once the DB cache has been built successfully, it is the sole authority.

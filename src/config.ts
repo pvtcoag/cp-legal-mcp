@@ -47,6 +47,21 @@ const ConfigSchema = z.object({
   // Australian Business Register GUID for entity lookups.
   // Register for free at https://abr.business.gov.au/Tools/WebServices
   ABR_GUID: z.string().optional(),
+
+  // ── OAuth 2.1 token lifecycle ───────────────────────────────────────────────
+  // HMAC signing key for short-lived JWT access tokens issued by /oauth/token.
+  // If not set, falls back to SESSION_SECRET, then ENCRYPTION_KEY. At least one
+  // of these MUST be set in production — an unset key disables JWT issuance and
+  // the token endpoint will fall back to the legacy long-lived bearer.
+  JWT_SIGNING_KEY: z.string().min(32).optional(),
+  // Access-token lifetime in seconds. Default 1h.
+  OAUTH_AT_TTL_SEC: z.string().default('3600').transform(Number),
+  // Refresh-token inactivity lifetime in seconds (per RT). Default 30 days.
+  OAUTH_RT_TTL_SEC: z.string().default(String(30 * 24 * 3600)).transform(Number),
+  // Absolute refresh-token family lifetime cap in seconds. Even with continuous
+  // rotation, once a family hits this age the user must re-authenticate via
+  // browser. Default 90 days. Set to 0 to disable the cap (not recommended).
+  OAUTH_RT_FAMILY_MAX_SEC: z.string().default(String(90 * 24 * 3600)).transform(Number),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

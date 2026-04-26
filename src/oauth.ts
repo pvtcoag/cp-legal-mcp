@@ -26,8 +26,16 @@ import {
   consumeAuthCode,
   listClientsDebug,
 } from './oauth-store.js';
-import { upsertOAuthAuthorization, logLoginEvent, getUserByUsername } from './db.js';
-import { decryptToken, verifyToken } from './token-utils.js';
+import {
+  upsertOAuthAuthorization,
+  logLoginEvent,
+  getUserByUsername,
+  revokeRefreshToken,
+  revokeRefreshTokenFamily,
+} from './db.js';
+import { verifyToken } from './token-utils.js';
+import { jwtAvailable } from './jwt.js';
+import { issueTokens, rotateRefreshToken, findRefreshToken } from './oauth-tokens.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,12 +242,19 @@ function authorizationServerMetadata(_req: Request, res: Response): void {
     authorization_endpoint: `${base}/oauth/authorize`,
     token_endpoint: `${base}/oauth/token`,
     registration_endpoint: `${base}/oauth/register`,
+    revocation_endpoint: `${base}/oauth/revoke`,
+    introspection_endpoint: `${base}/oauth/introspect`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code'],
+    // refresh_token grant added once short-lived JWT ATs are enabled (JWT signing key set).
+    grant_types_supported: jwtAvailable()
+      ? ['authorization_code', 'refresh_token']
+      : ['authorization_code'],
     code_challenge_methods_supported: ['S256'],
     // DCR issues a server-generated secret → confidential clients (ChatGPT) use
     // client_secret_post. PKCE clients (mcp-remote, Cursor) use 'none'.
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    revocation_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    introspection_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
     scopes_supported: ['mcp'],
   });
 }
@@ -291,7 +306,7 @@ function dynamicClientRegistration(req: Request, res: Response): void {
     ...(name ? { client_name: name } : {}),
     ...(typeof scope === 'string' ? { scope } : { scope: 'mcp' }),
     token_endpoint_auth_method: 'client_secret_post',
-    grant_types: ['authorization_code'],
+    grant_types: jwtAvailable() ? ['authorization_code', 'refresh_token'] : ['authorization_code'],
     response_types: ['code'],
     code_challenge_methods_supported: ['S256'],
   });
@@ -414,10 +429,45 @@ oauthRouter.post('/mcp/oauth/authorize', oauthLoginRateLimit, async (req: Reques
   res.redirect(redirectUrl.toString());
 });
 
-// POST /oauth/token — Exchange code + PKCE verifier for access token
+// POST /oauth/token
+// Dispatches by grant_type:
+//   authorization_code → exchange code + PKCE verifier for AT (+ RT when JWT key set)
+//   refresh_token       → rotate the presented RT, return new AT + RT
 oauthRouter.post('/mcp/oauth/token', async (req: Request, res: Response) => {
+  const body = req.body as Record<string, string | undefined>;
+  const grant_type = body['grant_type'];
+
+  logger.info(
+    {
+      grant_type,
+      client_id: body['client_id'],
+      has_code: !!body['code'],
+      has_refresh_token: !!body['refresh_token'],
+      has_code_verifier: !!body['code_verifier'],
+      has_client_secret: !!body['client_secret'],
+      content_type: req.headers['content-type'],
+    },
+    'OAuth: token request received',
+  );
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+
+  if (grant_type === 'authorization_code') {
+    await handleAuthCodeGrant(req, res);
+    return;
+  }
+  if (grant_type === 'refresh_token') {
+    await handleRefreshGrant(req, res);
+    return;
+  }
+
+  logger.warn({ grant_type }, 'OAuth: unsupported grant_type');
+  res.status(400).json({ error: 'unsupported_grant_type' });
+});
+
+async function handleAuthCodeGrant(req: Request, res: Response): Promise<void> {
   const {
-    grant_type,
     code,
     redirect_uri,
     client_id,
@@ -425,25 +475,6 @@ oauthRouter.post('/mcp/oauth/token', async (req: Request, res: Response) => {
     code_verifier,
   } = req.body as Record<string, string | undefined>;
 
-  // Log every token request so Railway shows exactly what was received.
-  logger.info(
-    {
-      grant_type,
-      client_id,
-      redirect_uri,
-      has_code: !!code,
-      has_code_verifier: !!code_verifier,
-      has_client_secret: !!client_secret,
-      content_type: req.headers['content-type'],
-    },
-    'OAuth: token request received',
-  );
-
-  if (grant_type !== 'authorization_code') {
-    logger.warn({ grant_type }, 'OAuth: unsupported grant_type');
-    res.status(400).json({ error: 'unsupported_grant_type' });
-    return;
-  }
   if (!code || !redirect_uri || !client_id || !code_verifier) {
     logger.warn({ has_code: !!code, has_redirect_uri: !!redirect_uri, has_client_id: !!client_id, has_code_verifier: !!code_verifier }, 'OAuth: token request missing required fields');
     res.status(400).json({ error: 'invalid_request', error_description: 'Missing required parameters' });
@@ -465,8 +496,6 @@ oauthRouter.post('/mcp/oauth/token', async (req: Request, res: Response) => {
 
   // Validate client secret when the client sends one. We accept it if it matches
   // and ignore the check if neither side has a secret (PKCE-only clients).
-  // We do NOT require a secret even if one was issued — some DCR clients (mcp-remote,
-  // Cursor) use PKCE exclusively and don't send client_secret back.
   const client = getClient(client_id);
   if (client_secret && client?.clientSecret) {
     if (!safeEqual(client_secret, client.clientSecret)) {
@@ -488,66 +517,283 @@ oauthRouter.post('/mcp/oauth/token', async (req: Request, res: Response) => {
     return;
   }
 
-  // Resolve access token — prefer DB (encrypted plaintext), fall back to MCP_AUTH_TOKENS.
-  let accessToken: string | undefined;
-
+  // Verify the user still exists and is active before issuing tokens.
   const dbUser = await getUserByUsername(entry.userId).catch(() => null);
-  if (dbUser && dbUser.is_active) {
-    if (dbUser.token_encrypted) {
-      const encKey = process.env.ENCRYPTION_KEY?.trim();
-      if (!encKey) {
-        logger.error({ user: entry.userId }, 'OAuth: token_encrypted present but ENCRYPTION_KEY not set');
-        res.status(500).json({ error: 'server_error', error_description: 'Server misconfiguration: ENCRYPTION_KEY required' });
-        return;
-      }
-      try {
-        accessToken = decryptToken(dbUser.token_encrypted, encKey);
-      } catch (err) {
-        logger.error({ user: entry.userId, err }, 'OAuth: failed to decrypt token');
-        res.status(500).json({ error: 'server_error', error_description: 'Token decryption failed' });
-        return;
-      }
-    } else {
-      // Legacy: token not yet encrypted — fall back to env var
-      accessToken = credentials().get(entry.userId);
-      if (!accessToken) {
-        logger.error({ user: entry.userId }, 'OAuth: no encrypted token and no env token — rotate token in admin panel');
-        res.status(500).json({ error: 'server_error', error_description: 'Token not available — rotate via admin panel' });
-        return;
-      }
-    }
-  } else {
-    // No DB user — legacy env-var-only path
-    accessToken = credentials().get(entry.userId);
-    if (!accessToken) {
-      logger.error({ user: entry.userId }, 'OAuth: user not found in DB or env');
-      res.status(400).json({ error: 'invalid_grant', error_description: 'User not found' });
+  if (dbUser && !dbUser.is_active) {
+    logger.warn({ user: entry.userId }, 'OAuth: user is disabled — refusing to issue tokens');
+    res.status(400).json({ error: 'invalid_grant', error_description: 'User disabled' });
+    return;
+  }
+  if (!dbUser && !credentials().get(entry.userId)) {
+    logger.error({ user: entry.userId }, 'OAuth: user not found in DB or env');
+    res.status(400).json({ error: 'invalid_grant', error_description: 'User not found' });
+    return;
+  }
+
+  // Modern path: short-lived JWT AT + rotating RT. Available when a JWT signing
+  // key is configured. Falls back to the legacy long-lived bearer otherwise so
+  // misconfigured deployments don't break.
+  if (jwtAvailable()) {
+    try {
+      const tokens = await issueTokens({
+        username: entry.userId,
+        clientId: client_id,
+        clientName: client?.clientName,
+        scope: 'mcp',
+      });
+
+      upsertOAuthAuthorization({
+        username: entry.userId,
+        clientId: client_id,
+        clientName: client?.clientName,
+        redirectUri: redirect_uri,
+      }).catch(() => {/* fire-and-forget */});
+
+      logLoginEvent({
+        username: entry.userId,
+        eventType: 'oauth_token_issued',
+        clientName: client?.clientName,
+        meta: { client_id, has_refresh_token: !!tokens.refresh_token },
+      }).catch(() => {/* fire-and-forget */});
+
+      logger.info({ user: entry.userId, has_rt: !!tokens.refresh_token }, 'OAuth: JWT access token issued');
+      res.json(tokens);
+      return;
+    } catch (err) {
+      logger.error({ err, user: entry.userId }, 'OAuth: token issuance failed');
+      res.status(500).json({ error: 'server_error', error_description: 'Token issuance failed' });
       return;
     }
   }
 
-  logger.info({ user: entry.userId }, 'OAuth: access token issued');
+  // Legacy path: return the user's pre-configured long-lived bearer.
+  // Kept so that deployments without a JWT signing key continue to work.
+  await issueLegacyBearer(entry.userId, client_id, client?.clientName, redirect_uri, res);
+}
 
-  // Log OAuth authorization to DB (fire-and-forget)
-  upsertOAuthAuthorization({
-    username: entry.userId,
-    clientId: client_id,
-    clientName: client?.clientName,
-    redirectUri: redirect_uri,
-  }).catch(() => {/* ignore */});
+async function handleRefreshGrant(req: Request, res: Response): Promise<void> {
+  const {
+    refresh_token,
+    client_id,
+    client_secret,
+  } = req.body as Record<string, string | undefined>;
 
+  if (!refresh_token || !client_id) {
+    res.status(400).json({ error: 'invalid_request', error_description: 'Missing refresh_token or client_id' });
+    return;
+  }
+
+  if (!jwtAvailable()) {
+    // Without a JWT signing key we never issued an RT in the first place.
+    res.status(400).json({ error: 'unsupported_grant_type', error_description: 'Refresh tokens disabled (JWT signing key not configured)' });
+    return;
+  }
+
+  // Confidential client check — same rule as the auth_code grant.
+  const client = getClient(client_id);
+  if (client_secret && client?.clientSecret) {
+    if (!safeEqual(client_secret, client.clientSecret)) {
+      logger.warn({ client_id }, 'OAuth: invalid client_secret on refresh');
+      res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client_secret' });
+      return;
+    }
+  }
+
+  const outcome = await rotateRefreshToken(refresh_token, client_id);
+  if (!outcome.ok || !outcome.tokens) {
+    const status = outcome.error === 'server_error' ? 500 : 400;
+    res.status(status).json({
+      error: outcome.error ?? 'invalid_grant',
+      ...(outcome.error_description ? { error_description: outcome.error_description } : {}),
+    });
+    return;
+  }
+
+  res.json(outcome.tokens);
+}
+
+async function issueLegacyBearer(
+  userId: string,
+  clientId: string,
+  clientName: string | undefined,
+  redirectUri: string,
+  res: Response,
+): Promise<void> {
+  const dbUser = await getUserByUsername(userId).catch(() => null);
+
+  let accessToken: string | undefined;
+  if (dbUser && dbUser.is_active && dbUser.token_encrypted) {
+    const encKey = process.env.ENCRYPTION_KEY?.trim();
+    if (!encKey) {
+      logger.error({ user: userId }, 'OAuth: token_encrypted present but ENCRYPTION_KEY not set');
+      res.status(500).json({ error: 'server_error', error_description: 'Server misconfiguration: ENCRYPTION_KEY required' });
+      return;
+    }
+    try {
+      const { decryptToken } = await import('./token-utils.js');
+      accessToken = decryptToken(dbUser.token_encrypted, encKey);
+    } catch (err) {
+      logger.error({ user: userId, err }, 'OAuth: failed to decrypt token');
+      res.status(500).json({ error: 'server_error', error_description: 'Token decryption failed' });
+      return;
+    }
+  } else {
+    accessToken = credentials().get(userId);
+  }
+
+  if (!accessToken) {
+    logger.error({ user: userId }, 'OAuth: no token available for legacy bearer issuance');
+    res.status(500).json({ error: 'server_error', error_description: 'Token not available — rotate via admin panel' });
+    return;
+  }
+
+  upsertOAuthAuthorization({ username: userId, clientId, clientName, redirectUri }).catch(() => {/* ignore */});
   logLoginEvent({
-    username: entry.userId,
+    username: userId,
     eventType: 'oauth_authorized',
-    clientName: client?.clientName,
-    meta: { client_id },
+    clientName,
+    meta: { client_id: clientId, legacy_bearer: true },
   }).catch(() => {/* ignore */});
 
+  logger.info({ user: userId }, 'OAuth: legacy long-lived access token issued (no JWT signing key)');
   res.json({
     access_token: accessToken,
     token_type: 'Bearer',
-    // No expiry — token is valid until MCP_AUTH_TOKENS is changed in Railway
     scope: 'mcp',
+  });
+}
+
+// POST /oauth/revoke — RFC 7009 token revocation.
+// Accepts an access_token or refresh_token. Spec: ALWAYS return 200 (with no
+// body) regardless of whether the token was found, to avoid token-existence oracles.
+oauthRouter.post('/mcp/oauth/revoke', async (req: Request, res: Response) => {
+  const { token, token_type_hint, client_id, client_secret } = req.body as Record<string, string | undefined>;
+
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (!token) {
+    res.status(400).json({ error: 'invalid_request', error_description: 'Missing token' });
+    return;
+  }
+
+  // Authenticate the client when one was issued a secret.
+  if (client_id) {
+    const client = getClient(client_id);
+    if (client_secret && client?.clientSecret) {
+      if (!safeEqual(client_secret, client.clientSecret)) {
+        logger.warn({ client_id }, 'OAuth: invalid client_secret on revoke');
+        res.status(401).json({ error: 'invalid_client' });
+        return;
+      }
+    }
+  }
+
+  // Try refresh-token revocation first unless the hint says access_token.
+  // Per RFC 7009 §2.1, hints are advisory — we still try the alternate type.
+  let revokedKind: 'refresh_token' | 'access_token' | 'unknown' = 'unknown';
+  let revokedRow: Awaited<ReturnType<typeof findRefreshToken>> = null;
+
+  if (token_type_hint !== 'access_token') {
+    revokedRow = await findRefreshToken(token);
+    if (revokedRow) {
+      // Revoke this RT and its entire family — explicit user logout should
+      // sever the chain so a stale sibling can't be used to mint new tokens.
+      await revokeRefreshToken(revokedRow.id, 'client_revocation').catch(() => {/* ignore */});
+      const count = await revokeRefreshTokenFamily(revokedRow.family_id, 'client_revocation').catch(() => 0);
+      revokedKind = 'refresh_token';
+      logLoginEvent({
+        username: revokedRow.username,
+        eventType: 'oauth_token_revoked',
+        clientName: revokedRow.client_name ?? undefined,
+        meta: { client_id: revokedRow.client_id, family_id: revokedRow.family_id, revoked_count: count, kind: 'refresh_token' },
+      }).catch(() => {/* ignore */});
+    }
+  }
+
+  // Access tokens (JWTs) are stateless — we can't revoke them server-side
+  // without a denylist, but we still log the attempt for the audit trail.
+  // Real revocation comes from the short TTL + RT family revocation cutting
+  // off future ATs.
+  if (!revokedRow) {
+    logLoginEvent({
+      username: 'unknown',
+      eventType: 'oauth_token_revoke_attempt',
+      meta: { hint: token_type_hint ?? null, kind: revokedKind, client_id: client_id ?? null },
+    }).catch(() => {/* ignore */});
+  }
+
+  // RFC 7009: always 200 even if the token was unknown.
+  res.status(200).end();
+});
+
+// POST /oauth/introspect — RFC 7662 token introspection.
+// Returns metadata for refresh tokens we issued; for access-token JWTs we
+// verify the signature and report the embedded claims. Active=false on any
+// error or unknown token (no oracle).
+oauthRouter.post('/mcp/oauth/introspect', async (req: Request, res: Response) => {
+  const { token, client_id, client_secret } = req.body as Record<string, string | undefined>;
+
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (!token) {
+    res.status(400).json({ error: 'invalid_request', error_description: 'Missing token' });
+    return;
+  }
+
+  // Confidential-client check — RFC 7662 requires client auth on this endpoint.
+  if (client_id) {
+    const client = getClient(client_id);
+    if (client_secret && client?.clientSecret) {
+      if (!safeEqual(client_secret, client.clientSecret)) {
+        res.status(401).json({ error: 'invalid_client' });
+        return;
+      }
+    }
+  }
+
+  // Try as JWT access token first.
+  const { verifyJwt, looksLikeJwt } = await import('./jwt.js');
+  if (looksLikeJwt(token)) {
+    const v = verifyJwt(token);
+    if (v.ok && v.payload) {
+      res.json({
+        active: true,
+        scope: v.payload.scope,
+        client_id: v.payload.client_id,
+        username: v.payload.sub,
+        sub: v.payload.sub,
+        aud: v.payload.aud,
+        iss: v.payload.iss,
+        exp: v.payload.exp,
+        iat: v.payload.iat,
+        jti: v.payload.jti,
+        token_type: 'Bearer',
+      });
+      return;
+    }
+    // fall through to RT lookup — some opaque RTs could superficially match the
+    // JWT shape regex; this keeps both paths safe.
+  }
+
+  const row = await findRefreshToken(token);
+  if (!row || row.revoked_at !== null || row.used_at !== null) {
+    res.json({ active: false });
+    return;
+  }
+  const now = Date.now();
+  if (new Date(row.expires_at).getTime() <= now || new Date(row.family_expires_at).getTime() <= now) {
+    res.json({ active: false });
+    return;
+  }
+  res.json({
+    active: true,
+    scope: row.scope,
+    client_id: row.client_id,
+    username: row.username,
+    sub: row.username,
+    exp: Math.floor(new Date(row.expires_at).getTime() / 1000),
+    iat: Math.floor(new Date(row.issued_at).getTime() / 1000),
+    token_type: 'refresh_token',
   });
 });
 

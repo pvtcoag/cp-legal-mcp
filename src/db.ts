@@ -182,6 +182,36 @@ export async function initDb(): Promise<void> {
       tokens_used  INTEGER      NOT NULL DEFAULT 0,
       created_at   TIMESTAMPTZ  DEFAULT NOW()
     );
+
+    -- OAuth 2.1 refresh tokens with rotation, family tracking, and replay detection.
+    -- token_hash: SHA-256 of the opaque RT plaintext (we never store plaintext).
+    -- family_id : shared by all RTs descended from a single browser-login grant;
+    --             used to revoke the entire chain on replay or explicit logout.
+    -- parent_id : the RT this one was rotated from (NULL for the first RT in a family).
+    -- used_at   : set when a successful rotation has consumed this RT (single-use).
+    --             A second presentation after used_at is set = replay → revoke family.
+    -- revoked_at + revoke_reason: set on explicit /oauth/revoke or family revocation.
+    -- expires_at:        per-RT inactivity expiry (default 30d from issue).
+    -- family_expires_at: absolute family lifetime cap (default 90d from initial grant).
+    CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+      id                SERIAL PRIMARY KEY,
+      token_hash        TEXT        NOT NULL UNIQUE,
+      family_id         TEXT        NOT NULL,
+      parent_id         INTEGER     REFERENCES oauth_refresh_tokens(id) ON DELETE SET NULL,
+      username          TEXT        NOT NULL,
+      client_id         TEXT        NOT NULL,
+      client_name       TEXT,
+      scope             TEXT        NOT NULL DEFAULT 'mcp',
+      issued_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at        TIMESTAMPTZ NOT NULL,
+      family_expires_at TIMESTAMPTZ NOT NULL,
+      used_at           TIMESTAMPTZ,
+      revoked_at        TIMESTAMPTZ,
+      revoke_reason     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_ort_family    ON oauth_refresh_tokens(family_id);
+    CREATE INDEX IF NOT EXISTS idx_ort_username  ON oauth_refresh_tokens(username);
+    CREATE INDEX IF NOT EXISTS idx_ort_expires   ON oauth_refresh_tokens(expires_at);
   `);
 
   logger.info('DB initialised — matter tracking enabled');
@@ -837,6 +867,15 @@ export async function updateUserAdmin(username: string, isAdmin: boolean): Promi
 export async function updateUserActive(username: string, isActive: boolean): Promise<void> {
   if (!pool) return;
   await pool.query('UPDATE users SET is_active = $2 WHERE username = $1', [username, isActive]);
+  // Disabling a user must invalidate any active OAuth sessions immediately —
+  // short-lived ATs will lapse within OAUTH_AT_TTL_SEC, but RTs must be cut now.
+  if (!isActive) {
+    await pool.query(
+      `UPDATE oauth_refresh_tokens SET revoked_at = NOW(), revoke_reason = 'user_disabled'
+         WHERE username = $1 AND revoked_at IS NULL`,
+      [username],
+    );
+  }
 }
 
 export async function rotateUserToken(username: string, tokenSalt: string, tokenHash: string, tokenEncrypted?: string): Promise<void> {
@@ -845,11 +884,20 @@ export async function rotateUserToken(username: string, tokenSalt: string, token
     'UPDATE users SET token_salt = $2, token_hash = $3, token_encrypted = $4 WHERE username = $1',
     [username, tokenSalt, tokenHash, tokenEncrypted ?? null],
   );
+  // Rotating a user's underlying API token must invalidate every OAuth session
+  // tied to the old credential — otherwise old browser sign-ins keep refreshing
+  // tokens forever after the admin "rotated" the user.
+  await pool.query(
+    `UPDATE oauth_refresh_tokens SET revoked_at = NOW(), revoke_reason = 'user_token_rotated'
+       WHERE username = $1 AND revoked_at IS NULL`,
+    [username],
+  );
 }
 
 export async function deleteUser(username: string): Promise<void> {
   if (!pool) return;
   await pool.query('DELETE FROM users WHERE username = $1', [username]);
+  await pool.query('DELETE FROM oauth_refresh_tokens WHERE username = $1', [username]);
 }
 
 export async function deleteMatter(ref: string): Promise<number> {
@@ -1691,4 +1739,120 @@ export async function getMattersBillingExport(from?: string, to?: string): Promi
     ORDER BY MAX(mq.created_at) DESC, mq.matter_ref, mq.tool_name
   `, params);
   return result.rows;
+}
+
+// ── OAuth refresh tokens ─────────────────────────────────────────────────────
+
+export interface RefreshTokenRow {
+  id: number;
+  token_hash: string;
+  family_id: string;
+  parent_id: number | null;
+  username: string;
+  client_id: string;
+  client_name: string | null;
+  scope: string;
+  issued_at: string;
+  expires_at: string;
+  family_expires_at: string;
+  used_at: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
+}
+
+export async function insertRefreshToken(params: {
+  tokenHash: string;
+  familyId: string;
+  parentId: number | null;
+  username: string;
+  clientId: string;
+  clientName: string | null;
+  scope: string;
+  expiresAt: Date;
+  familyExpiresAt: Date;
+}): Promise<RefreshTokenRow | null> {
+  if (!pool) return null;
+  const result = await pool.query<RefreshTokenRow>(
+    `INSERT INTO oauth_refresh_tokens
+       (token_hash, family_id, parent_id, username, client_id, client_name, scope, expires_at, family_expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     RETURNING *`,
+    [
+      params.tokenHash,
+      params.familyId,
+      params.parentId,
+      params.username,
+      params.clientId,
+      params.clientName,
+      params.scope,
+      params.expiresAt.toISOString(),
+      params.familyExpiresAt.toISOString(),
+    ],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function getRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRow | null> {
+  if (!pool) return null;
+  const result = await pool.query<RefreshTokenRow>(
+    `SELECT * FROM oauth_refresh_tokens WHERE token_hash = $1`,
+    [tokenHash],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Mark a refresh token as consumed (single-use). Returns true on success. */
+export async function markRefreshTokenUsed(id: number): Promise<boolean> {
+  if (!pool) return false;
+  const result = await pool.query(
+    `UPDATE oauth_refresh_tokens SET used_at = NOW() WHERE id = $1 AND used_at IS NULL AND revoked_at IS NULL`,
+    [id],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Revoke a single refresh token. */
+export async function revokeRefreshToken(id: number, reason: string): Promise<void> {
+  if (!pool) return;
+  await pool.query(
+    `UPDATE oauth_refresh_tokens
+       SET revoked_at = COALESCE(revoked_at, NOW()), revoke_reason = COALESCE(revoke_reason, $2)
+       WHERE id = $1`,
+    [id, reason],
+  );
+}
+
+/** Revoke every refresh token in a family. Returns number of rows affected. */
+export async function revokeRefreshTokenFamily(familyId: string, reason: string): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query(
+    `UPDATE oauth_refresh_tokens
+       SET revoked_at = COALESCE(revoked_at, NOW()), revoke_reason = COALESCE(revoke_reason, $2)
+       WHERE family_id = $1 AND revoked_at IS NULL`,
+    [familyId, reason],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Revoke every active refresh token for a user (used on admin token rotation / account disable). */
+export async function revokeAllUserRefreshTokens(username: string, reason: string): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query(
+    `UPDATE oauth_refresh_tokens
+       SET revoked_at = COALESCE(revoked_at, NOW()), revoke_reason = COALESCE(revoke_reason, $2)
+       WHERE username = $1 AND revoked_at IS NULL`,
+    [username, reason],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Background cleanup — delete RTs that have been expired or revoked for >7 days. */
+export async function purgeStaleRefreshTokens(): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query(
+    `DELETE FROM oauth_refresh_tokens
+       WHERE (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '7 days')
+          OR (family_expires_at < NOW() - INTERVAL '7 days')`,
+  );
+  return result.rowCount ?? 0;
 }
