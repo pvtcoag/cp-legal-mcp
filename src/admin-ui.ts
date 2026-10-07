@@ -278,7 +278,7 @@ function renderLoginEventsTable(events: LoginEventRow[], caption?: string, showU
 
 function renderTokenDisplay(token: string): string {
   return `<div style="max-width:560px">
-    <div class="token-explain">This is the user's API token. They use it to authenticate with the CP Legal MCP server at <strong>mcp.example.com/mcp</strong> — enter it as the password when connecting any MCP client (Claude, ChatGPT, Cursor, etc.). It will not be shown again.</div>
+    <div class="token-explain">This is the user's API token. They use it to authenticate with the CP Legal MCP server at <strong>${esc(config.OAUTH_ISSUER.replace(/^https?:\/\//, ""))}</strong> — enter it as the password when connecting any MCP client (Claude, ChatGPT, Cursor, etc.). It will not be shown again.</div>
     <div class="token-warning">Save this token — it cannot be recovered. Share it with the user via a secure channel.</div>
     <div style="display:flex;align-items:flex-start;gap:.5rem">
       <div class="token-display" id="token-val" style="flex:1">${esc(token)}</div>
