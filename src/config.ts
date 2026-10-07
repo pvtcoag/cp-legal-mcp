@@ -5,7 +5,7 @@ const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
-  // AusLaw upstream
+  // jurisd upstream (https://github.com/russellbrenner/jurisd)
   AUSLAW_BASE_URL: z.string().url('AUSLAW_BASE_URL must be a valid URL'),
   AUSLAW_TIMEOUT_MS: z.string().default('30000').transform(Number),
 

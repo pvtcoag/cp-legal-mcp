@@ -49,12 +49,12 @@ app.use(mattersRouter);
 // Admin panel — same session cookie, admin flag required
 app.use(adminRouter);
 
-// Diagnostic: probe auslaw-mcp — no auth required, safe (read-only connectivity test)
+// Diagnostic: probe jurisd — no auth required, safe (read-only connectivity test)
 app.get('/mcp/health/upstream', async (_req, res) => {
   const base = config.AUSLAW_BASE_URL;
   const results: Record<string, unknown> = { base };
 
-  // Probe several paths to discover what auslaw-mcp actually serves
+  // Probe several paths to discover what jurisd actually serves
   const probes = [
     { path: '/mcp',      method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'probe', version: '1' } }, id: 1 }) },
     { path: '/mcp',      method: 'GET',  body: undefined },

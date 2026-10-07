@@ -426,7 +426,7 @@ adminRouter.get('/mcp/admin', async (req: Request, res: Response) => {
         <div class="card-sub">Uptime ${uptimeStr}</div>
       </div>
       <div class="card">
-        <div class="card-label">auslaw-mcp</div>
+        <div class="card-label">jurisd</div>
         <div class="card-value sm"><span class="${auslawOk ? 'status-ok' : 'status-err'}">${auslawOk ? '✓' : '✗'} ${esc(auslawStatus)}</span></div>
         <div class="card-sub">${auslawMs}ms</div>
       </div>

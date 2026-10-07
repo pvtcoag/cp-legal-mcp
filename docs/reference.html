@@ -332,7 +332,7 @@ section[id] { scroll-margin-top:1.5rem; }
 <section class="section" id="architecture">
   <div class="section-label">Architecture</div>
   <h2 class="section-title">How It All Connects</h2>
-  <p class="section-desc">Two Railway services communicate over the private network. cp-legal-mcp is the public-facing gateway; auslaw-mcp never touches the internet directly.</p>
+  <p class="section-desc">Two Railway services communicate over the private network. cp-legal-mcp is the public-facing gateway; jurisd never touches the internet directly.</p>
 
   <div class="arch">
     <div class="arch-flow">
@@ -350,7 +350,7 @@ section[id] { scroll-margin-top:1.5rem; }
       <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">Private<br>MCP-HTTP</span></div>
       <div class="arch-node ok">
         <div class="arch-node-label">Private · Railway</div>
-        <div class="arch-node-name">auslaw-mcp</div>
+        <div class="arch-node-name">jurisd</div>
         <div class="arch-node-sub">:3000 / private domain</div>
       </div>
       <div class="arch-arrow"><span class="arch-arrow-line">→</span><span class="arch-arrow-label">HTTPS</span></div>
@@ -400,13 +400,13 @@ section[id] { scroll-margin-top:1.5rem; }
 5. spendCapMiddleware — checks monthly spend vs per-user / global cap (DB)
 6. requestContext.run({ user }) — async context propagation
 7. createMcpHandler() — fresh McpServer + StreamableHTTPServerTransport per request
-8. Tool handler executes → may call auslaw-mcp, Isaacus, ASIC/ABR, ASX
+8. Tool handler executes → may call jurisd, Isaacus, ASIC/ABR, ASX
 9. recordMatterQuery() — fire-and-forget insert into matter_queries
 10. res.on('close') → transport.close() + server.close()</pre>
   </div>
 
   <h3>Stateless by design</h3>
-  <p>Each MCP request creates a fresh <span class="inline-code">McpServer</span> + <span class="inline-code">StreamableHTTPServerTransport</span> with <span class="inline-code">sessionIdGenerator: undefined</span>. No session state, no shared mutable objects. Safe for concurrent users and horizontal scaling. The auslaw-mcp client is also fresh per tool call.</p>
+  <p>Each MCP request creates a fresh <span class="inline-code">McpServer</span> + <span class="inline-code">StreamableHTTPServerTransport</span> with <span class="inline-code">sessionIdGenerator: undefined</span>. No session state, no shared mutable objects. Safe for concurrent users and horizontal scaling. The jurisd client is also fresh per tool call.</p>
 </section>
 
 <!-- ════════════ SERVICES ════════════ -->
@@ -418,11 +418,11 @@ section[id] { scroll-margin-top:1.5rem; }
     <table>
       <thead><tr><th>Service</th><th>Role</th><th>Auth / Access</th><th>Rate Limit / Notes</th></tr></thead>
       <tbody>
-        <tr><td><strong>cp-legal-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — public</span></td><td>Main MCP server. Exposes 21 tools. Hosts web UI and OAuth endpoints.</td><td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, auslaw-mcp (private — no auth)</td><td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td></tr>
-        <tr><td><strong>auslaw-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — private</span></td><td>AustLII scraper MCP server. 9 tools for case/legislation search, document fetch, citation validation, LawCite citator.</td><td>No auth on private network. <code>MCP_TRANSPORT=http</code>, <code>PORT=3000</code></td><td>AustLII: 10 req/min. LawCite: 5 req/min. Timeout: 60 s</td></tr>
+        <tr><td><strong>cp-legal-mcp</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — public</span></td><td>Main MCP server. Exposes 21 tools. Hosts web UI and OAuth endpoints.</td><td>Outbound: Isaacus SDK key, ASIC (none), ABR GUID, jurisd (private — no auth)</td><td>60 req/min per IP (pre-auth) + 60/min per user (post-auth)</td></tr>
+        <tr><td><strong>jurisd</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway — private</span></td><td>AustLII scraper MCP server. 9 tools for case/legislation search, document fetch, citation validation, LawCite citator.</td><td>No auth on private network. <code>MCP_TRANSPORT=http</code>, <code>PORT=3000</code></td><td>AustLII: 10 req/min. LawCite: 5 req/min. Timeout: 60 s</td></tr>
         <tr><td><strong>Isaacus Kanon API</strong><br><a href="https://isaacus.com">isaacus.com</a></td><td>Legal AI layer — Kanon 2 Enricher, Kanon Answer Extractor, Kanon Universal Classifier.</td><td><code>ISAACUS_API_KEY</code> → SDK singleton</td><td>In-memory rerank cache (5 min, 100 entries). QA cache (200 entries, LRU).</td></tr>
-        <tr><td><strong>AustLII</strong><br><a href="https://www.austlii.edu.au">austlii.edu.au</a></td><td>Australian legal database. Full-text case law and legislation. Free public access via auslaw-mcp.</td><td>No API key. Accessed via auslaw-mcp only.</td><td>Rate limited by auslaw-mcp token bucket. Judgment text cached in PostgreSQL for 30 days.</td></tr>
-        <tr><td><strong>LawCite</strong><br><a href="https://www.austlii.edu.au/cgi-bin/LawCite">austlii.edu.au/cgi-bin/LawCite</a></td><td>AustLII citator — finds cases that have cited a given citation.</td><td>No auth. HTML scraping. Falls back to AustLII phrase search.</td><td>5 req/min in auslaw-mcp.</td></tr>
+        <tr><td><strong>AustLII</strong><br><a href="https://www.austlii.edu.au">austlii.edu.au</a></td><td>Australian legal database. Full-text case law and legislation. Free public access via jurisd.</td><td>No API key. Accessed via jurisd only.</td><td>Rate limited by jurisd token bucket. Judgment text cached in PostgreSQL for 30 days.</td></tr>
+        <tr><td><strong>LawCite</strong><br><a href="https://www.austlii.edu.au/cgi-bin/LawCite">austlii.edu.au/cgi-bin/LawCite</a></td><td>AustLII citator — finds cases that have cited a given citation.</td><td>No auth. HTML scraping. Falls back to AustLII phrase search.</td><td>5 req/min in jurisd.</td></tr>
         <tr><td><strong>ASIC Connect</strong><br><a href="https://connectonline.asic.gov.au">connectonline.asic.gov.au</a></td><td>Company and person register. Name/ACN/ABN searches and officer lookups.</td><td>No auth required. Public registry.</td><td>2 retry attempts on 429/5xx. 15 s timeout.</td></tr>
         <tr><td><strong>ABR</strong><br><a href="https://abr.business.gov.au">abr.business.gov.au</a></td><td>ABN lookup and entity details via ABR web services.</td><td><code>ABR_GUID</code> — free at abr.business.gov.au/Tools/WebServices. Graceful fallback to ASIC if not set.</td><td>No published rate limit.</td></tr>
         <tr><td><strong>PostgreSQL</strong><br><span style="font-size:.75rem;color:var(--text-3)">Railway managed DB</span></td><td>All persistent data: users, matter queries, judgment cache, login events, OAuth, watchlist, app config.</td><td><code>DATABASE_URL</code> — Railway injects automatically. Schema auto-migrated on startup.</td><td>Pool: max 10 connections. Graceful close on SIGTERM.</td></tr>
@@ -505,7 +505,7 @@ section[id] { scroll-margin-top:1.5rem; }
     <div class="tool">
       <div class="tool-head">
         <span class="tool-name">format_citation</span>
-        <span class="tool-desc">Format a case citation in AGLC4 style via auslaw-mcp. No Isaacus calls.</span>
+        <span class="tool-desc">Format a case citation in AGLC4 style via jurisd. No Isaacus calls.</span>
         <span class="tool-cost cost-0">$0</span>
       </div>
       <div class="tool-params">
@@ -839,7 +839,7 @@ section[id] { scroll-margin-top:1.5rem; }
       <tbody>
         <tr><td>https://mcp.example.com/auslaw</td><td>POST GET DELETE</td><td class="ok">Bearer token</td><td>Main MCP endpoint. All tool calls.</td></tr>
         <tr><td>https://mcp.example.com/auslaw/health</td><td>GET</td><td class="ok">None</td><td>Health check. Returns 503 if DB unreachable. Used by Railway deploy gating.</td></tr>
-        <tr><td>https://mcp.example.com/auslaw/health/upstream</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to auslaw-mcp. Returns connectivity report.</td></tr>
+        <tr><td>https://mcp.example.com/auslaw/health/upstream</td><td>GET</td><td class="ok">None</td><td>Diagnostic probe to jurisd. Returns connectivity report.</td></tr>
       </tbody>
     </table>
   </div>
@@ -969,7 +969,7 @@ PKCE:             S256 (required)</pre>
     <table>
       <thead><tr><th>Variable</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>AUSLAW_BASE_URL</code></td><td class="er">Required</td><td>—</td><td>Private URL of auslaw-mcp. Railway reference: <code>http://$&#123;&#123;auslaw-mcp.RAILWAY_PRIVATE_DOMAIN&#125;&#125;:3000</code></td></tr>
+        <tr><td><code>AUSLAW_BASE_URL</code></td><td class="er">Required</td><td>—</td><td>Private URL of jurisd. Railway reference: <code>http://$&#123;&#123;jurisd.RAILWAY_PRIVATE_DOMAIN&#125;&#125;:3000</code></td></tr>
         <tr><td><code>ISAACUS_API_KEY</code></td><td class="er">Required</td><td>—</td><td>Isaacus API key for Kanon model access.</td></tr>
         <tr><td><code>DATABASE_URL</code></td><td class="er">Required</td><td>—</td><td>PostgreSQL connection string. Railway injects automatically.</td></tr>
         <tr><td><code>OAUTH_ISSUER</code></td><td class="muted">Optional</td><td>https://mcp.example.com/auslaw</td><td>OAuth issuer URL. Public base URL, no trailing slash.</td></tr>
@@ -981,14 +981,14 @@ PKCE:             S256 (required)</pre>
         <tr><td><code>ABR_GUID</code></td><td class="muted">Optional</td><td>—</td><td>ABR web services GUID for ABN lookups. Free at abr.business.gov.au/Tools/WebServices.</td></tr>
         <tr><td><code>DEFAULT_MATTER_REF</code></td><td class="muted">Optional</td><td>—</td><td>Fallback matter reference when no <code>matter_ref</code> is passed in a tool call.</td></tr>
         <tr><td><code>RECOVERY_TOKEN</code></td><td class="muted">Optional</td><td>—</td><td>32+ char recovery password. Log in as <code>recovery</code>. Remove after use.</td></tr>
-        <tr><td><code>AUSLAW_TIMEOUT_MS</code></td><td class="muted">Optional</td><td>30000</td><td>Timeout for auslaw-mcp calls in ms. Must be less than auslaw-mcp's 60 s timeout.</td></tr>
+        <tr><td><code>AUSLAW_TIMEOUT_MS</code></td><td class="muted">Optional</td><td>30000</td><td>Timeout for jurisd calls in ms. Must be less than jurisd's 60 s timeout.</td></tr>
         <tr><td><code>PORT</code></td><td class="muted">Optional</td><td>8080</td><td>HTTP port. Railway sets automatically.</td></tr>
         <tr><td><code>LOG_LEVEL</code></td><td class="muted">Optional</td><td>info</td><td><code>debug | info | warn | error</code></td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3>auslaw-mcp (Railway — private service)</h3>
+  <h3>jurisd (Railway — private service)</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Variable</th><th>Required</th><th>Value</th><th>Description</th></tr></thead>
@@ -1069,7 +1069,7 @@ PKCE:             S256 (required)</pre>
 
   <div class="callout callout-ok">
     <div class="callout-title">In-memory &amp; DB caching</div>
-    Several layers of caching minimise both cost and latency: <strong>Rerank cache</strong> (5 min, 100 entries) deduplicates identical Isaacus rerank calls. <strong>QA cache</strong> (200 entries, permanent) deduplicates extractAnswer calls by (document, question) pair. <strong>Enrichment cache</strong> (DB, permanent) eliminates repeat Kanon 2 Enricher charges. <strong>Search cache</strong> (5 min, 200 entries) deduplicates auslaw-mcp search calls. <strong>Spend cap cache</strong> (5 min per user) avoids a DB aggregate on every MCP request.
+    Several layers of caching minimise both cost and latency: <strong>Rerank cache</strong> (5 min, 100 entries) deduplicates identical Isaacus rerank calls. <strong>QA cache</strong> (200 entries, permanent) deduplicates extractAnswer calls by (document, question) pair. <strong>Enrichment cache</strong> (DB, permanent) eliminates repeat Kanon 2 Enricher charges. <strong>Search cache</strong> (5 min, 200 entries) deduplicates jurisd search calls. <strong>Spend cap cache</strong> (5 min per user) avoids a DB aggregate on every MCP request.
   </div>
 </section>
 
@@ -1120,7 +1120,7 @@ Proxy:   Proxied (orange cloud)</pre>
         <tr><td>1</td><td>Push to GitHub (main branch)</td><td>Railway auto-deploys on push</td></tr>
         <tr><td>2</td><td>Watch Railway build logs for TypeScript errors</td><td><code>npm run build</code> runs in Dockerfile</td></tr>
         <tr><td>3</td><td>Check <code>/auslaw/health</code> returns 200</td><td>Confirms DB connection and startup migration ran</td></tr>
-        <tr><td>4</td><td>Check <code>/auslaw/health/upstream</code></td><td>Confirms private network connectivity to auslaw-mcp</td></tr>
+        <tr><td>4</td><td>Check <code>/auslaw/health/upstream</code></td><td>Confirms private network connectivity to jurisd</td></tr>
         <tr><td>5</td><td>Test an MCP initialize call</td><td>Confirms auth middleware and MCP handler are working</td></tr>
         <tr><td>6</td><td>Log into <code>/auslaw/matters</code></td><td>Confirms session auth and DB reads</td></tr>
         <tr><td>7</td><td>Check <code>/auslaw/admin</code> → service health card</td><td>End-to-end health of both services</td></tr>
@@ -1186,17 +1186,17 @@ Proxy:   Proxied (orange cloud)</pre>
 7. IMPORTANT: Remove RECOVERY_TOKEN from Railway immediately
 8. Save → redeploy to clear recovery access</pre></div>
 
-  <h3>SOP 7 — auslaw-mcp is unreachable</h3>
+  <h3>SOP 7 — jurisd is unreachable</h3>
   <div class="code-block"><pre>Diagnosis:
   curl https://mcp.example.com/auslaw/health/upstream
 
 Common causes:
-  A) auslaw-mcp crashed → restart from Railway dashboard
+  A) jurisd crashed → restart from Railway dashboard
   B) AUSLAW_BASE_URL wrong → must use Railway private domain:
      http://[service].railway.internal:3000
   C) Not co-located in same Railway project → private networking requires same project
 
-Affected tools (all call auslaw-mcp):
+Affected tools (all call jurisd):
   research_cases, research_legislation, get_judgment, ask_judgment,
   enrich_judgment, summarise_judgment, find_citing_cases, find_related_cases,
   compare_cases, search_by_citation, format_citation, get_legislation
@@ -1242,8 +1242,8 @@ Use case: AustLII updated a document and you need the fresh version.</pre></div>
       <tbody>
         <tr><td>IP rate limit (pre-auth)</td><td>60 req/min</td><td>Per client IP</td><td>Returns 429.</td></tr>
         <tr><td>User rate limit (post-auth)</td><td>60 req/min</td><td>Per authenticated user</td><td>Keyed on username. Returns 429.</td></tr>
-        <tr><td>AustLII (auslaw-mcp)</td><td>10 req/min</td><td>Global (token bucket)</td><td>Queue-based — callers may wait, not fail.</td></tr>
-        <tr><td>LawCite (auslaw-mcp)</td><td>5 req/min</td><td>Global</td><td>For find_citing_cases only.</td></tr>
+        <tr><td>AustLII (jurisd)</td><td>10 req/min</td><td>Global (token bucket)</td><td>Queue-based — callers may wait, not fail.</td></tr>
+        <tr><td>LawCite (jurisd)</td><td>5 req/min</td><td>Global</td><td>For find_citing_cases only.</td></tr>
         <tr><td>ASIC Connect / ABR</td><td>Soft (retry on 429)</td><td>Global</td><td>2 retries with 1 s / 2 s delay.</td></tr>
         <tr><td>ip-api.com (geo)</td><td>~45 req/min</td><td>Global</td><td>Fire-and-forget. In-memory cache reduces calls.</td></tr>
         <tr><td>Spend cap</td><td>Configurable USD/month</td><td>Per user + global</td><td>Returns HTTP 429 with <code>error: spend_cap_exceeded</code>.</td></tr>

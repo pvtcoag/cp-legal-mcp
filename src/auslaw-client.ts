@@ -71,7 +71,7 @@ export class AuslawError extends Error {
   }
 }
 
-/** Thrown when the auslaw-mcp HTTP transport fails (connection refused, timeout, etc.). Retry-safe. */
+/** Thrown when the jurisd HTTP transport fails (connection refused, timeout, etc.). Retry-safe. */
 export class AuslawNetworkError extends AuslawError {
   constructor(message: string, toolName: string) {
     super(message, toolName);
@@ -264,7 +264,7 @@ export async function searchCitingCases(params: {
   const cacheKey = _searchCacheKey('searchCitingCases', params);
   const cached = _searchCacheGet<AuslawCitingCase[]>(cacheKey);
   if (cached) return cached;
-  // auslaw-mcp returns { totalCount: number, results: AuslawCitingCase[] }, not a bare array.
+  // jurisd returns { totalCount: number, results: AuslawCitingCase[] }, not a bare array.
   // The generic cast in callAuslawTool doesn't validate at runtime, so unwrap here.
   const response = await withRetry(() =>
     callAuslawTool<{ results: AuslawCitingCase[] } | AuslawCitingCase[]>('auslaw_search_citing_cases', {
@@ -301,7 +301,7 @@ export async function formatCitation(params: {
   style?: 'neutral' | 'reported' | 'combined';
 }): Promise<AuslawFormattedCitation> {
   logger.debug({ params }, 'auslaw: format_citation');
-  // auslaw-mcp format_citation returns plain text, not JSON
+  // jurisd format_citation returns plain text, not JSON
   return withRetry(async () => {
     const text = await callAuslawToolRaw('auslaw_format_citation', {
       title: params.title,

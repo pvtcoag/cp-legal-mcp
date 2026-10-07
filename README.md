@@ -2,7 +2,7 @@
 
 # cp-legal-mcp
 
-Remote MCP server for Australian legal research. Deployed at `mcp.example.com` (Railway). Wraps AustLII via an upstream MCP, Isaacus (rerank + extractive QA), ABR/ASIC/ACCC/ASX, and a Postgres matter-tracking log.
+Remote MCP server for Australian legal research. Deployed at `mcp.example.com` (Railway). Wraps AustLII via the upstream [jurisd](https://github.com/russellbrenner/jurisd) MCP (formerly auslaw-mcp), Isaacus (rerank + extractive QA), ABR/ASIC/ACCC/ASX, and a Postgres matter-tracking log.
 
 ## Tools
 
