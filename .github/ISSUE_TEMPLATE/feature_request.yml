@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a new tool, data source, jurisdiction or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Research workflow
+      description: What are you trying to do? Describe the legal research task, not just the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work? Which tools or data sources would it involve?
+  - type: input
+    id: jurisdiction
+    attributes:
+      label: Jurisdiction(s)
+      placeholder: e.g. Cth, NSW, Vic, NZ
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,7 +1,20 @@
 {
   "name": "cp-legal-mcp",
   "version": "0.1.0",
-  "description": "Remote MCP wrapper for Australian legal research",
+  "description": "Open-source remote MCP server for Australian legal research",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pvtcoag/cp-legal-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "legal-research",
+    "australia",
+    "austlii"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22.0.0"

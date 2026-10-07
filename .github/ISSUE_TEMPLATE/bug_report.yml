@@ -1,0 +1,45 @@
+name: Bug report
+description: Something isn't working, or a tool returned an incorrect result
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do **not** include client-confidential or privileged information.
+        For security vulnerabilities, use [private vulnerability reporting](https://github.com/pvtcoag/cp-legal-mcp/security/advisories/new) instead.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      description: Which MCP tool is affected (if any)?
+      placeholder: e.g. research_cases, summarise_judgment
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the input you sent and the output you received.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: For incorrect legal results, link the primary source (e.g. the AustLII page).
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: e.g. Claude Desktop, Claude.ai, Claude Code, Cursor
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: e.g. 0.1.0 or a commit SHA
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact tokens and any personal information.
+      render: shell
